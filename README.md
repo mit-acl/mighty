@@ -1,6 +1,4 @@
-# MIGHTY: Quintic Hermite Spline-based Efficient Trajectory Planning #
-
-### **Submitted to the IEEE Robotics and Automation Letters (RA-L)**
+# 16.85 MIGHTY-based Simulation Setup #
 
 ## General Setup
 
@@ -15,34 +13,34 @@ MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 w
    ```bash
    mkdir -p ~/code/ws/src
    cd ~/code/ws/src
-   git clone https://github.com/kotakondo/dynus.git
+   git clone https://github.com/mit-acl/mighty.git
    cd src/dynus/docker
-   git checkout lbfgs
+   git switch 16.85
+   ```
+3. **Build the Docker Image:**
+   ```bash
+   make build
    ```
 
-3. **Generate a Personal Access Token (PAT):**
-    - Follow [this guide](https://www.geeksforgeeks.org/how-to-generate-personal-access-token-in-github/) to generate your PAT.
-    - When generating your PAT, ensure:
-      - **Repository access:** Set to **All repositories**
-      - In the **Repository permissions** menu, find the **Contents** row and select **Access > Read and Write**
-
-4. **BUILD:**
-    - Navigate to the docker folder in your dynus repo (eg. `cd ~/code/dynus_ws/src/dynus/docker/`) and run this
-    - ```bash
-      make build GIT_ACCESS_TOKEN=(copy and paste your_token_here)
-      ```
-5. **Run Simulation**
+4. **Run Simulation**
     - Run the following command to start the simulation:
       ```bash
       make run-sim
       ```
-6. **(Optional) If you want to run the sim in dynamic environment:**
-    - comment out `python3 src/dynus/launch/run_single_sim.py --env easy_forest` in dynus.sh
+5. **(Optional) If you want to run the sim in dynamic environment:**
+    - comment out `python3 src/dynus/launch/run_single_sim.py --env hard_forest` in dynus.sh
     - uncomment `python3 src/dynus/launch/run_single_sim.py --env dynamic_forest` in dynus.sh
     - run 
       ```bash
       make run-sim
       ```
+<details>
+   <summary><b>Docker-related Issues</b></summary>
+  - Rviz GUI not showing up? Run this in the terminal:
+    ```bash
+    xhost +
+    ```
+</details>
 
 <details>
   <summary><b>Useful Docker Commands</b></summary>
@@ -252,11 +250,6 @@ MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 w
       - In the **Repository permissions** menu, find the **Contents** row and select **Access > Read and Write**
 </details>
 
- <summary><b>Docker-related Issues</b></summary>
-  - Rviz GUI not showing up? Run this in the terminal:
-    ```bash
-    xhost +
-    ```
 <details>
   <summary><b>Object Detection Module</b></summary>
 

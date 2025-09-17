@@ -57,18 +57,17 @@ RUN apt install -y  ros-${ROS_DISTRO}-desktop \
 
 # Set up git acces token for private repos
 ##########################################
-ARG GIT_ACCESS_TOKEN=${GIT_ACCESS_TOKEN}
 
-# Install DYNUS and dependencies
+# Install MIGHTY and dependencies
 ##########################################
-RUN mkdir -p /home/kkondo/code/dynus_ws/src
-WORKDIR /home/kkondo/code/dynus_ws/src
+RUN mkdir -p /home/kkondo/code/mighty_ws/src
+WORKDIR /home/kkondo/code/mighty_ws/src
 # dummy arg to invalidate cache and build from here
 ARG DUMMY=unknown
-RUN DUMMY=${DUMMY} git clone https://kotakondo:${GIT_ACCESS_TOKEN}@github.com/kotakondo/dynus.git
-WORKDIR /home/kkondo/code/dynus_ws/src/dynus
-RUN git switch acl_mapper
-WORKDIR /home/kkondo/code/dynus_ws/src
+RUN DUMMY=${DUMMY} git clone https://github.com/mit-acl/mighty.git
+WORKDIR /home/kkondo/code/mighty_ws/src/mighty
+RUN git switch 16.85
+WORKDIR /home/kkondo/code/mighty_ws/src
 RUN git clone https://github.com/kotakondo/dynus_interfaces.git
 RUN git clone https://github.com/kotakondo/octomap_mapping.git
 RUN git clone https://github.com/kotakondo/realsense_gazebo_plugin.git
@@ -76,7 +75,7 @@ RUN git clone https://github.com/kotakondo/livox_laser_simulation_ros2.git
 RUN git clone https://github.com/kotakondo/octomap_rviz_plugins.git
 RUN git clone https://github.com/kotakondo/gazebo_ros_pkgs.git
 RUN git clone https://gitlab.com/mit-acl/lab/acl-mapping.git
-WORKDIR /home/kkondo/code/dynus_ws/src/acl-mapping
+WORKDIR /home/kkondo/code/mighty_ws/src/acl-mapping
 RUN git switch ros2
 RUN mkdir -p /home/kkondo/code/decomp_ws/src
 WORKDIR /home/kkondo/code/decomp_ws/src
@@ -105,7 +104,7 @@ WORKDIR /home/kkondo/code/livox_ws/src/livox_ros_driver2
 RUN . /opt/ros/humble/setup.sh && ./build.sh humble
 
 ### for other packages
-WORKDIR /home/kkondo/code/dynus_ws
+WORKDIR /home/kkondo/code/mighty_ws
 RUN . /opt/ros/humble/setup.sh && \
     . /home/kkondo/code/decomp_ws/install/setup.sh && \
     export CMAKE_PREFIX_PATH=/home/kkondo/code/livox_ws/install/livox_ros_driver2:/home/kkondo/code/decomp_ws/install/decomp_util && \
@@ -129,7 +128,7 @@ RUN echo 'alias sb="source ~/.bashrc"' >> ~/.bashrc
 RUN echo 'alias eb="code ~/.bashrc"' >> ~/.bashrc
 RUN echo 'alias gs="git status"' >> ~/.bashrc
 RUN echo 'alias gp="git push"' >> ~/.bashrc
-RUN echo 'alias roscd="cd ~/code/dynus_ws"' >> ~/.bashrc
+RUN echo 'alias roscd="cd ~/code/mighty_ws"' >> ~/.bashrc
 RUN echo 'alias cb="roscd && colcon build && sb"' >> ~/.bashrc
 RUN echo 'alias ss="roscd && source install/setup.bash"' >> ~/.bashrc
 RUN echo 'alias cbd="clear && roscd && colcon build && ss"' >> ~/.bashrc
