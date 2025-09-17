@@ -93,7 +93,7 @@ def main():
     env_cmd = env_cmds[env_name]
 
     # Common setup command for both panes.
-    setup_cmd = "source /home/kkondo/code/dynus_ws/install/setup.bash; source /usr/share/gazebo/setup.bash; export ROS_DOMAIN_ID=7;"
+    setup_cmd = "source /home/kkondo/code/mighty_ws/install/setup.bash; source /usr/share/gazebo/setup.bash; export ROS_DOMAIN_ID=7;"
 
     # use_dyn_obs
     if env_name in ["empty_wo_ground", "empty", "dynamic_debug", "dynamic_forest"]:

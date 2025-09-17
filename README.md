@@ -23,17 +23,31 @@ MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 w
    ```
 
 4. **Run Simulation**
+    - First run `xhost +` in your terminal to allow GUI applications from Docker to display on your host machine.
     - Run the following command to start the simulation:
       ```bash
-      make run-sim
+      make run
       ```
 5. **(Optional) If you want to run the sim in dynamic environment:**
-    - comment out `python3 src/dynus/launch/run_single_sim.py --env hard_forest` in dynus.sh
-    - uncomment `python3 src/dynus/launch/run_single_sim.py --env dynamic_forest` in dynus.sh
+    - comment out `python3 src/dynus/launch/run_single_sim.py --env hard_forest` in mighty.sh
+    - uncomment `python3 src/dynus/launch/run_single_sim.py --env dynamic_forest` in mighty.sh
     - run 
       ```bash
-      make run-sim
+      make run
       ```
+
+### How to change environment
+
+* The environmet is configured by `.world` file in `mighty_ws/src/dynus/launch/worlds`. 
+* You can change the environment by changing the `.world`, modify the input `--env` in run_single_sim.py and change the file path in `mighty.sh` (Rule of thumb: just keep updating easy_forest.world).
+* Script to modify the world file is in `mighty_ws/src/mighty/scripts/generate_random_forest.py`. You can change the number of cylindars, size of trees, and size of the environment.
+* NOTE: you need to add ROS2 bridge at the top on the world file. (See `generate_random_forest.py` and/or `easy_forest.world` for example.)
+* NOTE: once you generate a new world file, you need to send/upload it docker (or you can generate it inside docker). If you generate it outside docker, you can use `docker cp <container_id>:/path/to/destination /path/to/local/machine` to copy the file to docker. (Find `<container_id>` by running `docker ps`.)
+
+### How to change the sensor configuration
+
+* See `mighty_ws/src/mighty/urdf/quadrotor.urdf.xacro` for the sensor configuration. Change the transformation between the body and the sensor.
+
 <details>
    <summary><b>Docker-related Issues</b></summary>
   - Rviz GUI not showing up? Run this in the terminal:
@@ -61,103 +75,6 @@ MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 w
     ```
 
 </details>
-
-5. **Run the Docker Container:**
-   ```bash
-   make run-sim
-   ```
-   This command will start the simulation in the Docker container. If you encounter any issues, please refer to the [Error Handling](#error-handling) section.
-   
-
-### Native Installation
-
-1. **Clone the Repository and Navigate to the Workspace Folder:**
-   ```bash
-   mkdir -p ~/code/ws
-   cd ~/code/ws
-   git clone https://github.com/kotakondo/dynus.git
-   cd dynus
-   ```
-
-2. **Run the Setup Script:**
-   ```bash
-   ./setup.sh
-   ```
-   This script will first install ROS 2 Humble, then DYNUS and its dependencies. Please note that this script modifies your `~/.bashrc` file.
-
-<details>
-  <summary><b>Error Handling</b></summary>
-
-  - **Error 1: When running `colcon build`**
-    ```
-    By not providing "Finddecomp_util.cmake" in CMAKE_MODULE_PATH, this project
-    has asked CMake to find a package configuration file provided by
-    "decomp_util", but CMake did not find one.
-    ```
-    - **Solution:**  
-      Source `install/setup.bash` and build again.
-
-  - **Error 2: When running Python script**  
-    ```
-    No module named 'rclpy._rclpy_pybind11'
-    ```
-    - **Solution:**  
-      Deactivate the Conda environment if you are using Conda.
-
-  - **Runtime Error 3:**  
-    ```
-    "Spawn status: Entity pushed to spawn queue, but spawn service timed out
-    waiting for entity to appear in simulation under the name [quadrotor]"
-    ```
-    - **Solution:**  
-      Go to the world file you are using and make sure `sim_time` is set to `0`.
-
-  - **Error 4: When building dlio package**  
-    ```
-    fatal error: numpy/ndarrayobject.h: No such file or directory
-    ```
-    - **Solution:**  
-      Just cleaned up the workspace and rebuilt it.
-
-  - **Error 5: Gazebo runtime error**
-    ```
-    [gzserver-1] gzserver: /usr/include/boost/smart_ptr/shared_ptr.hpp:728: 
-    typename boost::detail::sp_member_access<T>::type boost::shared_ptr<T>::operator->() const 
-    [with T = gazebo::rendering::Scene; typename boost::detail::sp_member_access<T>::type = gazebo::rendering::Scene*]: 
-    Assertion `px != 0' failed.
-    ```
-    - **Solution:**  
-      Source Gazebo's setup file:  
-      ```
-      source /usr/share/gazebo/setup.bash
-      ```
-
-  - **Error 6: Missing package configuration file**  
-    ```
-    Could not find a package configuration file provided by "diagnostic_updater" 
-    with any of the following names: when building realsense-ros.
-    ```
-    - **Solution:**  
-      Install the missing package:  
-      ```
-      sudo apt-get install ros-humble-diagnostic-updater
-      ```
-  - **Error 7: When running `colcon build`**
-    ```
-    /lib/libgurobi_c++.a, needed by test_yaw_solver
-    ```
-    - **Solution:**  
-      Set the Gurobi path: (even if you put this in bashrc - just to make sure it's set)
-      ```
-      export GUROBI_HOME=/opt/gurobi1103/linux64
-      colcon build --cmake-args "-DCMAKE_BUILD_TYPE=Release"
-      ```
-    ```
-</details>
-
-### Run the Simulation
-
-
 
 ### Notes
 

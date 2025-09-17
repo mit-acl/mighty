@@ -1,7 +1,7 @@
 FROM ros:humble
 
 LABEL Maintainer="Kota Kondo <kkondo@mit.edu>" \
-      Description="Ubuntu 22.04, ROS2 humble for DYNUS"
+      Description="Ubuntu 22.04, ROS2 humble for MIGHTY"
 
 # Set environment variables
 ##########################################
@@ -140,6 +140,7 @@ RUN echo 'alias tks="tmux kill-server"' >> ~/.bashrc
 
 # Set up Entry Point
 # ##########################################
-COPY ./dynus.sh /
-RUN chmod +x /dynus.sh
-# ENTRYPOINT ["/dynus.sh"]
+WORKDIR /home/kkondo/code/mighty_ws/src/mighty/docker
+COPY ./mighty.sh /home/kkondo/code/mighty_ws/src/mighty/docker/
+RUN chmod +x /mighty.sh
+# ENTRYPOINT ["/mighty.sh"]
