@@ -120,7 +120,8 @@ def main():
     cylinders = load_forest_parameters(forest_csv)
     
     # add num_0 to num9 to at the end of the bag paths
-    bag_paths = [os.path.join(bag_path, f"num_{i}/num_{i}") for i in range(10) for bag_path in glob.glob(bag_folder)]
+    # bag_paths = [os.path.join(bag_path, f"num_{i}/num_{i}") for i in range(10) for bag_path in glob.glob(bag_folder)]
+    bag_paths = [os.path.join(bag_path, f"num_{i}") for i in range(10) for bag_path in glob.glob(bag_folder)]
     bag_paths = sorted(bag_paths)
     
     results = []

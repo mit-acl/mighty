@@ -4,8 +4,8 @@ and in test_unconstrained_opt_3d.ipynb, you can visualize the results saved in r
 */
 
 // test_lbfgs_solver.cpp
-#include <dynus/lbfgs_solver.hpp>
-#include <dynus/lbfgs.hpp>
+#include <mighty/lbfgs_solver.hpp>
+#include <mighty/lbfgs.hpp>
 #include <Eigen/Dense>
 #include <iostream>
 #include <fstream>
@@ -113,7 +113,6 @@ int main()
     // Constant parameters
     planner_params_t planner_params;
     planner_params.verbose = false;      // enable verbose output
-    planner_params.V_nom = 1.0;          // nominal velocity
     planner_params.V_max = 2.0;          // max velocity
     planner_params.A_max = 10.0;         // max acceleration
     planner_params.J_max = 100.0;        // max jerk
@@ -121,6 +120,7 @@ int main()
     planner_params.r_max = 1.0;          // perturbation radius for initial guesses
     planner_params.dyn_weight = 0.0;
     planner_params.time_weight = 1.0;
+    planner_params.pos_anchor_weight = 1.0;
     planner_params.jerk_weight = 1.0; // weight for jerk in the objective function
     planner_params.stat_weight = 1.0;
     planner_params.dyn_constr_vel_weight = 1.0;
@@ -141,7 +141,6 @@ int main()
     planner_params.f_max = 10.0;             // max thrust in N
     planner_params.mass = 1.0;               // mass in kg
     planner_params.g = 9.81;                 // gravity in m/s^2
-    planner_params.seam_min_dist = 0.3;      // min distance between seams to keep
 
     // Global waypoints
     vec_Vecf<3> global_wps = {

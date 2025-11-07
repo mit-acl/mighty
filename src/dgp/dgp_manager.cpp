@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
- * Copyright 2024, Kota Kondo, Aerospace Controls Laboratory
+ * Copyright 2025, Kota Kondo, Aerospace Controls Laboratory
  * Massachusetts Institute of Technology
  * All Rights Reserved
  * Authors: Kota Kondo, et al.
@@ -10,7 +10,7 @@
 
 /// The type of map data Tmap is defined as a 1D array
 using Tmap = std::vector<char>;
-using namespace dynus;
+using namespace mighty;
 using namespace termcolor;
 
 typedef timer::Timer MyTimer;
@@ -25,7 +25,6 @@ void DGPManager::setParameters(const parameters &par)
 
     // Set the parameters
     res_ = par.res;
-    use_raw_path_ = par.use_raw_path;
     drone_radius_ = par.drone_radius;
     max_dist_vertexes_ = par.max_dist_vertexes;
     use_shrinked_box_ = par.use_shrinked_box;
@@ -34,14 +33,7 @@ void DGPManager::setParameters(const parameters &par)
     local_box_size_ = {static_cast<float>(par.local_box_size[0]), static_cast<float>(par.local_box_size[1]), static_cast<float>(par.local_box_size[2])};
 
     // shared pointer to the map util for actual planning
-    map_util_ = std::make_shared<dynus::VoxelMapUtil>(par.factor_dgp * par.res, par.x_min, par.x_max, par.y_min, par.y_max, par.z_min, par.z_max, par.inflation_dgp);
-}
-
-void DGPManager::updateMapRes(double res)
-{
-    // Update the resolution
-    res_ = res;
-    map_util_->setResolution(res);
+    map_util_ = std::make_shared<mighty::VoxelMapUtil>(par.factor_dgp * par.res, par.x_min, par.x_max, par.y_min, par.y_max, par.z_min, par.z_max, par.inflation_dgp);
 }
 
 void DGPManager::cleanUpPath(vec_Vecf<3> &path)
@@ -49,7 +41,7 @@ void DGPManager::cleanUpPath(vec_Vecf<3> &path)
     planner_ptr_->cleanUpPath(path);
 }
 
-void DGPManager::setupDGPPlanner(const std::string &global_planner, bool global_planner_verbose, double res, double v_max, double a_max, double j_max, int dgp_timeout_duration_ms)
+void DGPManager::setupDGPPlanner(const std::string &global_planner, bool global_planner_verbose, double res, double v_max, double a_max, double j_max, int dgp_timeout_duration_ms, double w_unknown, double w_align, double decay_len_cells, double w_side, int los_cells, double min_len, double min_turn)
 {
 
     // Get the parameters
@@ -61,12 +53,12 @@ void DGPManager::setupDGPPlanner(const std::string &global_planner, bool global_
     j_max_3d_ = Eigen::Vector3d(j_max, j_max, j_max);
 
     // Create the DGP planner
-    planner_ptr_ = std::unique_ptr<DGPPlanner>(new DGPPlanner(global_planner, global_planner_verbose, v_max, a_max, j_max, dgp_timeout_duration_ms));
+    planner_ptr_ = std::unique_ptr<DGPPlanner>(new DGPPlanner(global_planner, global_planner_verbose, v_max, a_max, j_max, dgp_timeout_duration_ms, w_unknown, w_align, decay_len_cells, w_side, los_cells, min_len, min_turn));
 
     // Create the map_util_for_planning
     // This is the beginning of the planning, so we fetch the map_util_ and don't update it for the entire planning process (updating while planning makes the planner slower)
     mtx_map_util_.lock();
-    map_util_for_planning_ = std::make_shared<dynus::VoxelMapUtil>(*map_util_);
+    map_util_for_planning_ = std::make_shared<mighty::VoxelMapUtil>(*map_util_);
     mtx_map_util_.unlock();
 }
 
@@ -104,7 +96,7 @@ bool DGPManager::checkIfPointOccupied(const Vec3f &point)
 
 // Sample along [p0, p1] at a safe step to ensure we don't skip thin obstacles.
 // Uses the occupancy from the (already inflated) planning map.
-inline bool isSegmentFree(const dynus::VoxelMapUtil &map,
+inline bool isSegmentFree(const mighty::VoxelMapUtil &map,
                           const Vec3f &p0,
                           const Vec3f &p1,
                           const double sample_step)
@@ -135,7 +127,7 @@ inline bool isSegmentFree(const dynus::VoxelMapUtil &map,
 
 // Greedily collapse a path into maximal collision-free segments.
 // This mirrors the "generate a long segment if it’s collision free" behavior.
-inline void collapseIntoLongSegments(const dynus::VoxelMapUtil &map,
+inline void collapseIntoLongSegments(const mighty::VoxelMapUtil &map,
                                      double res,
                                      vec_Vecf<3> &path_inout,
                                      double sample_step = -1.0)
@@ -200,34 +192,7 @@ bool DGPManager::solveDGP(const Vec3f &start_sent, const Vec3f &start_vel, const
     // If there is a solution
     if (result)
     {
-        // Process path
-        if (use_raw_path_)
-        {
-            path = planner_ptr_->getRawPath(); // Get raw path
-        }
-        else
-        {
-            path = planner_ptr_->getPath();
-        }
-
-        // Collapse into long segments
-        collapseIntoLongSegments(*map_util_for_planning_, res_, path);
-
-        // Add more vertices if necessary
-        dynus_utils::createMoreVertexes(path, max_dist_vertexes_);
-
-        if (path.size() > 1)
-        {
-            path[0] = start;
-            path[path.size() - 1] = goal; // Ensure path starts and ends at the correct points
-        }
-        else
-        { // Handle the case where start and goal are in the same voxel
-            vec_Vecf<3> tmp;
-            tmp.push_back(start);
-            tmp.push_back(goal);
-            path = tmp;
-        }
+        path = planner_ptr_->getPath();
     }
     else
     {
@@ -237,8 +202,8 @@ bool DGPManager::solveDGP(const Vec3f &start_sent, const Vec3f &start_vel, const
     // Clean up path
     planner_ptr_->cleanUpPath(path);
 
-    // Add more vertices if necessary
-    dynus_utils::createMoreVertexes(path, max_dist_vertexes_);
+    // // Add more vertices if necessary
+    mighty_utils::createMoreVertexes(path, max_dist_vertexes_);
 
     return result;
 }
@@ -290,30 +255,6 @@ bool DGPManager::checkIfPointFree(const Vec3f &point) const
     // Check if the point is free
     Veci<3> point_int = map_util_for_planning_->floatToInt(point);
     return map_util_for_planning_->isFree(point_int);
-}
-
-void DGPManager::getPpoints(const Vec3f &global_path_point, const Vec3f &static_push_point, Vec3f &p_point)
-{
-
-    // starting from static_push_point, we increase the distance by some amount until it detects a free point
-    double push_detection_dist = 0.1;
-    double total_dist = (global_path_point - static_push_point).norm();
-    Vec3f direction = (global_path_point - static_push_point).normalized();
-
-    // Initialize p_point
-    p_point = static_push_point;
-
-    // Get the direction
-    for (double dist = 0.0; dist < total_dist; dist += push_detection_dist)
-    {
-        Vec3f point = static_push_point + dist * direction;
-        if (checkIfPointFree(point))
-        {
-            // get p point (which is in occupied space)
-            p_point = point - push_detection_dist * direction;
-            break;
-        }
-    }
 }
 
 bool DGPManager::checkIfPointHasNonFreeNeighbour(const Vec3f &point) const
@@ -388,19 +329,28 @@ void DGPManager::insertVecOccupiedToVecUnknownOccupied()
 
 bool DGPManager::cvxEllipsoidDecomp(const state &A, const vec_Vecf<3> &path,
                                     std::vector<LinearConstraint3D> &l_constraints,
-                                    vec_E<Polyhedron<3>> &poly_out)
+                                    vec_E<Polyhedron<3>> &poly_out,
+                                    bool use_for_safe_path)
 {
 
     // Initialize result.
     bool result = true;
 
     // Get unknown occupied cells.
-    // vec_Vecf<3> vec_uo;
-    // getVecUnknownOccupied(vec_uo);
-    // ellip_decomp_util_.set_obs(vec_uo);
-    vec_Vecf<3> vec_o;
-    getVecOccupied(vec_o);
-    ellip_decomp_util_.set_obs(vec_o);
+    if (use_for_safe_path)
+    {
+        // If we are using the convex decomposition for safe paths, we include both unknown and occupied cells.
+        vec_Vecf<3> vec_uo;
+        getVecUnknownOccupied(vec_uo);
+        ellip_decomp_util_.set_obs(vec_uo);
+    }
+    else
+    {
+        // Otherwise, we only include occupied cells.
+        vec_Vecf<3> vec_o;
+        getVecOccupied(vec_o);
+        ellip_decomp_util_.set_obs(vec_o);
+    }
 
     // Set the local bounding box and z constraints.
     ellip_decomp_util_.set_local_bbox(Vec3f(local_box_size_[0], local_box_size_[1], local_box_size_[2]));
@@ -494,11 +444,6 @@ void DGPManager::findClosestFreePoint(const Vec3f &point, Vec3f &closest_free_po
     mtx_map_util_.lock();
     map_util_->findClosestFreePoint(point, closest_free_point);
     mtx_map_util_.unlock();
-}
-
-bool DGPManager::computeStaticPushPoints(const vec_Vecf<3> &path, double discretization_dist, Vecf<3> &mean_point, int num_lookahead_global_path_for_push)
-{
-    return map_util_for_planning_->computeStaticPushPoints(path, discretization_dist, mean_point, num_lookahead_global_path_for_push);
 }
 
 int DGPManager::countUnknownCells() const

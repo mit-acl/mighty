@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # /* ----------------------------------------------------------------------------
-#  * Copyright 2024, Kota Kondo, Aerospace Controls Laboratory
+#  * Copyright 2025, Kota Kondo, Aerospace Controls Laboratory
 #  * Massachusetts Institute of Technology
 #  * All Rights Reserved
 #  * Authors: Kota Kondo, et al.
@@ -37,7 +37,7 @@ def generate_launch_description():
 
         # GoalToCmdVel Node
         node = Node(
-            package='dynus',  # Replace with your actual package name
+            package='mighty',  # Replace with your actual package name
             executable='convert_goal_to_cmd_vel',  # The name of your compiled executable
             name='convert_goal_to_cmd_vel',
             namespace=namespace,

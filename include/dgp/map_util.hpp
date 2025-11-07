@@ -7,12 +7,12 @@
 
 #include <iostream>
 #include "dgp/data_type.hpp"
-#include <dynus/dynus_type.hpp>
+#include <mighty/mighty_type.hpp>
 #include <pcl/kdtree/kdtree_flann.h>
 #include "timer.hpp"
 #include <omp.h>
 
-namespace dynus
+namespace mighty
 {
 
   // The type of map data Tmap is defined as a 1D array
@@ -152,63 +152,6 @@ namespace dynus
       }
 
       return offsets;
-    }
-
-    /**
-     * @brief Computes push vectors to adjust a given path away from obstacles.
-     * @param path A vector of Eigen::Vector3d representing the path waypoints.
-     * @param discretization_dist The distance of discretization for the path.
-     * @param mean_point The mean point of the occupied points.
-     * @return success A boolean indicating if the computation was successful.
-     */
-    bool computeStaticPushPoints(const vec_Vecf<3> &path, float discretization_dist, Vecf<3> &mean_point, int num_lookahead_global_path_for_push)
-    {
-
-      // Get the start and end points
-      const Eigen::Vector3d start = path.front();
-      const Eigen::Vector3d end = (num_lookahead_global_path_for_push < path.size()) ? path[num_lookahead_global_path_for_push] : path.back();
-      // const Eigen::Vector3d end = path.back();
-
-      // Discretize the line segment
-      Eigen::Vector3d diff = end - start;
-      int steps = std::ceil(diff.norm() / discretization_dist);
-      Eigen::Vector3d step = diff / static_cast<float>(steps);
-
-      // Initialize the occupied points
-      std::vector<Eigen::Vector3d> points;
-
-      for (int j = 0; j <= steps; ++j)
-      {
-        Eigen::Vector3d point = start + j * step;
-
-        // Convert point to map index
-        int map_index = getIndex(floatToInt(point));
-
-        // Check if point is within map bounds
-        if (!(map_index >= 0 && map_index < total_size_))
-          continue;
-
-        // Get map index and check if it's occupied or unknown
-        if (!map_[map_index] == val_free_)
-        {
-          points.push_back(point);
-        }
-      }
-
-      if (points.empty())
-      {
-        return false;
-      }
-
-      // Compute the mean location of the points
-      mean_point = Vecf<3>::Zero();
-      for (const auto &point : points)
-      {
-        mean_point += point;
-      }
-      mean_point /= points.size();
-
-      return true;
     }
 
     Veci<3> indexToVeci3(int index)
@@ -909,6 +852,6 @@ namespace dynus
 
   typedef MapUtil<3> VoxelMapUtil;
 
-} // namespace dynus
+} // namespace mighty
 
 #endif

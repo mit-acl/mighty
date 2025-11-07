@@ -119,7 +119,7 @@ def _spawn_static_block(context):
         print("[dyn_obstacles][spawn] num_obstacles:", num_obstacles,
               "seed:", seed, "spawn_interval:", spawn_interval)
 
-    urdf_path = os.path.join(get_package_share_directory('dynus'), 'urdf', urdf_xacro)
+    urdf_path = os.path.join(get_package_share_directory('mighty'), 'urdf', urdf_xacro)
 
     actions = []
     obstacles_meta = []
@@ -221,7 +221,7 @@ def _maybe_launch_forest_node(context):
     publish_rate_hz  = _as(context, 'publish_rate_hz', float, 50.0)
     seed             = _as(context, 'seed', int, 0)
     publish_markers  = _as_bool(context, 'publish_markers', True)
-    publish_tf       = _as_bool(context, 'publish_tf', False)
+    publish_tf       = _as_bool(context, 'publish_tf', True)
 
     if DEBUG_DYN_OBS:
         print("[dyn_obstacles][forest_node] delay:", delay,
@@ -244,7 +244,7 @@ def _maybe_launch_forest_node(context):
     }
 
     forest_node = Node(
-        package='dynus',
+        package='mighty',
         executable='dynamic_forest_node',
         name='dynamic_forest_trajs',
         output='screen',
@@ -267,7 +267,7 @@ def generate_launch_description():
         DeclareLaunchArgument('forest_start_delay', default_value='3.0'),
         DeclareLaunchArgument('launch_forest_node', default_value='true'),
         DeclareLaunchArgument('publish_markers', default_value='true'),
-        DeclareLaunchArgument('publish_tf', default_value='false'),
+        DeclareLaunchArgument('publish_tf', default_value='true'),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
 
         # Spatial ranges

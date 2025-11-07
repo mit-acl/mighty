@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
- * Copyright 2024, Kota Kondo, Aerospace Controls Laboratory
+ * Copyright 2025, Kota Kondo, Aerospace Controls Laboratory
  * Massachusetts Institute of Technology
  * All Rights Reserved
  * Authors: Kota Kondo, et al.
@@ -1077,35 +1077,11 @@ visualization_msgs::msg::MarkerArray stateVector2ColoredMarkerArray(const std::v
   return marker_array;
 }
 
-void deleteVertexes(vec_Vecf<3>& JPS_path, int max_value, double min_dist_between_vertexes, bool delete_too_close_points_in_global_path)
+void deleteVertexes(vec_Vecf<3>& JPS_path, int max_value)
 {
-
-  if (delete_too_close_points_in_global_path)
-  {
-    // Loop thru the vector and if two consective points are too close, delete the second one
-    vec_Vecf<3> adjusted_JPS_path;
-    adjusted_JPS_path.push_back(JPS_path[0]);  // Add the first element
-    for (int i = 1; i < JPS_path.size() - 1; i++)
-    {
-      if ((JPS_path[i] - JPS_path[i + 1]).norm() < min_dist_between_vertexes)
-      {
-        continue;
-      }
-      else
-      {
-        adjusted_JPS_path.push_back(JPS_path[i]);
-      }
-    }
-
-    // Add the last element
-    adjusted_JPS_path.push_back(JPS_path[JPS_path.size() - 1]);
-
-    // Now, update the JPS_path
-    JPS_path = adjusted_JPS_path;
-  }
-
   if (JPS_path.size() > max_value + 1)  // If I have more than (max_value + 1) vertexes
   {
-    JPS_path.erase(JPS_path.begin() + max_value + 1, JPS_path.end());  // Force JPS to have less than max_value elements
+    JPS_path.erase(JPS_path.begin() + max_value + 1,
+                   JPS_path.end());  // Force JPS to have less than max_value elements
   }
 }

@@ -19,10 +19,10 @@ public:
    * @brief Simple constructor
    * @param verbose enable debug mode
    */
-  DGPPlanner(std::string global_planner, bool verbose, double v_max, double a_max, double j_max, int dgp_timeout_duration_ms);
+  DGPPlanner(std::string global_planner, bool verbose, double v_max, double a_max, double j_max, int dgp_timeout_duration_ms, double w_unknown, double w_align, double decay_len_cells, double w_side, int los_cells = 3, double min_len = 0.5, double min_turn = 10.0);
 
   // Set map util for collistion checking
-  void setMapUtil(const std::shared_ptr<dynus::MapUtil<3>> &map_util);
+  void setMapUtil(const std::shared_ptr<mighty::MapUtil<3>> &map_util);
   /**
    * @brief Status of the planner
    *
@@ -58,10 +58,10 @@ public:
   double getDynamicAstarTime();
   double getRecoverPathTime();
   void updateVmax(double v_max);
-  vec_Vecf<3> shortCutByLoS(const vec_Vecf<3> &in, double inflate_radius_cells) const;
+  vec_Vecf<3> shortCutByLoS(const vec_Vecf<3> &in, int inflate_radius_cells) const;
   bool lineOfSightCapsule(const Vecf<3> &a,
                           const Vecf<3> &b,
-                          double inflate_radius_cells) const;
+                          int inflate_radius_cells) const;
   vec_Vecf<3> collapseShortEdges(const vec_Vecf<3> &in, double min_len) const;
   vec_Vecf<3> angleSpacingFilter(const vec_Vecf<3> &in,
                                  double min_turn_deg,
@@ -69,9 +69,9 @@ public:
 
 protected:
   // Assume using 3D voxel map for all 2d and 3d planning
-  std::shared_ptr<dynus::VoxelMapUtil> map_util_;
+  std::shared_ptr<mighty::VoxelMapUtil> map_util_;
   // The planner
-  std::shared_ptr<dynus::GraphSearch> graph_search_;
+  std::shared_ptr<mighty::GraphSearch> graph_search_;
   // Raw path from planner
   vec_Vecf<3> raw_path_;
   // Modified path for future usage
@@ -98,6 +98,20 @@ protected:
   double v_max_;
   double a_max_;
   double j_max_;
+
+  // alignment
+  double w_align_ = 60.0;        // weight for alignment with start velocity
+  double decay_len_cells_ = 20.0;    // decay length in cells for alignment
+  double w_side_ = 0.2;         // weight for side tie-break
+
+  // unknown cell cost weight
+  double w_unknown_ = 1.0;
+
+  // LOS post processing
+  int los_cells_ = 3;           // number of cells for inflation in LoS
+  double min_len_ = 0.5;        // minimum length of edges
+  double min_turn_ = 10.0;      // minimum turn angle in degrees
+
 };
 
 #endif

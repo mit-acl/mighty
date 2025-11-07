@@ -1,18 +1,13 @@
 # at the top of your Makefile
-GIT_ACCESS_TOKEN ?=          # default is empty
-GIT_ACCESS_TOKEN := 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
-
 .PHONY: build
 build:
 	docker build \
-	  --build-arg GIT_ACCESS_TOKEN=${GIT_ACCESS_TOKEN} \
-	  -t dynus .
+	  -t mighty .
 
 .PHONY: build-no-cache
 build-no-cache:
 	docker build \
-	--build-arg GIT_ACCESS_TOKEN=${GIT_ACCESS_TOKEN} \
-	--build-arg DUMMY=`date +%s` -t dynus .
+	--build-arg DUMMY=`date +%s` -t mighty .
 
 run:
 	xhost + && docker run  -it \
@@ -23,4 +18,4 @@ run:
 				--network=host \
 				--env="DISPLAY" \
 				--env="QT_X11_NO_MITSHM=1" \
-				--rm dynus
+				--rm mighty

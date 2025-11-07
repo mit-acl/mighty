@@ -1,7 +1,7 @@
 FROM ros:humble
 
 LABEL Maintainer="Kota Kondo <kkondo@mit.edu>" \
-      Description="Ubuntu 22.04, ROS2 humble for DYNUS"
+      Description="Ubuntu 22.04, ROS2 humble for MIGHTY"
 
 # Set environment variables
 ##########################################
@@ -24,14 +24,7 @@ RUN mkdir code
 
 # Install dependencies
 ##########################################
-
-#TODO: now we use gazebo_ros_pkgs from source, so we don't need to install ros-${ROS_DISTRO}-gazebo-* and ros-${ROS_DISTRO}-gazebo-ros-pkgs i think - need to double check
-
-RUN apt-get install -y  ros-${ROS_DISTRO}-octomap \
-                        ros-${ROS_DISTRO}-octomap-msgs \
-                        ros-${ROS_DISTRO}-octomap-ros \
-                        ros-${ROS_DISTRO}-octomap-rviz-plugins \
-                        ros-${ROS_DISTRO}-gazebo-* \
+RUN apt-get install -y  ros-${ROS_DISTRO}-gazebo-* \
                         ros-${ROS_DISTRO}-pcl-conversions \
                         ros-${ROS_DISTRO}-example-interfaces \
                         ros-${ROS_DISTRO}-pcl-ros \
@@ -50,33 +43,23 @@ RUN apt install -y  ros-${ROS_DISTRO}-desktop \
                         libpcl-dev \
                         build-essential \
                         nlohmann-json3-dev
-                        # ros-${ROS_DISTRO}-gazebo-ros-pkgs \
 
-# Install Gazebo for the suitable ROS version
-# RUN curl -sSL http://get.gazebosim.org | sh
-
-# Set up git acces token for private repos
+# Install MIGHTY and dependencies
 ##########################################
-ARG GIT_ACCESS_TOKEN=${GIT_ACCESS_TOKEN}
-
-# Install DYNUS and dependencies
-##########################################
-RUN mkdir -p /home/kkondo/code/dynus_ws/src
-WORKDIR /home/kkondo/code/dynus_ws/src
+RUN mkdir -p /home/kkondo/code/mighty_ws/src
+WORKDIR /home/kkondo/code/mighty_ws/src
 # dummy arg to invalidate cache and build from here
 ARG DUMMY=unknown
-RUN DUMMY=${DUMMY} git clone https://kotakondo:${GIT_ACCESS_TOKEN}@github.com/kotakondo/dynus.git
-WORKDIR /home/kkondo/code/dynus_ws/src/dynus
-RUN git switch acl_mapper
-WORKDIR /home/kkondo/code/dynus_ws/src
+RUN DUMMY=${DUMMY} https://github.com/mit-acl/mighty.git
+WORKDIR /home/kkondo/code/mighty_ws/src/mighty
+RUN git switch dev
+WORKDIR /home/kkondo/code/mighty_ws/src
 RUN git clone https://github.com/kotakondo/dynus_interfaces.git
-RUN git clone https://github.com/kotakondo/octomap_mapping.git
 RUN git clone https://github.com/kotakondo/realsense_gazebo_plugin.git
 RUN git clone https://github.com/kotakondo/livox_laser_simulation_ros2.git
-RUN git clone https://github.com/kotakondo/octomap_rviz_plugins.git
 RUN git clone https://github.com/kotakondo/gazebo_ros_pkgs.git
 RUN git clone https://gitlab.com/mit-acl/lab/acl-mapping.git
-WORKDIR /home/kkondo/code/dynus_ws/src/acl-mapping
+WORKDIR /home/kkondo/code/mighty_ws/src/acl-mapping
 RUN git switch ros2
 RUN mkdir -p /home/kkondo/code/decomp_ws/src
 WORKDIR /home/kkondo/code/decomp_ws/src
@@ -105,7 +88,7 @@ WORKDIR /home/kkondo/code/livox_ws/src/livox_ros_driver2
 RUN . /opt/ros/humble/setup.sh && ./build.sh humble
 
 ### for other packages
-WORKDIR /home/kkondo/code/dynus_ws
+WORKDIR /home/kkondo/code/mighty_ws
 RUN . /opt/ros/humble/setup.sh && \
     . /home/kkondo/code/decomp_ws/install/setup.sh && \
     export CMAKE_PREFIX_PATH=/home/kkondo/code/livox_ws/install/livox_ros_driver2:/home/kkondo/code/decomp_ws/install/decomp_util && \
@@ -129,7 +112,7 @@ RUN echo 'alias sb="source ~/.bashrc"' >> ~/.bashrc
 RUN echo 'alias eb="code ~/.bashrc"' >> ~/.bashrc
 RUN echo 'alias gs="git status"' >> ~/.bashrc
 RUN echo 'alias gp="git push"' >> ~/.bashrc
-RUN echo 'alias roscd="cd ~/code/dynus_ws"' >> ~/.bashrc
+RUN echo 'alias roscd="cd ~/code/mighty_ws"' >> ~/.bashrc
 RUN echo 'alias cb="roscd && colcon build && sb"' >> ~/.bashrc
 RUN echo 'alias ss="roscd && source install/setup.bash"' >> ~/.bashrc
 RUN echo 'alias cbd="clear && roscd && colcon build && ss"' >> ~/.bashrc
@@ -141,6 +124,6 @@ RUN echo 'alias tks="tmux kill-server"' >> ~/.bashrc
 
 # Set up Entry Point
 # ##########################################
-COPY ./dynus.sh /
-RUN chmod +x /dynus.sh
-# ENTRYPOINT ["/dynus.sh"]
+COPY ./mighty.sh /
+RUN chmod +x /mighty.sh
+# ENTRYPOINT ["/mighty.sh"]

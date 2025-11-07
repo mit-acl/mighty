@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # /* ----------------------------------------------------------------------------
-#  * Copyright 2024, Kota Kondo, Aerospace Controls Laboratory
+#  * Copyright 2025, Kota Kondo, Aerospace Controls Laboratory
 #  * Massachusetts Institute of Technology
 #  * All Rights Reserved
 #  * Authors: Kota Kondo, et al.
@@ -38,7 +38,7 @@ class BenchmarkNode(Node):
         self.use_dyn_obs = True
 
         super().__init__('benchmark_node')
-        self.declare_parameter('iterations', 10)
+        self.declare_parameter('iterations', 5)
         self.iterations = self.get_parameter('iterations').value
         self.current_run = 0
 
@@ -78,7 +78,7 @@ class BenchmarkNode(Node):
         os.makedirs(bag_folder_path, exist_ok=True)
 
         # simulation loop
-        for i in range(self.iterations):
+        for i in range(4, self.iterations):
             self.current_run = i
             self.get_logger().info(f'Starting simulation {self.current_run}/{self.iterations}')
             self.start_simulation(self.global_planner_algorithm, csv_folder_path, bag_folder_path, self.algorithm)
@@ -99,7 +99,7 @@ class BenchmarkNode(Node):
         self.get_logger().info(f'Goal position: {goal_x}, {goal_y}')
 
         # Base
-        self.sim_process_base = subprocess.Popen(["ros2", "launch", "dynus", "base_dynus.launch.py", f"use_dyn_obs:={self.use_dyn_obs}", "use_gazebo_gui:=false", f"use_rviz:={self.use_rviz}", f"env:={self.env}"], preexec_fn=os.setsid)
+        self.sim_process_base = subprocess.Popen(["ros2", "launch", "mighty", "base_mighty.launch.py", f"use_dyn_obs:={self.use_dyn_obs}", "use_gazebo_gui:=false", f"use_rviz:={self.use_rviz}", f"env:={self.env}"], preexec_fn=os.setsid)
 
         # ACL Mapper
         self.acl_mapper_process = subprocess.Popen(["ros2", "launch", "global_mapper_ros", "global_mapper_node.launch.py"], preexec_fn=os.setsid)
@@ -107,9 +107,10 @@ class BenchmarkNode(Node):
         sleep(10)
         
         # Onboard
-        self.sim_process_onboard = subprocess.Popen(["ros2", "launch", "dynus", "onboard_dynus.launch.py", f"x:={start_x}", f"y:={start_y}", f"z:={self.start_goal_z}", "yaw:=0", "namespace:=NX01", f"use_obstacle_tracker:={self.use_dyn_obs}", f"data_file:={csv_folder_path}/num_{self.current_run}.csv", f"global_planner:={global_planner_algorithm}", "use_benchmark:=true", "depth_camera_name:=d435", f"num_N:={self.num_N}"], preexec_fn=os.setsid)
+        self.sim_process_onboard = subprocess.Popen(["ros2", "launch", "mighty", "onboard_mighty.launch.py", f"x:={start_x}", f"y:={start_y}", f"z:={self.start_goal_z}", "yaw:=0", "namespace:=NX01", f"use_obstacle_tracker:={self.use_dyn_obs}", f"data_file:={csv_folder_path}/num_{self.current_run}.csv", f"global_planner:={global_planner_algorithm}", "use_benchmark:=true", "depth_camera_name:=d435", f"num_N:={self.num_N}"], preexec_fn=os.setsid)
         
-        sleep(50)
+        time_to_sleep = 100 if self.env == "empty_wo_ground" else 50
+        sleep(time_to_sleep)
 
         # Bag recording
         self.sim_bag_record = subprocess.Popen(["python3", "/home/kkondo/code/dynus_ws/src/dynus/scripts/bag_record.py", "--bag_number", str(self.current_run), "--bag_path", f"{bag_folder_path}/num_{self.current_run}", "--agents", "['NX01']"], preexec_fn=os.setsid)
@@ -118,7 +119,7 @@ class BenchmarkNode(Node):
         
         # Goal
         # print("Sending goal")
-        self.sim_process_goal =  subprocess.Popen(["ros2", "launch", "dynus", "goal_sender.launch.py", "list_agents:=['NX01']", f"list_goals:=['[{goal_x}, {goal_y}]']", f"default_goal_z:={self.start_goal_z}"], preexec_fn=os.setsid)
+        self.sim_process_goal =  subprocess.Popen(["ros2", "launch", "mighty", "goal_sender.launch.py", "list_agents:=['NX01']", f"list_goals:=['[{goal_x}, {goal_y}]']", f"default_goal_z:={self.start_goal_z}"], preexec_fn=os.setsid)
 
 
     def stop_simulation(self):

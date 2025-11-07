@@ -2,6 +2,22 @@
 
 ### **Submitted to the IEEE Robotics and Automation Letters (RA-L)**
 
+| **Trajectory** | **Forest** |
+| ------------------------- | ------------------------- |
+<a target="_blank" href="https://youtu.be/SI8YbMS-wyw"><img src="./imgs/mighty_gifs_complex_benchmarks.gif" width="350" height="193" alt="Complex Benchmarks"></a> | <a target="_blank" href="https://youtu.be/SI8YbMS-wyw"><img src="./imgs/mighty_gifs_hard_forest.gif" width="350" height="193" alt="Static Forest"></a> |
+
+| **Dynamic Obstacles** | **Long Flight** |
+| ------------------------- | ------------------------- |
+<a target="_blank" href="https://youtu.be/SI8YbMS-wyw"><img src="./imgs/mighty_gifs_dynamic_sim.gif" width="350" height="193" alt="Dynamic Obstacles"></a> | <a target="_blank" href="https://youtu.be/SI8YbMS-wyw"><img src="./imgs/mighty_gifs_hw_long_flight.gif" width="350" height="193" alt="Hardware Long Flight"></a>
+
+| **Fast Flight 1** | **Fast Flight 2** |
+| ------------------------- | ------------------------- |
+<a target="_blank" href="https://youtu.be/SI8YbMS-wyw"><img src="./imgs/mighty_gifs_hw_fast_flight_1.gif" width="350" height="193" alt="Hardware Fast Flight 1"></a> | <a target="_blank" href="https://youtu.be/SI8YbMS-wyw"><img src="./imgs/mighty_gifs_hw_fast_flight_2.gif" width="350" height="193" alt="Hardware Fast Flight 2"></a>
+
+| **Dynamic Env 1** | **Dynamic Env 2** |
+| ------------------------- | ------------------------- |
+<a target="_blank" href="https://youtu.be/SI8YbMS-wyw"><img src="./imgs/mighty_gifs_hw_dynamic_1.gif" width="350" height="193" alt="Hardware Dynamic Env 1"></a> | <a target="_blank" href="https://youtu.be/SI8YbMS-wyw"><img src="./imgs/mighty_gifs_hw_dynamic_2.gif" width="350" height="193" alt="Hardware Dynamic Env 2"></a>
+
 ## General Setup
 
 MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 with ROS 2 Humble.
@@ -19,7 +35,6 @@ MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 w
    cd src/dynus/docker
    git checkout lbfgs
    ```
-
 3. **Generate a Personal Access Token (PAT):**
     - Follow [this guide](https://www.geeksforgeeks.org/how-to-generate-personal-access-token-in-github/) to generate your PAT.
     - When generating your PAT, ensure:
@@ -144,22 +159,14 @@ MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 w
       ```
       sudo apt-get install ros-humble-diagnostic-updater
       ```
-  - **Error 7: When running `colcon build`**
-    ```
-    /lib/libgurobi_c++.a, needed by test_yaw_solver
-    ```
-    - **Solution:**  
-      Set the Gurobi path: (even if you put this in bashrc - just to make sure it's set)
-      ```
-      export GUROBI_HOME=/opt/gurobi1103/linux64
-      colcon build --cmake-args "-DCMAKE_BUILD_TYPE=Release"
-      ```
-    ```
 </details>
 
 ### Run the Simulation
 
-
+Change the /path/to/install/ to your actual install path (eg. `./src/dynus/launch/run_mighty.sh /home/kkondo/code/dynus_ws/install/setup.bash`)
+```bash
+./src/dynus/launch/run_mighty.sh /path/to/install/setup.bash
+```
 
 ### Notes
 
@@ -345,7 +352,7 @@ MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 w
     ```bash
     xhost +
     ```
-  - *If you see "Depth Camera not found" in `base_dynus.launch..py`, try rebuilding the docker image.*
+  - *If you see "Depth Camera not found" in `base_mighty.launch..py`, try rebuilding the docker image.*
 
   **Error Troubleshooting:**
   - **Error:**

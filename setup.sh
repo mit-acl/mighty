@@ -57,25 +57,6 @@ sudo apt install -y  ros-${ROS_DISTRO}-rviz-common
 sudo apt install -y  libpcl-dev 
 sudo apt install -y  build-essential
 
-# Install Gurobi
-wget https://packages.gurobi.com/11.0/gurobi11.0.3_linux64.tar.gz -P . 
-tar -xzf gurobi11.0.3_linux64.tar.gz
-rm gurobi11.0.3_linux64.tar.gz
-sudo mv gurobi1103/ /opt
-
-cd /opt/gurobi1103/linux64/src/build 
-make && cp libgurobi_c++.a ../../lib/
-echo >> ~/.bashrc
-echo "# Gurobi" >> ~/.bashrc
-echo 'export GUROBI_HOME="/opt/gurobi1103/linux64" ' >> ~/.bashrc
-echo 'export PATH="${PATH}:${GUROBI_HOME}/bin" ' >> ~/.bashrc
-echo 'export LD_LIBRARY_PATH="${GUROBI_HOME}/lib" ' >> ~/.bashrc
-source ~/.bashrc 
-
-export GUROBI_HOME="/opt/gurobi1103/linux64" 
-export PATH="${PATH}:${GUROBI_HOME}/bin" 
-export LD_LIBRARY_PATH="${GUROBI_HOME}/lib" 
-
 # Dynus and dependencies
 mkdir -p /home/${USER}/code/dynus_ws/src
 cd /home/${USER}/code/dynus_ws/src

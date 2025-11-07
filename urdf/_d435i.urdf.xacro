@@ -14,7 +14,7 @@ aluminum peripherial evaluation case.
 
 <robot name="sensor_d435i" xmlns:xacro="http://ros.org/wiki/xacro">
   <!--File includes-->
-  <xacro:include filename="$(find dynus)/urdf/_d435i.gazebo.xacro"/>
+  <xacro:include filename="$(find mighty)/urdf/_d435i.gazebo.xacro"/>
 
   <xacro:macro name="sensor_d435i" params="parent
                                           name:=camera
@@ -86,7 +86,7 @@ aluminum peripherial evaluation case.
       <visual>
       <origin xyz="${d435i_cam_mount_from_center_offset} ${-d435i_cam_depth_py} 0" rpy="${M_PI/2} 0 ${M_PI/2}"/>
         <geometry>
-          <mesh filename="package://dynus/share/dynus/meshes/real_sense/d435.dae"/>
+          <mesh filename="package://mighty/share/dynus/meshes/real_sense/d435.dae"/>
         </geometry>
         <material name="${name}_aluminum"/>
       </visual>

@@ -12,17 +12,17 @@
 #include <vector>                    // std::vector
 #include <unordered_map>             // std::unordered_map
 #include <mutex>                     // std::mutex
-#include <dgp/map_util.hpp>          // dynus::MapUtil
+#include <dgp/map_util.hpp>          // mighty::MapUtil
 #include <dgp/data_type.hpp>
 #include <timer.hpp>
 #include <dgp/data_type.hpp>
-#include <dynus/utils.hpp>
-#include <dynus/dynus_type.hpp>
+#include <mighty/utils.hpp>
+#include <mighty/mighty_type.hpp>
 
 // TODO: ROS dependency (not ideal)
 #include <rclcpp/rclcpp.hpp>
 
-namespace dynus
+namespace mighty
 {
   /// Heap element comparison
   template <class T>
@@ -179,7 +179,7 @@ namespace dynus
      * @param global_planner initial guess planner, optional, default as ""
      * @param res map resolution, optional, default as 0.5
      */
-    GraphSearch(const int *cMap, const std::shared_ptr<dynus::VoxelMapUtil> &map_util, int xDim, int yDim, int zDim, double eps, bool verbose, std::string global_planner);
+    GraphSearch(const int *cMap, const std::shared_ptr<mighty::VoxelMapUtil> &map_util, int xDim, int yDim, int zDim, double eps, bool verbose, std::string global_planner, double w_unknown, double w_align = 60.0, double decay_len_cells = 20.0, double w_side = 0.2);
 
     /**
      * @brief start 3D planning thread
@@ -213,17 +213,6 @@ namespace dynus
     /// Set max dynamic constraints
     void setBounds(double max_values[3]);
 
-    // Prefer steps aligned with start_vel_ near the start;
-    // also apply a tiny side tie-break (left/right) derived from geometry.
-    void setDirectionalBias(double w_align_cells,
-                            double decay_len_cells,
-                            double w_side_cells)
-    {
-      w_align_ = std::max(0.0, w_align_cells);
-      decay_cells_ = std::max(1e-3, decay_len_cells);
-      w_side_ = std::max(0.0, w_side_cells);
-    }
-
   private:
     /// Select planner
     bool select_planner(StatePtr &currNode_ptr, int max_expand, int start_id, int goal_id, std::chrono::milliseconds timeout_duration);
@@ -248,6 +237,9 @@ namespace dynus
 
     /// Check if (x, y, z) is occupied
     bool isOccupied(int x, int y, int z) const;
+
+    /// Check if (x, y, z) is unknown
+    bool isUnknown(int x, int y, int z) const;
 
     /// Clculate heuristic
     double getHeur(int x, int y, int z) const;
@@ -284,6 +276,15 @@ namespace dynus
     bool verbose_;
 
     const int val_free_ = 0;
+    const int val_occupied_ = 100;
+    const int val_unknown_ = -1;
+
+    const double w_unknown_ = 1.5; // cost for unknown cells, in multiples of base cost (1 for orthogonal step)
+    // weights are in "cell-length" units to match succ_costs
+    double w_align_{60.0};     // strength of alignment penalty (cells)
+    double decay_len_cells_{20.0}; // e-folding distance from the start (cells)
+    double w_side_{0.2};      // side (handedness) tie-break strength (cells)
+
     int xGoal_, yGoal_, zGoal_;
     bool use_jps_ = false;
 
@@ -301,7 +302,7 @@ namespace dynus
     std::string global_planner_;
 
     // Map util
-    std::shared_ptr<dynus::VoxelMapUtil> map_util_;
+    std::shared_ptr<mighty::VoxelMapUtil> map_util_;
 
     // Set start and goal
     Vecf<3> start_;
@@ -328,10 +329,6 @@ namespace dynus
     // variables
     Vecf<3> start_vel_;
 
-    // weights are in "cell-length" units to match succ_costs
-    double w_align_{0.0};     // strength of alignment penalty (cells)
-    double decay_cells_{3.0}; // e-folding distance from the start (cells)
-    double w_side_{0.0};      // side (handedness) tie-break strength (cells)
   };
 }
 #endif
