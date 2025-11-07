@@ -103,7 +103,6 @@ RUN echo    'pcm.!default { \
             }' >> /usr/share/alsa/alsa.conf
 
 # For livox lidar
-# ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/lib:/usr/local/include
 ENV LD_LIBRARY_PATH=/home/kkondo/code/livox_ws/install/livox_ros_driver2/lib:${LD_LIBRARY_PATH}:/usr/local/lib:/usr/local/include
 
 # Alias
@@ -126,4 +125,4 @@ RUN echo 'alias tks="tmux kill-server"' >> ~/.bashrc
 # ##########################################
 COPY ./mighty.sh /
 RUN chmod +x /mighty.sh
-# ENTRYPOINT ["/mighty.sh"]
+ENTRYPOINT ["/mighty.sh"]
