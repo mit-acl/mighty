@@ -35,23 +35,24 @@ echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
 export ROS_DISTRO=humble
 
 # Ros dependencies 
-sudo apt-get install -y  ros-${ROS_DISTRO}-gazebo-* 
-sudo apt-get install -y  ros-${ROS_DISTRO}-pcl-conversions 
-sudo apt-get install -y  ros-${ROS_DISTRO}-example-interfaces 
-sudo apt-get install -y  ros-${ROS_DISTRO}-pcl-ros 
-sudo apt-get install -y  ros-${ROS_DISTRO}-rviz2 
-sudo apt-get install -y  ros-${ROS_DISTRO}-rqt-gui 
-sudo apt-get install -y  ros-${ROS_DISTRO}-rqt-gui-py 
-sudo apt-get install -y  ros-${ROS_DISTRO}-tf2-tools 
-sudo apt-get install -y  ros-${ROS_DISTRO}-tf-transformations
+sudo apt-get install -y ros-${ROS_DISTRO}-gazebo-* 
+sudo apt-get install -y ros-${ROS_DISTRO}-pcl-conversions 
+sudo apt-get install -y ros-${ROS_DISTRO}-example-interfaces 
+sudo apt-get install -y ros-${ROS_DISTRO}-pcl-ros 
+sudo apt-get install -y ros-${ROS_DISTRO}-rviz2 
+sudo apt-get install -y ros-${ROS_DISTRO}-rqt-gui 
+sudo apt-get install -y ros-${ROS_DISTRO}-rqt-gui-py 
+sudo apt-get install -y ros-${ROS_DISTRO}-tf2-tools 
+sudo apt-get install -y ros-${ROS_DISTRO}-tf-transformations
+sudo apt-get install -y nlohmann-json3-dev
 
-sudo apt install -y  ros-${ROS_DISTRO}-turtlesim 
-sudo apt install -y  ros-${ROS_DISTRO}-rqt* 
-sudo apt install -y  ros-${ROS_DISTRO}-rviz2 
-sudo apt install -y  ros-${ROS_DISTRO}-gazebo-ros-pkgs 
-sudo apt install -y  ros-${ROS_DISTRO}-rviz-common 
-sudo apt install -y  libpcl-dev 
-sudo apt install -y  build-essential
+sudo apt install -y ros-${ROS_DISTRO}-turtlesim 
+sudo apt install -y ros-${ROS_DISTRO}-rqt* 
+sudo apt install -y ros-${ROS_DISTRO}-rviz2 
+sudo apt install -y ros-${ROS_DISTRO}-gazebo-ros-pkgs 
+sudo apt install -y ros-${ROS_DISTRO}-rviz-common 
+sudo apt install -y libpcl-dev 
+sudo apt install -y build-essential
 
 # MIGHTY and dependencies
 mkdir -p /home/${USER}/code/mighty_ws/src

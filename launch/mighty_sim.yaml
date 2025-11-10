@@ -12,7 +12,9 @@ windows:
     - export ROS_DOMAIN_ID=7
     panes:
       # base station
-      - ros2 launch mighty base_mighty.launch.py use_dyn_obs:=false use_gazebo_gui:=false use_rviz:=true env:=hard_forest
+      - shell_command:
+        - source /usr/share/gazebo/setup.sh
+        - ros2 launch mighty base_mighty.launch.py use_dyn_obs:=false use_gazebo_gui:=false use_rviz:=true env:=hard_forest
 
       # ACL mapper
       - shell_command:

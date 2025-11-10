@@ -86,9 +86,9 @@ MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 w
    This script will first install ROS 2 Humble, then MIGHTY and its dependencies. Please note that this script modifies your `~/.bashrc` file.
 
  3. **Run the Simulation**
-    Change the /path/to/install/ to your actual install path (eg. `./src/mighty/launch/run_mighty.sh /home/kkondo/code/ws/install/setup.bash`)
+    Run the simulation. You might need to change the path to `setup.bash` to its absolute path (eg. `/home/kkondo/code/ws/install/setup.bash`).
     ```bash
-    ./src/mighty/launch/run_mighty.sh /path/to/install/setup.bash
+    cd ~/code/mighty_ws && ./src/mighty/launch/run_mighty_sim.sh ~/code/mighty_ws/install/setup.bash
     ```
 
 ### Notes
