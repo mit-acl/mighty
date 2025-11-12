@@ -1,4 +1,4 @@
-# MIGHTY Simple Demo
+# MIGHTY Interactive Demo
 
 <a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_click_example.gif" width="700" height="386" alt="Complex Benchmarks"></a>
 
@@ -9,6 +9,15 @@ This is a revised version for benchmarking based on Kumar Lab's repo (https://gi
 ## Video
 
 The full video is available [https://youtu.be/2KNR2eF0PEE](https://youtu.be/2KNR2eF0PEE).
+
+## System Demo
+
+If you are interested in the real-world system demo, please check out `main` branch: [https://github.com/mit-acl/mighty/tree/main]
+```
+bash
+git checkout main
+```
+and follow the instructions in the README file there.
 
 ## Setup Instructions 
 
