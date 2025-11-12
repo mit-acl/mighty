@@ -35,57 +35,36 @@ echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
 export ROS_DISTRO=humble
 
 # Ros dependencies 
-sudo apt-get install -y  ros-${ROS_DISTRO}-octomap 
-sudo apt-get install -y  ros-${ROS_DISTRO}-octomap-msgs 
-sudo apt-get install -y  ros-${ROS_DISTRO}-octomap-ros 
-sudo apt-get install -y  ros-${ROS_DISTRO}-octomap-rviz-plugins 
-sudo apt-get install -y  ros-${ROS_DISTRO}-gazebo-* 
-sudo apt-get install -y  ros-${ROS_DISTRO}-pcl-conversions 
-sudo apt-get install -y  ros-${ROS_DISTRO}-example-interfaces 
-sudo apt-get install -y  ros-${ROS_DISTRO}-pcl-ros 
-sudo apt-get install -y  ros-${ROS_DISTRO}-rviz2 
-sudo apt-get install -y  ros-${ROS_DISTRO}-rqt-gui 
-sudo apt-get install -y  ros-${ROS_DISTRO}-rqt-gui-py 
-sudo apt-get install -y  ros-${ROS_DISTRO}-tf2-tools 
-sudo apt-get install -y  ros-${ROS_DISTRO}-tf-transformations
+sudo apt-get install -y ros-${ROS_DISTRO}-gazebo-* 
+sudo apt-get install -y ros-${ROS_DISTRO}-pcl-conversions 
+sudo apt-get install -y ros-${ROS_DISTRO}-example-interfaces 
+sudo apt-get install -y ros-${ROS_DISTRO}-pcl-ros 
+sudo apt-get install -y ros-${ROS_DISTRO}-rviz2 
+sudo apt-get install -y ros-${ROS_DISTRO}-rqt-gui 
+sudo apt-get install -y ros-${ROS_DISTRO}-rqt-gui-py 
+sudo apt-get install -y ros-${ROS_DISTRO}-tf2-tools 
+sudo apt-get install -y ros-${ROS_DISTRO}-tf-transformations
+sudo apt-get install -y nlohmann-json3-dev
 
-sudo apt install -y  ros-${ROS_DISTRO}-turtlesim 
-sudo apt install -y  ros-${ROS_DISTRO}-rqt* 
-sudo apt install -y  ros-${ROS_DISTRO}-rviz2 
-sudo apt install -y  ros-${ROS_DISTRO}-gazebo-ros-pkgs 
-sudo apt install -y  ros-${ROS_DISTRO}-rviz-common 
-sudo apt install -y  libpcl-dev 
-sudo apt install -y  build-essential
+sudo apt install -y ros-${ROS_DISTRO}-turtlesim 
+sudo apt install -y ros-${ROS_DISTRO}-rqt* 
+sudo apt install -y ros-${ROS_DISTRO}-rviz2 
+sudo apt install -y ros-${ROS_DISTRO}-gazebo-ros-pkgs 
+sudo apt install -y ros-${ROS_DISTRO}-rviz-common 
+sudo apt install -y libpcl-dev 
+sudo apt install -y build-essential
 
-# Install Gurobi
-wget https://packages.gurobi.com/11.0/gurobi11.0.3_linux64.tar.gz -P . 
-tar -xzf gurobi11.0.3_linux64.tar.gz
-rm gurobi11.0.3_linux64.tar.gz
-sudo mv gurobi1103/ /opt
-
-cd /opt/gurobi1103/linux64/src/build 
-make && cp libgurobi_c++.a ../../lib/
-echo >> ~/.bashrc
-echo "# Gurobi" >> ~/.bashrc
-echo 'export GUROBI_HOME="/opt/gurobi1103/linux64" ' >> ~/.bashrc
-echo 'export PATH="${PATH}:${GUROBI_HOME}/bin" ' >> ~/.bashrc
-echo 'export LD_LIBRARY_PATH="${GUROBI_HOME}/lib" ' >> ~/.bashrc
-source ~/.bashrc 
-
-export GUROBI_HOME="/opt/gurobi1103/linux64" 
-export PATH="${PATH}:${GUROBI_HOME}/bin" 
-export LD_LIBRARY_PATH="${GUROBI_HOME}/lib" 
-
-# Dynus and dependencies
-mkdir -p /home/${USER}/code/dynus_ws/src
-cd /home/${USER}/code/dynus_ws/src
-git https://github.com/kotakondo/dynus.git
+# MIGHTY and dependencies
+mkdir -p /home/${USER}/code/mighty_ws/src
+cd /home/${USER}/code/mighty_ws/src
+git clone https://github.com/mit-acl/mighty.git
 git clone https://github.com/kotakondo/dynus_interfaces.git
-git clone https://github.com/kotakondo/octomap_mapping.git
 git clone https://github.com/kotakondo/realsense_gazebo_plugin.git
 git clone https://github.com/kotakondo/livox_laser_simulation_ros2.git
-git clone https://github.com/kotakondo/octomap_rviz_plugins.git
+git clone https://gitlab.com/mit-acl/lab/acl-mapping.git
 git clone https://github.com/kotakondo/gazebo_ros_pkgs.git
+cd /home/${USER}/code/mighty_ws/src/acl-mapping
+git switch ros2
 
 mkdir -p /home/${USER}/code/decomp_ws/src
 cd /home/${USER}/code/decomp_ws/src
@@ -112,12 +91,12 @@ cmake .. && make -j && sudo make install
 cd /home/${USER}/code/livox_ws/src/livox_ros_driver2
 source /opt/ros/humble/setup.sh && ./build.sh humble
 
-#Dynus 
-cd /home/${USER}/code/dynus_ws
+#MIGHTY
+cd /home/${USER}/code/mighty_ws
 source /opt/ros/humble/setup.sh 
 source /home/${USER}/code/decomp_ws/install/setup.sh 
 export CMAKE_PREFIX_PATH=/home/${USER}/code/livox_ws/install/livox_ros_driver2:/home/${USER}/code/decomp_ws/install/decomp_util
-colcon build
+colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # Add livox to library path 
 echo >> ~/.bashrc
@@ -126,17 +105,10 @@ echo 'export LD_LIBRARY_PATH="/opt/ros/humble/lib:${LD_LIBRARY_PATH}" ' >> ~/.ba
 echo 'export LD_LIBRARY_PATH="/home/${USER}/code/decomp_ws/install/decomp_ros_msgs/lib:${LD_LIBRARY_PATH}" ' >> ~/.bashrc
 source ~/.bashrc
 
-# Install and configure cyclonedds
-sudo apt install -y ros-humble-rmw-cyclonedds-cpp
-
 echo >> ~/.bashrc
 echo '# ROS2 RTPS network' >> ~/.bashrc
 echo 'export ROS_DOMAIN_ID=10' >> ~/.bashrc
-echo 'export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp' >> ~/.bashrc
-echo 'export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET' >> ~/.bashrc
-echo 'export CYCLONEDDS_URI="<CycloneDDS><Domain><General><NetworkInterfaceAddress>wlo1</NetworkInterfaceAddress></General></Domain></CycloneDDS>"' >> ~/.bashrc
 echo >> ~/.bashrc
-echo '# Path to library for cyclonedds' >> ~/.bashrc
 echo 'export LD_LIBRARY_PATH=/opt/ros/humble/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH' >> ~/.bashrc
 echo >> ~/.bashrc
 echo '# Source ros distro' >> ~/.bashrc

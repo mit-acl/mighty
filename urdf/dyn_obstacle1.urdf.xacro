@@ -22,7 +22,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="$(find dynus)/meshes/obstacles/model4.dae" scale="$(arg size) $(arg size) $(arg size)" />
+        <mesh filename="$(find mighty)/meshes/obstacles/model4.dae" scale="$(arg size) $(arg size) $(arg size)" />
       </geometry>
     </visual>
     <collision>

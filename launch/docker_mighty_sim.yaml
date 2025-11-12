@@ -1,0 +1,30 @@
+session_name: docker_mighty_sim
+windows:
+  - window_name: main
+    layout: tiled
+    shell_command_before:
+    - source /home/kkondo/code/mighty_ws/install/setup.bash
+    - source /home/kkondo/code/decomp_ws/install/setup.bash
+    - export ROS_DOMAIN_ID=7
+    panes:
+      # base station
+      - shell_command:
+        - source /usr/share/gazebo/setup.bash
+        - ros2 launch mighty base_mighty.launch.py use_dyn_obs:=false use_gazebo_gui:=false use_rviz:=true env:=hard_forest
+
+      # ACL mapper
+      - shell_command:
+        - sleep 10
+        - ros2 launch global_mapper_ros global_mapper_node.launch.py
+
+      # onboard agent NX01
+      - shell_command:
+        - sleep 10
+        - ros2 launch mighty onboard_mighty.launch.py x:=0 y:=0 z:=3.0 yaw:=1.57
+      
+      # goal sender
+      - shell_command:
+        - sleep 20
+        - | # Send goal to NX01
+            ros2 topic pub --once /NX01/term_goal geometry_msgs/msg/PoseStamped \
+            '{header: {stamp: {sec: 0, nanosec: 0}, frame_id: "map"}, pose: {position: {x: 305.0, y: 0.0, z: 3.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}'

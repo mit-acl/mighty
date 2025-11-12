@@ -29,13 +29,13 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0.0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/chassis.dae"/>
+        <mesh filename="$(find mighty)/meshes/chassis.dae"/>
       </geometry>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0.0"/>
       <geometry>
-        <mesh filename="$(find dynus)/meshes/chassis.dae"/>
+        <mesh filename="$(find mighty)/meshes/chassis.dae"/>
       </geometry>
     </collision>
   </link>
@@ -57,7 +57,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/top.dae"/>
+        <mesh filename="$(find mighty)/meshes/top.dae"/>
       </geometry>
       <material name="TopBlack">
         <color rgba="0.038 0.038 0.038 1.0"/>
@@ -87,7 +87,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/axle.dae"/>
+        <mesh filename="$(find mighty)/meshes/axle.dae"/>
       </geometry>
       <material name="AxleGrey">
         <color rgba="0.5 0.5 0.5 1"/>
@@ -117,7 +117,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/left_hubcap.dae"/>
+        <mesh filename="$(find mighty)/meshes/left_hubcap.dae"/>
       </geometry>
       <material name="HubcapYellow">
         <color rgba="1.0 0.811 0.151 1.0"/>
@@ -147,7 +147,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/left_wheel.dae"/>
+        <mesh filename="$(find mighty)/meshes/left_wheel.dae"/>
       </geometry>
       <material name="WheelBlack">
         <color rgba="0.117 0.117 0.117 1"/>
@@ -156,7 +156,7 @@
     <collision>
       <origin rpy="-1.57079635 0 0" xyz="0 0 0"/>
       <geometry>
-        <!--mesh filename="$(find dynus)/meshes/wheel.dae"/-->
+        <!--mesh filename="$(find mighty)/meshes/wheel.dae"/-->
         <cylinder length="0.035" radius="0.110"/>
       </geometry>
     </collision>
@@ -182,7 +182,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/axle.dae"/>
+        <mesh filename="$(find mighty)/meshes/axle.dae"/>
       </geometry>
       <material name="AxleGrey">
         <color rgba="0.5 0.5 0.5 1"/>
@@ -212,7 +212,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/right_hubcap.dae"/>
+        <mesh filename="$(find mighty)/meshes/right_hubcap.dae"/>
       </geometry>
       <material name="HubcapYellow">
         <color rgba="1.0 0.811 0.151 1.0"/>
@@ -242,7 +242,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/right_wheel.dae"/>
+        <mesh filename="$(find mighty)/meshes/right_wheel.dae"/>
       </geometry>
       <material name="WheelBlack">
         <color rgba="0.117 0.117 0.117 1"/>
@@ -251,7 +251,7 @@
     <collision>
       <origin rpy="-1.57079635 0 0" xyz="0 0 0"/>
       <geometry>
-        <!--mesh filename="$(find dynus)/meshes/wheel.dae"/-->
+        <!--mesh filename="$(find mighty)/meshes/wheel.dae"/-->
         <cylinder length="0.035" radius="0.110"/>
       </geometry>
     </collision>
@@ -277,7 +277,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/axle.dae"/>
+        <mesh filename="$(find mighty)/meshes/axle.dae"/>
       </geometry>
       <material name="AxleGrey">
         <color rgba="0.5 0.5 0.5 1"/>
@@ -286,7 +286,7 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="$(find dynus)/meshes/axle.dae"/>
+        <mesh filename="$(find mighty)/meshes/axle.dae"/>
       </geometry>
     </collision>
   </link>
@@ -307,14 +307,14 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/left_hubcap.dae"/>
+        <mesh filename="$(find mighty)/meshes/left_hubcap.dae"/>
       </geometry>
       <material name="HubcapYellow"/>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="$(find dynus)/meshes/left_hubcap.dae"/>
+        <mesh filename="$(find mighty)/meshes/left_hubcap.dae"/>
       </geometry>
     </collision>
   </link>
@@ -335,14 +335,14 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/left_wheel.dae"/>
+        <mesh filename="$(find mighty)/meshes/left_wheel.dae"/>
       </geometry>
       <material name="WheelBlack"/>
     </visual>
     <collision>
       <origin rpy="-1.57079635 0 0" xyz="0 0 0"/>
       <geometry>
-        <!--mesh filename="$(find dynus)/meshes/wheel.dae"/-->
+        <!--mesh filename="$(find mighty)/meshes/wheel.dae"/-->
         <cylinder length="0.035" radius="0.110"/>
       </geometry>
     </collision>
@@ -390,7 +390,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/axle.dae"/>
+        <mesh filename="$(find mighty)/meshes/axle.dae"/>
       </geometry>
       <material name="AxleGrey">
         <color rgba="0.5 0.5 0.5 1"/>
@@ -399,7 +399,7 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="$(find dynus)/meshes/axle.dae"/>
+        <mesh filename="$(find mighty)/meshes/axle.dae"/>
       </geometry>
     </collision>
   </link>
@@ -420,14 +420,14 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/right_hubcap.dae"/>
+        <mesh filename="$(find mighty)/meshes/right_hubcap.dae"/>
       </geometry>
       <material name="HubcapYellow"/>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="$(find dynus)/meshes/right_hubcap.dae"/>
+        <mesh filename="$(find mighty)/meshes/right_hubcap.dae"/>
       </geometry>
     </collision>
   </link>
@@ -448,14 +448,14 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry name="pioneer_geom">
-        <mesh filename="$(find dynus)/meshes/right_wheel.dae"/>
+        <mesh filename="$(find mighty)/meshes/right_wheel.dae"/>
       </geometry>
       <material name="WheelBlack"/>
     </visual>
     <collision>
       <origin rpy="-1.57079635 0 0" xyz="0 0 0"/>
       <geometry>
-        <!--mesh filename="$(find dynus)/meshes/wheel.dae"/-->
+        <!--mesh filename="$(find mighty)/meshes/wheel.dae"/-->
         <cylinder length="0.035" radius="0.110"/>
       </geometry>
     </collision>
@@ -547,7 +547,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="$(find dynus)/meshes/hokuyo1.dae"/>
+        <mesh filename="$(find mighty)/meshes/hokuyo1.dae"/>
       </geometry>
     </visual>
     <inertial>

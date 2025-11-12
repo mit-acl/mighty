@@ -1,7 +1,7 @@
 #include "dgp/graph_search.hpp"
 #include <cmath>
 
-using namespace dynus;
+using namespace mighty;
 using namespace termcolor;
 
 typedef timer::Timer MyTimer;
@@ -10,32 +10,32 @@ typedef timer::Timer MyTimer;
 static inline double clamp01(double x) { return x < -1.0 ? -1.0 : (x > 1.0 ? 1.0 : x); }
 static inline double hypot2d(double x, double y) { return std::sqrt(x * x + y * y); }
 
-GraphSearch::GraphSearch(const int *cMap, const std::shared_ptr<dynus::VoxelMapUtil> &map_util, int xDim, int yDim, int zDim, double eps, bool verbose, std::string global_planner) : cMap_(cMap), map_util_(map_util), xDim_(xDim), yDim_(yDim), zDim_(zDim), eps_(eps), verbose_(verbose), global_planner_(global_planner)
+GraphSearch::GraphSearch(const int *cMap, const std::shared_ptr<mighty::VoxelMapUtil> &map_util, int xDim, int yDim, int zDim, double eps, bool verbose, std::string global_planner, double w_unknown, double w_align, double decay_len_cells, double w_side) : cMap_(cMap), map_util_(map_util), xDim_(xDim), yDim_(yDim), zDim_(zDim), eps_(eps), verbose_(verbose), global_planner_(global_planner), w_unknown_(w_unknown), w_align_(w_align), decay_len_cells_(decay_len_cells), w_side_(w_side)
 {
   hm_.assign(xDim_ * yDim_ * zDim_, nullptr);
   seen_.assign(xDim_ * yDim_ * zDim_, false);
 
   // Set 3D neighbors
-  // for (int x = -1; x <= 1; x++)
-  // {
-  //   for (int y = -1; y <= 1; y++)
-  //   {
-  //     for (int z = -1; z <= 1; z++)
-  //     {
-  //       if (x == 0 && y == 0 && z == 0)
-  //         continue;
-  //       ns_.push_back(std::vector<int>{x, y, z});
-  //     }
-  //   }
-  // }
+  for (int x = -1; x <= 1; x++)
+  {
+    for (int y = -1; y <= 1; y++)
+    {
+      for (int z = -1; z <= 1; z++)
+      {
+        if (x == 0 && y == 0 && z == 0)
+          continue;
+        ns_.push_back(std::vector<int>{x, y, z});
+      }
+    }
+  }
 
   // Set neighbors (not including the diagonal neighbors)
-  ns_.push_back(std::vector<int>{1, 0, 0});
-  ns_.push_back(std::vector<int>{-1, 0, 0});
-  ns_.push_back(std::vector<int>{0, 1, 0});
-  ns_.push_back(std::vector<int>{0, -1, 0});
-  ns_.push_back(std::vector<int>{0, 0, 1});
-  ns_.push_back(std::vector<int>{0, 0, -1});
+  // ns_.push_back(std::vector<int>{1, 0, 0});
+  // ns_.push_back(std::vector<int>{-1, 0, 0});
+  // ns_.push_back(std::vector<int>{0, 1, 0});
+  // ns_.push_back(std::vector<int>{0, -1, 0});
+  // ns_.push_back(std::vector<int>{0, 0, 1});
+  // ns_.push_back(std::vector<int>{0, 0, -1});
 
   jn3d_ = std::make_shared<JPS3DNeib>();
 }
@@ -53,7 +53,12 @@ inline bool GraphSearch::isFree(int x, int y, int z) const
 
 inline bool GraphSearch::isOccupied(int x, int y, int z) const
 {
-  return x > 0 && x < xDim_ && y > 0 && y < yDim_ && z > 0 && z < zDim_ && cMap_[coordToId(x, y, z)] > val_free_;
+  return x < 0 || x >= xDim_ || y < 0 || y >= yDim_ || z < 0 || z >= zDim_ || cMap_[coordToId(x, y, z)] == val_occupied_;
+}
+
+inline bool GraphSearch::isUnknown(int x, int y, int z) const
+{
+  return x >= 0 && x < xDim_ && y >= 0 && y < yDim_ && z >= 0 && z < zDim_ && cMap_[coordToId(x, y, z)] == val_unknown_;
 }
 
 inline double GraphSearch::getHeur(int x, int y, int z) const
@@ -170,10 +175,17 @@ bool GraphSearch::static_jps_plan(StatePtr &currNode_ptr, int max_expand, int st
       break;
     }
 
+    // // early stopping for planning horizon
+    if (currNode_ptr->g > 70.0)
+    {
+      break;
+    }
+
     std::vector<int> succ_ids;
     std::vector<double> succ_costs;
 
-    getJpsSucc(currNode_ptr, succ_ids, succ_costs);
+    // getJpsSucc(currNode_ptr, succ_ids, succ_costs);
+    getSucc(currNode_ptr, succ_ids, succ_costs);
 
     // Process successors
     for (int s = 0; s < (int)succ_ids.size(); s++)
@@ -189,22 +201,28 @@ bool GraphSearch::static_jps_plan(StatePtr &currNode_ptr, int max_expand, int st
       }
 
       // Directional bias: only on the very first expansion
+      // ----- Start-direction bias (first expansion only): penalize ONLY backward -----
       double penalty = 0.0;
       // if (currNode_ptr->id == start_id && start_vel_.squaredNorm() > 1e-8)
       // {
-      //   Eigen::Vector3d pref = start_vel_.normalized().cast<double>();
+      //   Eigen::Vector3d pref = start_vel_.cast<double>();
+      //   Eigen::Vector3d toGoal(xGoal_ - currNode_ptr->x,
+      //                          yGoal_ - currNode_ptr->y,
+      //                          zGoal_ - currNode_ptr->z);
+      //   // If start_vel_ points >90° away from goal, flip it
+      //   if (pref.dot(toGoal) < 0)
+      //     pref = -pref;
+      //   pref.normalize();
 
-      //   // Direction of this jump (child - current), normalized
-      //   Eigen::Vector3d step(
-      //       static_cast<double>(child_ptr->x - currNode_ptr->x),
-      //       static_cast<double>(child_ptr->y - currNode_ptr->y),
-      //       static_cast<double>(child_ptr->z - currNode_ptr->z));
+      //   Eigen::Vector3d step(static_cast<double>(child_ptr->x - currNode_ptr->x),
+      //                        static_cast<double>(child_ptr->y - currNode_ptr->y),
+      //                        static_cast<double>(child_ptr->z - currNode_ptr->z));
       //   double n = step.norm();
       //   if (n > 1e-9)
       //   {
-      //     double cosang = (step / n).dot(pref); // [-1, 1]
-      //     const double k_dir = 3.0;             // tune: ~0.3–1.0 “cell-lengths”
-      //     penalty = k_dir * (1.0 - cosang);     // 0 aligned, larger if opposite
+      //     double cosang = (step / n).dot(pref);      // [-1, 1]
+      //     double k_back = 1.0;                       // try 0.5–1.0
+      //     penalty = k_back * std::max(0.0, -cosang); // penalize only backward
       //   }
       // }
 
@@ -234,7 +252,7 @@ bool GraphSearch::static_jps_plan(StatePtr &currNode_ptr, int max_expand, int st
         // if currently in CLOSED
         else if (child_ptr->opened && child_ptr->closed)
         {
-          printf("STATIC JPS ERROR!\n");
+          // printf("STATIC JPS ERROR!\n");
         }
         else // new node, add to heap
         {
@@ -634,16 +652,36 @@ std::vector<StatePtr> GraphSearch::recoverPath(StatePtr node, int start_id)
 
 void GraphSearch::getSucc(const StatePtr &curr, std::vector<int> &succ_ids, std::vector<double> &succ_costs)
 {
+  succ_ids.clear();
+  succ_costs.clear();
+
+  // --- Build a forward reference once per node ---
+  // Prefer start_vel_ when available; if it's anti-aligned with goal, flip it.
+  Eigen::Vector2d vref(start_vel_(0), start_vel_(1));
+  if (vref.squaredNorm() < 1e-9)
+  {
+    vref = Eigen::Vector2d(goal_(0) - start_(0), goal_(1) - start_(1));
+  }
+  else
+  {
+    Eigen::Vector2d vg(goal_(0) - start_(0), goal_(1) - start_(1));
+    if (vg.squaredNorm() > 1e-9 && vref.dot(vg) < 0.0)
+      vref = -vref; // never bias away from goal
+  }
+  const double vref_n = vref.norm();
 
   for (const auto &d : ns_)
   {
     int new_x = curr->x + d[0];
     int new_y = curr->y + d[1];
     int new_z = curr->z + d[2];
-    if (!isFree(new_x, new_y, new_z))
+    if (isOccupied(new_x, new_y, new_z))
       continue;
 
     int new_id = coordToId(new_x, new_y, new_z);
+    if (new_id < 0 || new_id >= (int)hm_.size())
+      continue;
+
     if (!seen_[new_id])
     {
       seen_[new_id] = true;
@@ -656,8 +694,48 @@ void GraphSearch::getSucc(const StatePtr &curr, std::vector<int> &succ_ids, std:
       hm_[new_id]->h = getHeur(new_x, new_y, new_z);
     }
 
+    // Base geometric step cost (1, √2, √3)
+    const double base = std::sqrt(double(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]));
+    double step_cost = base;
+    // const double dist_from_start = std::sqrt((new_x - start_(0)) * (new_x - start_(0)) + (new_y - start_(1)) * (new_y - start_(1)) + (new_z - start_(2)) * (new_z - start_(2)));
+    // // -------- Alignment (XY) + optional side tie-breaker --------
+    // if ((w_align_ > 0.0 || w_side_ > 0.0) && dist_from_start < 10.0)
+    // {
+    //   Eigen::Vector2d step2d(d[0], d[1]);
+    //   const double step_n = step2d.norm();
+    //   if (vref_n > 1e-9 && step_n > 1e-9)
+    //   {
+    //     // Decay by *pure* g if you track it; else use distance_score or path length in cells.
+    //     // Here we assume curr->g holds pure accumulated step costs.
+    //     const double decay = std::exp(-curr->g / std::max(1e-9, decay_len_cells_));
+
+    //     const double cosang = std::clamp(step2d.dot(vref) / (step_n * vref_n), -1.0, 1.0);
+    //     // Misalignment penalty (0 when perfectly aligned; π gives 2*w_align_*step_n*decay)
+    //     step_cost += w_align_ * (1.0 - cosang) * decay * step_n;
+
+    //     // Optional: left/right tie-breaker (small!); gated to forward-ish (cos>=0)
+    //     if (w_side_ > 0.0)
+    //     {
+    //       const double crossz = (vref.x() * step2d.y() - vref.y() * step2d.x()) / (vref_n * step_n); // [-1,1]
+    //       Eigen::Vector2d vg(goal_(0) - start_(0), goal_(1) - start_(1));
+    //       const double sign_pref = (vref.x() * vg.y() - vref.y() * vg.x()) >= 0.0 ? 1.0 : -1.0;
+    //       const double cospos = std::max(0.0, cosang);
+    //       step_cost += -w_side_ * sign_pref * crossz * cospos * decay * step_n;
+    //     }
+    //   }
+    // }
+
+    // // -------- If unknown, add a penalty --------
+    // if (isUnknown(new_x, new_y, new_z))
+    // {
+    //   step_cost += w_unknown_ * base;
+    // }
+
     succ_ids.push_back(new_id);
-    succ_costs.push_back(std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]));
+    succ_costs.push_back(step_cost);
+
+    // succ_ids.push_back(new_id);
+    // succ_costs.push_back(std::sqrt((new_x - curr->x) * (new_x - curr->x) + (new_y - curr->y) * (new_y - curr->y) + (new_z - curr->z) * (new_z - curr->z)));
   }
 }
 

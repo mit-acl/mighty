@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>dynus</name>
+  <name>mighty</name>
   <version>0.0.0</version>
-  <description>Dynus: Fully Decentralized Uncertainty-aware Multiagent Trajectory Planner in Unknown Dynamic Environments</description>
+  <description>MIGHTY: Hermite spline-based Efficient Trajectory Planning</description>
   <maintainer email="kkondo@mit.edu">Kota Kondo</maintainer>
   <license>TODO: License declaration</license>
 

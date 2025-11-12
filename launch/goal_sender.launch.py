@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # /* ----------------------------------------------------------------------------
-#  * Copyright 2024, Kota Kondo, Aerospace Controls Laboratory
+#  * Copyright 2025, Kota Kondo, Aerospace Controls Laboratory
 #  * Massachusetts Institute of Technology
 #  * All Rights Reserved
 #  * Authors: Kota Kondo, et al.
@@ -21,9 +21,9 @@ def generate_launch_description():
 
     # Parameters
     parameters_path = os.path.join(
-        get_package_share_directory('dynus'),
+        get_package_share_directory('mighty'),
         'config',
-        'dynus.yaml'
+        'mighty.yaml'
         )
 
     # Get the dict of parameters from the yaml file
@@ -31,7 +31,7 @@ def generate_launch_description():
         parameters = yaml.safe_load(file)
 
     # Extract specific node parameters
-    parameters = parameters['dynus_node']['ros__parameters']
+    parameters = parameters['mighty_node']['ros__parameters']
     default_goal_z = parameters['default_goal_z']
 
     return LaunchDescription([
@@ -59,7 +59,7 @@ def generate_launch_description():
 
         # Launch the GoalSender node
         Node(
-            package='dynus',
+            package='mighty',
             executable='goal_sender.py',
             name='goal_sender',
             output='screen',

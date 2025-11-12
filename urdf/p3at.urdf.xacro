@@ -20,7 +20,7 @@
   <xacro:arg name="namespace" default="NX01" />
   <xacro:arg name="d435_range_max_depth" default="5.0" />
 
-  <xacro:include filename="$(find dynus)/urdf/pioneer3at_body.urdf.xacro" />
+  <xacro:include filename="$(find mighty)/urdf/pioneer3at_body.urdf.xacro" />
   <xacro:p3at_gazebo_ext name="$(arg namespace)_red_rover" namespace="$(arg namespace)" />
 
   <xacro:include filename="$(find ros2_livox_simulation)/urdf/mid360.xacro" />
@@ -28,7 +28,7 @@
     <origin xyz="0 0 1.0" rpy="0 0 0"/>
   </xacro:mid360>
 
-  <xacro:include filename="$(find dynus)/urdf/_d435.urdf.xacro" />
+  <xacro:include filename="$(find mighty)/urdf/_d435.urdf.xacro" />
   <xacro:sensor_d435 name="$(arg namespace)_d435" topics_ns="$(arg namespace)" range_max_depth="$(arg d435_range_max_depth)" parent="base_link">
     <origin xyz="1.0 0.0 1.0" rpy="0 0 0"/>
   </xacro:sensor_d435>

@@ -9,7 +9,7 @@
     <!-- <xacro:property name="M_PI" value="3.1415926535897931" /> -->
 
     <!-- Included URDF Files -->
-    <xacro:include filename="$(find dynus)/urdf/quadrotor_base.urdf.xacro" />
+    <xacro:include filename="$(find mighty)/urdf/quadrotor_base.urdf.xacro" />
     
     <!-- Instantiate quadrotor_base_macro once (has no parameters atm) -->
     <xacro:quadrotor_base_macro />
@@ -23,32 +23,32 @@
     </xacro:mid360>
 
     <!-- Forward facing camera (d435)-->
-    <xacro:include filename="$(find dynus)/urdf/_d435.urdf.xacro" />
+    <xacro:include filename="$(find mighty)/urdf/_d435.urdf.xacro" />
     <xacro:sensor_d435 name="$(arg namespace)_d435" topics_ns="$(arg namespace)" range_max_depth="$(arg d435_range_max_depth)" parent="base_link">
       <origin xyz="0.05 0.0 0" rpy="0 0 0"/>
     </xacro:sensor_d435>
     
     <!-- Forward facing camera (d435i)-->
-    <!-- <xacro:include filename="$(find dynus)/urdf/_d435i.urdf.xacro" />
+    <!-- <xacro:include filename="$(find mighty)/urdf/_d435i.urdf.xacro" />
     <xacro:sensor_d435i name="$(arg namespace)_d435i" topics_ns="$(arg namespace)" parent="base_link">
       <origin xyz="0.2 0.0 0" rpy="0 0 0"/>
     </xacro:sensor_d435i> -->
 
     <!-- Forward facing camera -->
     <!-- TODO: Not sure why but can't put them in namespace  -->
-    <!-- <xacro:include filename="$(find dynus)/urdf/generic_camera.urdf.xacro" />
+    <!-- <xacro:include filename="$(find mighty)/urdf/generic_camera.urdf.xacro" />
     <xacro:generic_camera name="$(arg namespace)_front_cam" parent="base_link" ros_topic="$(arg namespace)" cam_info_topic="$(arg namespace)" update_rate="50" res_x="320" res_y="240" image_format="R8G8B8" hfov="90">
       <origin xyz="0.1 0.0 -0.1" rpy="0 0 0"/>
     </xacro:generic_camera> -->
 
     <!-- Forward facing camera (t265)-->
-    <!-- <xacro:include filename="$(find dynus)/urdf/_t265.urdf.xacro" />
+    <!-- <xacro:include filename="$(find mighty)/urdf/_t265.urdf.xacro" />
     <xacro:sensor_t265 name="front_cam" topics_ns="$(arg namespace)" parent="base_link">
       <origin xyz="0.1 0.0 0.1" rpy="0 0 0"/>
     </xacro:sensor_t265> -->
     
     <!-- Sonar height sensor -->
-    <!-- <xacro:include filename="$(find dynus)/urdf/sonar_sensor.urdf.xacro" /> 
+    <!-- <xacro:include filename="$(find mighty)/urdf/sonar_sensor.urdf.xacro" /> 
     <xacro:sonar_sensor name="sonar" parent="base_link" >
       <origin xyz="-0.03 -0.03 1.0" rpy="0 ${90*pi/180} 0"/>
     </xacro:sonar_sensor> -->

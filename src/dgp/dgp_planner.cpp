@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
- * Copyright 2024, Kota Kondo, Aerospace Controls Laboratory
+ * Copyright 2025, Kota Kondo, Aerospace Controls Laboratory
  * Massachusetts Institute of Technology
  * All Rights Reserved
  * Authors: Kota Kondo, et al.
@@ -10,16 +10,16 @@
 
 using namespace termcolor;
 
-DGPPlanner::DGPPlanner(std::string global_planner, bool verbose, double v_max, double a_max, double j_max, int dgp_timeout_duration_ms) : global_planner_(global_planner), planner_verbose_(verbose), v_max_(v_max), a_max_(a_max), j_max_(j_max), dgp_timeout_duration_ms_(dgp_timeout_duration_ms)
+DGPPlanner::DGPPlanner(std::string global_planner, bool verbose, double v_max, double a_max, double j_max, int dgp_timeout_duration_ms, double w_unknown, double w_align, double decay_len_cells, double w_side, int los_cells, double min_len, double min_turn) : global_planner_(global_planner), planner_verbose_(verbose), v_max_(v_max), a_max_(a_max), j_max_(j_max), dgp_timeout_duration_ms_(dgp_timeout_duration_ms), w_unknown_(w_unknown), w_align_(w_align), decay_len_cells_(decay_len_cells), w_side_(w_side), los_cells_(los_cells), min_len_(min_len), min_turn_(min_turn)
 {
   if (planner_verbose_)
-    printf(ANSI_COLOR_CYAN "JPS PLANNER VERBOSE ON\n" ANSI_COLOR_RESET);
+    printf(ANSI_COLOR_CYAN "DGP PLANNER VERBOSE ON\n" ANSI_COLOR_RESET);
 }
 
 // --- In dgp_planner.cpp (definitions) ---
 bool DGPPlanner::lineOfSightCapsule(const Vecf<3> &a,
                                     const Vecf<3> &b,
-                                    double inflate_radius_cells) const
+                                    int inflate_radius_cells) const
 {
   // Sample along the segment and check a "capsule" of radius r around it.
   // r is in *cells* (so r=1.5 checks a segment thickened by 1.5 voxels).
@@ -31,7 +31,7 @@ bool DGPPlanner::lineOfSightCapsule(const Vecf<3> &a,
 
   const Vecf<3> u = d / L;
   const double step = std::max(0.25 * res, 0.05); // fine step
-  const int radial = std::max(1, int(std::ceil(inflate_radius_cells)));
+  const int radial = std::max(1, inflate_radius_cells);
 
   for (double s = 0.0; s <= L; s += step)
   {
@@ -60,7 +60,7 @@ bool DGPPlanner::lineOfSightCapsule(const Vecf<3> &a,
 }
 
 vec_Vecf<3> DGPPlanner::shortCutByLoS(const vec_Vecf<3> &in,
-                                      double inflate_radius_cells) const
+                                      int inflate_radius_cells) const
 {
   if (in.size() < 2)
     return in;
@@ -144,10 +144,10 @@ void DGPPlanner::updateVmax(double v_max)
   v_max_ = v_max;
 }
 
-void DGPPlanner::setMapUtil(const std::shared_ptr<dynus::MapUtil<3>> &map_util)
+void DGPPlanner::setMapUtil(const std::shared_ptr<mighty::MapUtil<3>> &map_util)
 {
   // Deep copy the map_util
-  map_util_ = std::make_shared<dynus::MapUtil<3>>(*map_util);
+  map_util_ = std::make_shared<mighty::MapUtil<3>>(*map_util);
   // map_util_ = map_util;
 }
 
@@ -341,15 +341,10 @@ bool DGPPlanner::plan(const Vecf<3> &start, const Vecf<3> &start_vel, const Vecf
   double initial_g = (start - map_util_->intToFloat(start_int)).norm();
 
   // should we initialize the planner in constructor?
-  graph_search_ = std::make_shared<dynus::GraphSearch>((map_util_->map_).data(), map_util_, dim(0), dim(1), dim(2), eps, planner_verbose_, global_planner_);
+  graph_search_ = std::make_shared<mighty::GraphSearch>((map_util_->map_).data(), map_util_, dim(0), dim(1), dim(2), eps, planner_verbose_, global_planner_, w_unknown_);
   graph_search_->setStartAndGoal(start, goal);
   double max_values[3] = {v_max_, a_max_, j_max_};
   graph_search_->setBounds(max_values);
-
-  // NEW: velocity alignment (cells), decay length (cells), side tie-break (cells)
-  graph_search_->setDirectionalBias(/*w_align_cells=*/1.35,
-    /*decay_len_cells=*/25.0,
-    /*w_side_cells=*/1.5);
 
   // Run Initial guess module
   int max_expand = 10000;
@@ -387,26 +382,33 @@ bool DGPPlanner::plan(const Vecf<3> &start, const Vecf<3> &start_vel, const Vecf
   raw_path_ = ps;
   std::reverse(std::begin(raw_path_), std::end(raw_path_));
 
-  // new GCOPTER-like simplification --------------------------------
-  const double r_cells   = 1.0;                       // LoS inflation in *cells*
-  // const double min_len   = 2.0 * map_util_->getRes();
-  const double min_len   = 1.5;
-  const double min_turn  = 80.0;                       // degrees
+  // // Check if the path has really close points and if so remove them
+  // if (path_.size() >= 2)
+  // {
+  //   vec_Vecf<3> new_path;
+  //   new_path.push_back(path_.front());
+  //   for (unsigned int i = 1; i < path_.size(); i++)
+  //   {
+  //     if ((path_[i] - new_path.back()).norm() > 0.3)
+  //       new_path.push_back(path_[i]);
+  //   }
+  //   path_ = new_path;
+  // }
 
   // 1) coarse LoS shortcut with inflation
-  path_ = shortCutByLoS(raw_path_, r_cells);
+  path_ = shortCutByLoS(raw_path_, los_cells_);
 
   // 2) collapse very short edges
-  path_ = collapseShortEdges(path_, min_len);
+  path_ = collapseShortEdges(path_, min_len_);
 
   // 3) a light angle/spacing filter
-  path_ = angleSpacingFilter(path_, min_turn, min_len);
+  path_ = angleSpacingFilter(path_, min_turn_, min_len_);
 
   // 4) (optional) one more LoS pass to knit long spans
-  path_ = shortCutByLoS(path_, r_cells);
+  path_ = shortCutByLoS(path_, los_cells_);
 
-  // 5) clean up path
-  cleanUpPath(path_);
+  // // // 5) clean up path
+  // cleanUpPath(path_);
 
   return true;
 }

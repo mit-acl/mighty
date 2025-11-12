@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Run Gazebo first in one terminal:
+Run Gazebo first:
   ros2 launch gazebo_ros gazebo.launch.py
 
-Then in another terminal:
-  ros2 run dynus generate_random_forest.py --ros-args -p difficulty:=hard -p min_clearance:=1.2 -p shape_mode:=cylinder -p yaw_random:=False
+Then:
+  ros2 run mighty generate_random_forest.py --ros-args -p difficulty:=hard -p min_clearance:=2.0 -p shape_mode:=mixed -p box_probability:=0.5
 
 Add this to .world for ROS2 bridge:
   <plugin name='gazebo_ros_state' filename='libgazebo_ros_state.so'>
@@ -18,15 +18,11 @@ Add this to .world for ROS2 bridge:
 
 Usage:
 
-# one used for the paper
-ros2 run dynus generate_random_forest.py --ros-args -p difficulty:=hard -p min_clearance:=1.2 -p shape_mode:=cylinder -p yaw_random:=False
-
 # all boxes
-ros2 run dynus generate_random_forest.py --ros-args -p shape_mode:=box
+ros2 run mighty generate_random_forest.py --ros-args -p shape_mode:=box
 
 # mixed (70% boxes), random yaw, 2.0 m clearance
-ros2 run dynus generate_random_forest.py --ros-args -p shape_mode:=mixed -p box_probability:=0.7 -p min_clearance:=2.0
-ros2 run dynus generate_random_forest.py --ros-args -p difficulty:=hard -p min_clearance:=2.0 -p shape_mode:=mixed -p box_probability:=0.5
+ros2 run mighty generate_random_forest.py --ros-args -p shape_mode:=mixed -p box_probability:=0.7 -p min_clearance:=2.0
   
 Parameters (new ones starred ★):
 - seed (int)
@@ -183,16 +179,16 @@ class ForestSpawner(Node):
             self.density = 0.05
             CSV_PATH = "/home/kkondo/data/easy_forest_obstacle_parameters.csv"
         elif difficulty == "medium":
-            self.density = 0.2
+            self.density = 0.1
             CSV_PATH = "/home/kkondo/data/medium_forest_obstacle_parameters.csv"
         elif difficulty == "hard":
             self.density = 0.4
             CSV_PATH = "/home/kkondo/data/hard_forest_obstacle_parameters.csv"
         elif difficulty == "dynamic":
-            self.density = 0.25
+            self.density = 0.05
             self.dynamic = True
-            self.dynamic_min_x = 0.0 #35.0
-            self.dynamic_max_x = 0.0 #65.0
+            self.dynamic_min_x = 35.0
+            self.dynamic_max_x = 65.0
             CSV_PATH = "/home/kkondo/data/dynamic_forest_obstacle_parameters.csv"
         else:
             self.get_logger().warn(f"Unknown difficulty '{difficulty}', defaulting to medium.")
@@ -201,7 +197,7 @@ class ForestSpawner(Node):
 
         # Map bounds
         self.min_x = 3.0
-        self.max_x = 103.0 if self.dynamic else 303.0
+        self.max_x = 303.0
         self.min_y = -20.0
         self.max_y =  20.0
         self.size_z = 5.0

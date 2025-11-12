@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # /* ----------------------------------------------------------------------------
-#  * Copyright 2024, Kota Kondo, Aerospace Controls Laboratory
+#  * Copyright 2025, Kota Kondo, Aerospace Controls Laboratory
 #  * Massachusetts Institute of Technology
 #  * All Rights Reserved
 #  * Authors: Kota Kondo, et al.
@@ -29,7 +29,7 @@ def generate_launch_description():
         namespace = LaunchConfiguration('namespace').perform(context)
 
         node = Node(
-            package='dynus',  
+            package='mighty',  
             executable='convert_odom_to_state',
             name='convert_odom_to_state',
             namespace=namespace,

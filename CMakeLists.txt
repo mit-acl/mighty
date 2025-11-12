@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(dynus)
+project(mighty)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -29,8 +29,6 @@ find_package(dynus_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(gazebo_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(octomap_msgs REQUIRED)
-find_package(octomap REQUIRED)
 find_package(gazebo_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_eigen REQUIRED)
@@ -53,70 +51,42 @@ include_directories(${EIGEN3_INCLUDE_DIR} ${PCL_INCLUDE_DIRS} ${DECOMP_UTIL_INCL
 link_directories(${PCL_LIBRARY_DIRS} ${BOOST_LIBRARY_DIRS} ${GAZEBO_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
-# for dynus ROS2 components
-# add_library(dynus_component SHARED src/dynus/dynus_node.cpp)
-# ament_target_dependencies(dynus_component rclcpp rclcpp_components example_interfaces sensor_msgs)
-# rclcpp_components_register_nodes(dynus_component "dynus::Dynus")
-
-# for jps test ROS2 components
-# add_library(jps_component SHARED src/dynus/dynus_node.cpp src/dynus/dynus.cpp src/dgp/dgp_manager.cpp src/dgp/utils.cpp)
-# target_link_libraries(jps_component ${DECOMP_UTIL_LIBRARIES})
-# ament_target_dependencies(jps_component rclcpp rclcpp_components example_interfaces visualization_msgs Eigen3 decomp_ros_msgs decomp_rviz_plugins decomp_test_node)
-# rclcpp_components_register_nodes(jps_component "dynus::DYNUS_NODE")
-
 # add executables
-add_executable(dynus src/dynus/dynus_node.cpp src/dynus/dynus.cpp src/dgp/dgp_manager.cpp src/dgp/utils.cpp src/dgp/dgp_planner.cpp src/dgp/graph_search.cpp src/dynus/closed_form_solver.cpp src/dynus/utils.cpp src/dynus/lbfgs_solver.cpp src/dynus/lbfgs_solver_utils.cpp)
-target_link_libraries(dynus ${PCL_LIBRARIES})
-ament_target_dependencies(dynus rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 decomp_ros_msgs sensor_msgs std_msgs octomap_msgs decomp_rviz_plugins decomp_test_node octomap tf2_geometry_msgs tf2 tf2_ros tf2_eigen std_srvs pcl_ros)
+add_executable(mighty src/mighty/mighty_node.cpp src/mighty/mighty.cpp src/dgp/dgp_manager.cpp src/dgp/utils.cpp src/dgp/dgp_planner.cpp src/dgp/graph_search.cpp src/mighty/utils.cpp src/mighty/lbfgs_solver.cpp src/mighty/lbfgs_solver_utils.cpp)
+target_link_libraries(mighty ${PCL_LIBRARIES})
+ament_target_dependencies(mighty rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 decomp_ros_msgs sensor_msgs std_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs tf2 tf2_ros tf2_eigen std_srvs pcl_ros)
 
 # Add the fake_sim executable
-add_executable(fake_sim src/dynus/fake_sim.cpp)
+add_executable(fake_sim src/mighty/fake_sim.cpp)
 target_link_libraries(fake_sim)
 ament_target_dependencies(fake_sim rclcpp rclcpp_components visualization_msgs dynus_interfaces sensor_msgs gazebo_msgs sensor_msgs tf2 tf2_ros nav_msgs)
 
 # Add the obstracle tracker
-add_executable(obstacle_tracker_node src/dynus/obstacle_tracker_node.cpp src/dgp/utils.cpp src/dynus/utils.cpp)
+add_executable(obstacle_tracker_node src/mighty/obstacle_tracker_node.cpp src/dgp/utils.cpp src/mighty/utils.cpp)
 target_link_libraries(obstacle_tracker_node ${PCL_LIBRARIES})
 ament_target_dependencies(obstacle_tracker_node rclcpp rclcpp_components visualization_msgs Eigen3 dynus_interfaces std_msgs gazebo_msgs sensor_msgs tf2 tf2_ros pcl_conversions tf2_geometry_msgs tf2_eigen)
 
 # Add goal to cmd_vel converter
-add_executable(convert_goal_to_cmd_vel src/dynus/convert_goal_to_cmd_vel.cpp)
+add_executable(convert_goal_to_cmd_vel src/mighty/convert_goal_to_cmd_vel.cpp)
 target_link_libraries(convert_goal_to_cmd_vel)
-ament_target_dependencies(convert_goal_to_cmd_vel rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs octomap_msgs decomp_rviz_plugins decomp_test_node octomap tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
-
-# Add goal to cmd_vel converter for quadruped
-add_executable(quadruped_convert_goal_to_cmd_vel src/dynus/quadruped_convert_goal_to_cmd_vel.cpp)
-target_link_libraries(quadruped_convert_goal_to_cmd_vel)
-ament_target_dependencies(quadruped_convert_goal_to_cmd_vel rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs octomap_msgs decomp_rviz_plugins decomp_test_node octomap tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
+ament_target_dependencies(convert_goal_to_cmd_vel rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
 
 # Add odom to state converter
-add_executable(convert_odom_to_state src/dynus/convert_odom_to_state.cpp)
+add_executable(convert_odom_to_state src/mighty/convert_odom_to_state.cpp)
 target_link_libraries(convert_odom_to_state)
-ament_target_dependencies(convert_odom_to_state rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs octomap_msgs decomp_rviz_plugins decomp_test_node octomap tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
-
-# Add odom to state converter for quadruped
-add_executable(quadruped_convert_odom_to_state src/dynus/quadruped_convert_odom_to_state.cpp)
-target_link_libraries(quadruped_convert_odom_to_state)
-ament_target_dependencies(quadruped_convert_odom_to_state rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs octomap_msgs decomp_rviz_plugins decomp_test_node octomap tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
+ament_target_dependencies(convert_odom_to_state rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
 
 # Add vicon to state converter
-add_executable(convert_vicon_to_state src/dynus/convert_vicon_to_state.cpp)
+add_executable(convert_vicon_to_state src/mighty/convert_vicon_to_state.cpp)
 target_link_libraries(convert_vicon_to_state)
-ament_target_dependencies(convert_vicon_to_state rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 decomp_ros_msgs sensor_msgs std_msgs octomap_msgs decomp_rviz_plugins decomp_test_node octomap tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
-
-# Add the fake_dynamic_obstacle executable
-# add_executable(fake_dynamic_obstacle src/dynus/fake_dynamic_obstacle.cpp)
-# target_link_libraries(fake_dynamic_obstacle)
-# ament_target_dependencies(fake_dynamic_obstacle rclcpp rclcpp_components visualization_msgs dynus_interfaces sensor_msgs gazebo_msgs sensor_msgs tf2 tf2_ros)
-
-# Add the executable for the test file
+ament_target_dependencies(convert_vicon_to_state rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 decomp_ros_msgs sensor_msgs std_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
 
 # Add the executable for the lbfgs solver test file
-add_executable(test_lbfgs_solver src/test/test_lbfgs_solver.cpp src/dynus/lbfgs_solver.cpp src/dynus/lbfgs_solver_utils.cpp)
-ament_target_dependencies(test_lbfgs_solver rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 decomp_ros_msgs sensor_msgs std_msgs octomap_msgs decomp_rviz_plugins decomp_test_node octomap tf2_geometry_msgs)
+add_executable(test_lbfgs_solver src/test/test_lbfgs_solver.cpp src/mighty/lbfgs_solver.cpp src/mighty/lbfgs_solver_utils.cpp)
+ament_target_dependencies(test_lbfgs_solver rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 decomp_ros_msgs sensor_msgs std_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs)
 
 # Add the convert velodyne executable
-add_executable(convert_velodyne_to_ros_time src/dynus/convert_velodyne_to_ros_time.cpp)
+add_executable(convert_velodyne_to_ros_time src/mighty/convert_velodyne_to_ros_time.cpp)
 target_link_libraries(convert_velodyne_to_ros_time)
 ament_target_dependencies(convert_velodyne_to_ros_time rclcpp rclcpp_components visualization_msgs dynus_interfaces sensor_msgs gazebo_msgs sensor_msgs tf2 tf2_ros nav_msgs)
 
@@ -142,15 +112,6 @@ ament_target_dependencies(dynamic_forest_node
   dynus_interfaces
 )
 
-# install for ROS2 components
-# install(TARGETS
-# # dynus_component
-# # jps_component
-# ARCHIVE DESTINATION lib
-# LIBRARY DESTINATION lib
-# RUNTIME DESTINATION bin
-# )
-
 # install for launch and config files
 install(DIRECTORY
 launch
@@ -164,13 +125,11 @@ DESTINATION share/${PROJECT_NAME}
 
 # install for executables
 install(TARGETS
-  dynus
+  mighty
   fake_sim
   obstacle_tracker_node
   convert_goal_to_cmd_vel
-  quadruped_convert_goal_to_cmd_vel
   convert_odom_to_state
-  quadruped_convert_odom_to_state
   convert_vicon_to_state
   convert_velodyne_to_ros_time
   dynamic_forest_node
@@ -191,15 +150,11 @@ ament_python_install_package(${PROJECT_NAME})
 
 # install Python executables
 install(PROGRAMS
-  # scripts/fake_sim.py # fake_sim.py is too slow - now we use fake_sim.cpp
   scripts/goal_sender.py
-  scripts/object_detection_node.py
   scripts/goal_monitor_node.py
   scripts/generate_random_forest.py
   benchmarking/dynamic_obstacle_benchmark_node.py
-  # scripts/convert_goal_to_cmd_vel.py
-  # scripts/convert_vicon_to_state.py
-  # scripts/convert_odom_to_state.py
+  benchmarking/unc_benchmark_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

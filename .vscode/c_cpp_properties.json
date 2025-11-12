@@ -1,0 +1,57 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/kkondo/code/mighty_ws/install/ros2_livox_simulation/include/**",
+        "/home/kkondo/code/mighty_ws/install/global_mapper_ros/include/**",
+        "/home/kkondo/code/mighty_ws/install/gazebo_plugins/include/**",
+        "/home/kkondo/code/mighty_ws/install/gazebo_ros/include/**",
+        "/home/kkondo/code/mighty_ws/install/gazebo_msgs/include/**",
+        "/home/kkondo/code/mighty_ws/install/fla_interfaces/include/**",
+        "/home/kkondo/code/mighty_ws/install/dynus_interfaces/include/**",
+        "/home/kkondo/code/mighty_ws/install/decomp_rviz_plugins/include/**",
+        "/home/kkondo/code/mighty_ws/install/decomp_ros_msgs/include/**",
+        "/home/kkondo/code/dynus_ws/install/global_mapper_ros/include/**",
+        "/home/kkondo/code/dynus_ws/install/fla_interfaces/include/**",
+        "/home/kkondo/code/dynus_ws/install/champ_msgs/include/**",
+        "/home/kkondo/code/dynus_ws/install/champ/include/**",
+        "/home/kkondo/code/dynus_ws/install/gazebo_plugins/include/**",
+        "/home/kkondo/code/dynus_ws/install/gazebo_ros/include/**",
+        "/home/kkondo/code/dynus_ws/install/gazebo_msgs/include/**",
+        "/home/kkondo/code/dynus_ws/install/realsense_gazebo_plugin/include/**",
+        "/home/kkondo/code/dynus_ws/install/ros2_livox_simulation/include/**",
+        "/home/kkondo/code/dynus_ws/install/dynus_interfaces/include/**",
+        "/home/kkondo/code/dynus_ws/install/decomp_rviz_plugins/include/**",
+        "/home/kkondo/code/dynus_ws/install/decomp_ros_msgs/include/**",
+        "/home/kkondo/code/dlio_ws/install/direct_lidar_inertial_odometry/include/**",
+        "/home/kkondo/code/livox_ws/install/livox_ros_driver2/include/**",
+        "/home/kkondo/code/ros2_ws/install/turtlebot3_gazebo/include/**",
+        "/home/kkondo/code/ros2_ws/install/turtlebot3_fake_node/include/**",
+        "/home/kkondo/code/ros2_ws/install/my_robot_interfaces/include/**",
+        "/opt/ros/humble/include/**",
+        "/home/kkondo/code/mighty_ws/src/DecompROS2/DecompUtil/include/**",
+        "/home/kkondo/code/mighty_ws/src/DecompROS2/decomp_rviz_plugins/include/**",
+        "/home/kkondo/code/mighty_ws/src/DecompROS2/decomp_test_node/include/**",
+        "/home/kkondo/code/mighty_ws/src/acl-mapping/fla_utils/include/**",
+        "/home/kkondo/code/mighty_ws/src/acl-mapping/global_mapper/include/**",
+        "/home/kkondo/code/mighty_ws/src/acl-mapping/global_mapper_ros/include/**",
+        "/home/kkondo/code/mighty_ws/src/gazebo_ros_pkgs/gazebo_plugins/include/**",
+        "/home/kkondo/code/mighty_ws/src/gazebo_ros_pkgs/gazebo_ros/include/**",
+        "/home/kkondo/code/mighty_ws/src/livox_laser_simulation_ros2/include/**",
+        "/home/kkondo/code/mighty_ws/src/mighty/include/**",
+        "include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

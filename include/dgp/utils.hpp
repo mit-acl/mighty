@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
- * Copyright 2024, Kota Kondo, Aerospace Controls Laboratory
+ * Copyright 2025, Kota Kondo, Aerospace Controls Laboratory
  * Massachusetts Institute of Technology
  * All Rights Reserved
  * Authors: Kota Kondo, et al.
@@ -20,7 +20,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <pcl/point_types.h>
 #include <pcl/kdtree/kdtree_flann.h>
-#include "dynus/dynus_type.hpp"
+#include "mighty/mighty_type.hpp"
 #include <deque>
 
 #define RED 1
@@ -177,6 +177,6 @@ visualization_msgs::msg::MarkerArray stateVector2ColoredMarkerArray(const std::v
                                                                     double max_value,
                                                                     const rclcpp::Time &stamp);
 
-void deleteVertexes(vec_Vecf<3> &JPS_path, int max_value, double min_dist_between_vertexes, bool delete_too_close_points_in_global_path);
+void deleteVertexes(vec_Vecf<3> &JPS_path, int max_value);
 
 #endif
