@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mighty</name>
+  <version>0.1.0</version>
+  <description>MIGHTY</description>
+
+  <maintainer email="kkondo@mit.edu">Kota Kondo</maintainer>
+  <author email="kkondo@mit.edu">Kota Kondo</author>
+  <license>TODO</license>
+
+  <!-- Build system -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Build dependencies -->
+  <build_depend>rclcpp</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>visualization_msgs</build_depend>
+  <build_depend>ompl</build_depend>
+  <build_depend>eigen3_cmake_module</build_depend>
+
+  <!-- Execution dependencies -->
+  <exec_depend>rclcpp</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>ompl</exec_depend>
+  <exec_depend>eigen3_cmake_module</exec_depend>
+
+  <!-- Export -->
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

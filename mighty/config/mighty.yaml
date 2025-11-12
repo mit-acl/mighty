@@ -1,0 +1,48 @@
+/**:
+  ros__parameters:
+
+    # Common parameters
+    MapTopic:                   '/voxel_map'
+    TargetTopic:                '/goal_pose'
+    DilateRadius:               0.5
+    VoxelWidth:                 0.25
+    MapBound:                   [-30.0, 30.0, -30.0, 30.0, 0.0, 5.0]
+    TimeoutRRT:                 0.5
+    MaxVelMag:                  5.0
+    MaxBdrMag:                  2.1
+    MaxTiltAngle:               1.05
+    MinThrust:                  2.0
+    MaxThrust:                  12.0
+    VehicleMass:                0.61
+    GravAcc:                    9.8
+    HorizDrag:                  0.70
+    VertDrag:                   0.80
+    ParasDrag:                  0.01
+    SpeedEps:                   0.0001
+    WeightT:                    1e+2
+    ChiVec:                     [1.0e+4, 1.0e+4, 1.0e+4, 1.0e+4, 1.0e+5] # [pos, vel, omega, theta, thrust]
+    SmoothingEps:               1.0e-2
+    IntegralIntervs:            32
+    RelCostTol:                 1.0e-5
+
+    # MIGHTY-specific parameters
+    MIGHTYJerkWeight:           1.0e-6
+    MIGHTYWeightT:              9.0e+3
+    MIGHTYPosWeight:            1.0e+4
+    MIGHTYVelWeight:            1.0e+4
+    MIGHTYOmegaWeight:          1.0e+4
+    MIGHTYThetaWeight:          1.0e+4
+    MIGHTYThrustWeight:         1.0e+5
+    mightyInitTurnBF:           40.0 # deg
+
+    # safe corridor parameters
+    sfc_progress:             7.0
+    sfc_range:                10.0
+
+    # L-BFGS parameters
+    lbfgs_mem_size:           256 #256
+    max_linesearch:           64 #40
+    lbfgs_past:               3
+    lbfgs_min_step:           1.0e-32
+    lbfgs_max_iterations:     1000
+    lbfgs_g_epsilon:          1.0e-5

@@ -1,22 +1,8 @@
-# MIGHTY: Hermite Spline-based Efficient Trajectory Planning #
+# MIGHTY Simple Demo
 
-### **Submitted to the IEEE Robotics and Automation Letters (RA-L)**
+<a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_click_example.gif" width="700" height="386" alt="Complex Benchmarks"></a>
 
-| **Trajectory** | **Forest** |
-| ------------------------- | ------------------------- |
-<a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_gifs_complex_benchmarks.gif" width="350" height="193" alt="Complex Benchmarks"></a> | <a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_gifs_hard_forest.gif" width="350" height="193" alt="Static Forest"></a> |
-
-| **Dynamic Obstacles** | **Long Flight** |
-| ------------------------- | ------------------------- |
-<a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_gifs_dynamic_sim.gif" width="350" height="193" alt="Dynamic Obstacles"></a> | <a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_gifs_hw_long_flight.gif" width="350" height="193" alt="Hardware Long Flight"></a>
-
-| **Fast Flight 1** | **Fast Flight 2** |
-| ------------------------- | ------------------------- |
-<a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_gifs_hw_fast_flight_1.gif" width="350" height="193" alt="Hardware Fast Flight 1"></a> | <a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_gifs_hw_fast_flight_2.gif" width="350" height="193" alt="Hardware Fast Flight 2"></a>
-
-| **Dynamic Env 1** | **Dynamic Env 2** |
-| ------------------------- | ------------------------- |
-<a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_gifs_hw_dynamic_1.gif" width="350" height="193" alt="Hardware Dynamic Env 1"></a> | <a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_gifs_hw_dynamic_2.gif" width="350" height="193" alt="Hardware Dynamic Env 2"></a>
+This is a revised version for benchmarking based on Kumar Lab's repo (https://github.com/yuwei-wu/GCOPTER.git), which implements the GCOPTER algorithm (See the "About GCOPTER" section below for more details). 
 
 ## Paper
 
@@ -24,92 +10,57 @@
 
 The full video is available [https://youtu.be/2KNR2eF0PEE](https://youtu.be/2KNR2eF0PEE).
 
-## Interactive Demo
+## Setup Instructions 
 
-If you are interested in an interactive demo of MIGHTY, please switch to the `interactive_demo` branch:
+### Prerequisites
+
+Before running the code, make sure you have ROS 2 (Humble) installed. You may also need to install some additional dependencies:
 
 ```bash
-git checkout interactive_demo
+sudo apt update
+sudo apt install ros-humble-pcl-conversions ros-humble-pcl-ros
+sudo apt install libpcl-dev libompl-dev
 ```
-and follow the setup instructions in the README of that branch.
 
-## Setup
+### Build
 
-MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 with ROS 2 Humble.
+```bash
+mkdir -p ws/src
+cd ws/src
+git clone https://github.com/kotakondo/DecompROS2.git
+git clone https://github.com/kotakondo/GCOPTER.git
+cd ../
+colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
+```
 
-### Use Docker (Recommended)
+### Run Simulation
 
-1. **Install Docker:**  
-   Follow the [official Docker installation guide for Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+```bash
+ros2 launch mighty mighty.launch.py
+```
 
-2. **Clone the Repository and Navigate to the Docker Folder:**
-   ```bash
-   mkdir -p ~/code/ws/src
-   cd ~/code/ws/src
-   git clone https://github.com/mit-acl/mighty.git
-   cd src/mighty/docker
-   ```
+Now RViz should open automatically. You can click the "2D Nav Goal" button or type "g", then the cursor turns into a green arrow. Click somewhere in the RViz window to set the start position and then click the "2D Nav Goal" button (or type "g") again and click somewhere else to set the goal position. The planner will start running automatically after you set both the start and goal positions.
 
-3. **BUILD:**
-    - Navigate to the docker folder in your mighty repo (eg. `cd ~/code/ws/src/mighty/docker/`) and run this
-      ```bash
-      make build
-      ```
+## About GCOPTER
 
-4. **Run Simulation**
-    - Run the following command to start the simulation:
-      ```bash
-      make run
-      ```
+__Author__: [Zhepei Wang](https://zhepeiwang.github.io) and [Fei Gao](https://scholar.google.com/citations?hl=en&user=4RObDv0AAAAJ) from [ZJU FAST Lab](http://zju-fast.com).
 
-<details>
-  <summary><b>Useful Docker Commands</b></summary>
+__Paper__: [Geometrically Constrained Trajectory Optimization for Multicopters](https://arxiv.org/abs/2103.00190), Zhepei Wang, Xin Zhou, Chao Xu, and Fei Gao, <em>[IEEE Transactions on Robotics](https://doi.org/10.1109/TRO.2022.3160022)</em> (__T-RO__), Regular Paper.
+```
+@article{WANG2022GCOPTER,
+    title={Geometrically Constrained Trajectory Optimization for Multicopters}, 
+    author={Wang, Zhepei and Zhou, Xin and Xu, Chao and Gao, Fei}, 
+    journal={IEEE Transactions on Robotics}, 
+    year={2022}, 
+    volume={38}, 
+    number={5}, 
+    pages={3259-3278}, 
+    doi={10.1109/TRO.2022.3160022}
+}
+```
 
-  - **Remove all caches:**  
-    ```bash
-    docker builder prune
-    ```
-
-  - **Remove all containers:**  
-    ```bash
-    docker rm $(docker ps -a -q)
-    ```
-
-  - **Remove all images:**  
-    ```bash
-    docker rmi $(docker images -q)
-    ```
-
-</details>
-
-### Native Installation
-
-1. **Clone the Repository and Navigate to the Workspace Folder:**
-   ```bash
-   mkdir -p ~/code/ws
-   cd ~/code/ws
-   git clone https://github.com/mit-acl/mighty.git
-   cd mighty
-   ```
-
-2. **Run the Setup Script:**
-   ```bash
-   ./setup.sh
-   ```
-   This script will first install ROS 2 Humble, then MIGHTY and its dependencies. Please note that this script modifies your `~/.bashrc` file.
-
- 3. **Run the Simulation**
-    Run the simulation. You might need to change the path to `setup.bash` to its absolute path (eg. `/home/kkondo/code/ws/install/setup.bash`).
-    ```bash
-    cd ~/code/mighty_ws && ./src/mighty/launch/run_mighty_sim.sh ~/code/mighty_ws/install/setup.bash
-    ```
-
-### Notes
-
-<details>
-  <summary><b>Goal Command Example</b></summary>
-
-  - ```bash
-    ros2 topic pub /NX01/term_goal geometry_msgs/msg/PoseStamped "{header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'map'}, pose: {position: {x: 305.0, y: 0.0, z: 3.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}" --once
-    ```
-</details>
+## Submodules
+- [SDLP: Seidel's Algorithm](https://github.com/ZJU-FAST-Lab/SDLP) on Linear-Complexity Linear Programming for Computational Geometry.
+- [VertexEnumeration3D](https://github.com/ZJU-FAST-Lab/VertexEnumeration3D): Highly Efficient Vertex Enumeration for 3D Convex Polytopes (Outperforms [cddlib](https://github.com/cddlib/cddlib) in 3D).
+- [LBFGS-Lite](https://github.com/ZJU-FAST-Lab/LBFGS-Lite): An Easy-to-Use Header-Only L-BFGS Solver.
