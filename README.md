@@ -1,6 +1,6 @@
 # MIGHTY Interactive Demo
 
-<a target="_blank" href="https://youtu.be/2KNR2eF0PEE"><img src="./imgs/mighty_click_example.gif" width="700" height="386" alt="Complex Benchmarks"></a>
+<a target="_blank" href="https://youtu.be/Pvb-VPUdLvg"><img src="./imgs/mighty_click_example.gif" width="700" height="386" alt="Complex Benchmarks"></a>
 
 This is a revised version for benchmarking based on Kumar Lab's repo (https://github.com/yuwei-wu/GCOPTER.git), which implements the GCOPTER algorithm (See the "About GCOPTER" section below for more details). 
 
@@ -8,7 +8,7 @@ This is a revised version for benchmarking based on Kumar Lab's repo (https://gi
 
 ## Video
 
-The full video is available [https://youtu.be/2KNR2eF0PEE](https://youtu.be/2KNR2eF0PEE).
+The full video is available [https://youtu.be/Pvb-VPUdLvg](https://youtu.be/Pvb-VPUdLvg).
 
 ## System Demo
 
