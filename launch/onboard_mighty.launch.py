@@ -48,7 +48,8 @@ def generate_launch_description():
 
         # The path to the urdf file
         urdf_path=PathJoinSubstitution([FindPackageShare('mighty'), 'urdf', 'quadrotor.urdf.xacro'])
-        parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', 'mighty.yaml')
+        param_file_name = 'hw_mighty.yaml' if use_hardware else 'mighty.yaml'
+        parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', param_file_name)
 
         # Get the dict of parameters from the yaml file
         with open(parameters_path, 'r') as file:
@@ -62,7 +63,7 @@ def generate_launch_description():
         parameters['use_benchmark'] = bool(use_benchmark)
         if use_benchmark:
             parameters['global_planner'] = global_planner
-        lidar_point_could_topic = 'livox/lidar' if use_hardware else 'mid360_PointCloud2'
+        lidar_point_cloud_topic = 'livox/lidar' if use_hardware else 'mid360_PointCloud2'
    
         # Create a Dynus node
         mighty_node = Node(
@@ -73,7 +74,7 @@ def generate_launch_description():
                     output='screen',
                     emulate_tty=True,
                     parameters=[parameters],
-                    remappings=[('lidar_cloud_in', lidar_point_could_topic),
+                    remappings=[('lidar_cloud_in', lidar_point_cloud_topic),
                                 ('depth_camera_cloud_in', f'{depth_camera_name}/depth/color/points')],
                     arguments=['--ros-args', '--log-level', 'error']
                     # prefix='xterm -e gdb -q -ex run --args', # gdb debugging
@@ -109,6 +110,7 @@ def generate_launch_description():
         )
         
         # Create an obstacle tracker node
+        tracker_point_cloud_topic = lidar_point_cloud_topic if use_hardware else f'{depth_camera_name}/depth/color/points'
         obstacle_tracker_node = Node(
             package='mighty',
             executable='obstacle_tracker_node',
@@ -118,8 +120,7 @@ def generate_launch_description():
             parameters=[parameters],
             # prefix='xterm -e gdb -ex run --args', # gdb debugging
             output='screen',
-            # remappings=[('point_cloud', lidar_point_could_topic)],
-            remappings=[('point_cloud', f'{depth_camera_name}/depth/color/points')],
+            remappings=[('point_cloud', tracker_point_cloud_topic)],
         )
 
         # Convert odom (from T265) to state
