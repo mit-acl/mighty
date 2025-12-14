@@ -76,7 +76,7 @@ mighty_node:
         dyn_constr_tilt_weight: 0.0                 # [-] Weight of the tilt constraints violation in the optimization
         dyn_constr_thrust_weight: 0.0               # [-] Weight of the thrust constraints violation in the optimization
         num_dyn_obst_samples: 10                    # [-] Number of samples for the dynamic obstacles in the optimization
-        planner_Co: 1.2                            # [-] Collision clearance thresh for static obstacles in the optimization
+        planner_Co: 1.0                            # [-] Collision clearance thresh for static obstacles in the optimization
         planner_Cw: 3.0                             # [-] Collision clearance thresh for dynamic obstacles in the optimization
         drone_bbox: [0.2, 0.2, 0.2]                 # [m] Size of the bounding box for the obstacles
         goal_radius: 0.5                           # [m] Radius of the goal
