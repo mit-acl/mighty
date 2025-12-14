@@ -33,7 +33,7 @@ mighty_node:
         y_min: -1000.0                                          # [m] y_min of the map
         y_max: 1000.0                                           # [m] y_max of the map
         z_min: 1.25                                              # [m] points below this are considered ground
-        z_max: 4.5 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
+        z_max: 3.0 #4.25 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
         dgp_timeout_duration_ms: 10000                          # [ms] Timeout duration for the DGP
         use_free_start: true                                    # [-] Use free start for the DGP
         free_start_factor: 3.0 #1.0                                  # [-] Factor for the free start
@@ -65,18 +65,18 @@ mighty_node:
         a_max: 1.0 #3.0                                 # [m/s2] max acceleration
         j_max: 2.0 #5.0                              # [m/s3] max jerk
         dynamic_weight: 1e+1                        # [-] Weight of the obstacles and agents distance in the optimization
-        time_weight: 5e+2                            # [-] Weight of the time cost in the optimization
+        time_weight: 5e+1 #5e+2                           # [-] Weight of the time cost in the optimization
         pos_anchor_weight: 0.0                      # [-] Weight of the position anchors in the optimization
-        stat_weight: 1e+3                           # [-] Weight of the static obstacles in the optimization
+        stat_weight: 1e+4 #1e+3                           # [-] Weight of the static obstacles in the optimization
         jerk_weight: 2e-1 #1e-1                           # [-] Weight of the jerk in the optimization
-        dyn_constr_vel_weight: 1e+3                 # [-] Weight of the velocity constraints violation in the optimization
+        dyn_constr_vel_weight: 1e4 # 1e+3                 # [-] Weight of the velocity constraints violation in the optimization
         dyn_constr_acc_weight: 1e+3                 # [-] Weight of the acceleration constraints violation in the optimization
         dyn_constr_jerk_weight: 1e+3                # [-] Weight of the jerk constraints violation in the optimization
         dyn_constr_bodyrate_weight: 0.0             # [-] Weight of the body rate constraints violation in the optimization
         dyn_constr_tilt_weight: 0.0                 # [-] Weight of the tilt constraints violation in the optimization
         dyn_constr_thrust_weight: 0.0               # [-] Weight of the thrust constraints violation in the optimization
         num_dyn_obst_samples: 10                    # [-] Number of samples for the dynamic obstacles in the optimization
-        planner_Co: 0.2                            # [-] Collision clearance thresh for static obstacles in the optimization
+        planner_Co: 0.6                            # [-] Collision clearance thresh for static obstacles in the optimization
         planner_Cw: 3.0                             # [-] Collision clearance thresh for dynamic obstacles in the optimization
         drone_bbox: [0.2, 0.2, 0.2]                 # [m] Size of the bounding box for the obstacles
         goal_radius: 0.5                           # [m] Radius of the goal
