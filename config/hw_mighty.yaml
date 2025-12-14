@@ -61,9 +61,9 @@ mighty_node:
         # Optimization parameters
         horizon: 11.0                               # [m] Horizon
         dc: 0.01                                    # [s] Duration for the interpolation=Value of the timer pubGoal
-        v_max: 0.5 #1.0                                  # [m/s]  max velocity
-        a_max: 1.0 #3.0                                 # [m/s2] max acceleration
-        j_max: 2.0 #5.0                              # [m/s3] max jerk
+        v_max: 1.0 #1.0                                  # [m/s]  max velocity
+        a_max: 1.5 #3.0                                 # [m/s2] max acceleration
+        j_max: 2.5 #5.0                              # [m/s3] max jerk
         dynamic_weight: 1e+1                        # [-] Weight of the obstacles and agents distance in the optimization
         time_weight: 5e+2                            # [-] Weight of the time cost in the optimization
         pos_anchor_weight: 0.0                      # [-] Weight of the position anchors in the optimization
@@ -76,7 +76,7 @@ mighty_node:
         dyn_constr_tilt_weight: 0.0                 # [-] Weight of the tilt constraints violation in the optimization
         dyn_constr_thrust_weight: 0.0               # [-] Weight of the thrust constraints violation in the optimization
         num_dyn_obst_samples: 10                    # [-] Number of samples for the dynamic obstacles in the optimization
-        planner_Co: 0.2                            # [-] Collision clearance thresh for static obstacles in the optimization
+        planner_Co: 0.3 #0.2                            # [-] Collision clearance thresh for static obstacles in the optimization
         planner_Cw: 3.0                             # [-] Collision clearance thresh for dynamic obstacles in the optimization
         drone_bbox: [0.2, 0.2, 0.2]                 # [m] Size of the bounding box for the obstacles
         goal_radius: 0.5                           # [m] Radius of the goal
