@@ -32,8 +32,8 @@ mighty_node:
         x_max: 1000.0                                           # [m] x_max of the map
         y_min: -1000.0                                          # [m] y_min of the map
         y_max: 1000.0                                           # [m] y_max of the map
-        z_min: 1.0                                              # [m] points below this are considered ground
-        z_max: 4.0 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
+        z_min: 1.25                                              # [m] points below this are considered ground
+        z_max: 4.25 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
         dgp_timeout_duration_ms: 10000                          # [ms] Timeout duration for the DGP
         use_free_start: true                                    # [-] Use free start for the DGP
         free_start_factor: 3.0 #1.0                                  # [-] Factor for the free start
