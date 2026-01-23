@@ -396,19 +396,20 @@ bool DGPPlanner::plan(const Vecf<3> &start, const Vecf<3> &start_vel, const Vecf
   // }
 
   // 1) coarse LoS shortcut with inflation
-  path_ = shortCutByLoS(raw_path_, los_cells_);
+  // path_ = shortCutByLoS(raw_path_, los_cells_);
 
-  // 2) collapse very short edges
-  path_ = collapseShortEdges(path_, min_len_);
+  // // 2) collapse very short edges
+  // path_ = collapseShortEdges(path_, min_len_);
 
-  // 3) a light angle/spacing filter
-  path_ = angleSpacingFilter(path_, min_turn_, min_len_);
+  // // 3) a light angle/spacing filter
+  // path_ = angleSpacingFilter(path_, min_turn_, min_len_);
 
-  // 4) (optional) one more LoS pass to knit long spans
-  path_ = shortCutByLoS(path_, los_cells_);
+  // // 4) (optional) one more LoS pass to knit long spans
+  // path_ = shortCutByLoS(path_, los_cells_);
 
-  // // // 5) clean up path
-  // cleanUpPath(path_);
+  // // 5) clean up path
+  cleanUpPath(raw_path_);
+  path_=raw_path_;
 
   return true;
 }
