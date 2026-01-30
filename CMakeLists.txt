@@ -71,10 +71,20 @@ add_executable(convert_goal_to_cmd_vel src/mighty/convert_goal_to_cmd_vel.cpp)
 target_link_libraries(convert_goal_to_cmd_vel)
 ament_target_dependencies(convert_goal_to_cmd_vel rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
 
+# Add goal to cmd_vel converter for quadruped
+add_executable(quadruped_convert_goal_to_cmd_vel src/mighty/quadruped_convert_goal_to_cmd_vel.cpp)
+target_link_libraries(quadruped_convert_goal_to_cmd_vel)
+ament_target_dependencies(quadruped_convert_goal_to_cmd_vel rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
+
 # Add odom to state converter
 add_executable(convert_odom_to_state src/mighty/convert_odom_to_state.cpp)
 target_link_libraries(convert_odom_to_state)
 ament_target_dependencies(convert_odom_to_state rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
+
+# Add odom to state converter for quadruped
+add_executable(quadruped_convert_odom_to_state src/mighty/quadruped_convert_odom_to_state.cpp)
+target_link_libraries(quadruped_convert_odom_to_state)
+ament_target_dependencies(quadruped_convert_odom_to_state rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
 
 # Add vicon to state converter
 add_executable(convert_vicon_to_state src/mighty/convert_vicon_to_state.cpp)
@@ -129,7 +139,9 @@ install(TARGETS
   fake_sim
   obstacle_tracker_node
   convert_goal_to_cmd_vel
+  quadruped_convert_goal_to_cmd_vel
   convert_odom_to_state
+  quadruped_convert_odom_to_state
   convert_vicon_to_state
   convert_velodyne_to_ros_time
   dynamic_forest_node
@@ -153,6 +165,7 @@ install(PROGRAMS
   scripts/goal_sender.py
   scripts/goal_monitor_node.py
   scripts/generate_random_forest.py
+  scripts/repub_rviz_2Dgoal.py
   benchmarking/dynamic_obstacle_benchmark_node.py
   benchmarking/unc_benchmark_node.py
   DESTINATION lib/${PROJECT_NAME}

@@ -9,6 +9,12 @@ from launch_ros.parameter_descriptions import ParameterValue
 import yaml
 from math import radians
 
+# String constants 
+QUADROTOR = 'quadrotor' 
+QUADRUPED = 'quadruped' 
+RED_ROVER = 'red_rover' 
+STAR_ROBOT = 'star_robot' 
+
 def convert_str_to_bool(str):
     return True if (str == 'true' or str == 'True' or str == 1 or str == '1') else False
 
@@ -29,6 +35,7 @@ def generate_launch_description():
     use_hardware_arg = DeclareLaunchArgument('use_hardware', default_value='false', description='Flag to indicate whether to use hardware or simulation') # flag to indicte if this is hardware or simulation
     use_onboard_localization_arg = DeclareLaunchArgument('use_onboard_localization', default_value='false', description='Flag to indicate whether to use t265 or vicon for localization') # flag to indicate whether to use t265 (odom) or vicon (pose & twist) for localization
     depth_camera_name_arg = DeclareLaunchArgument('depth_camera_name', default_value='d435', description='Depth camera name') # depth camera name
+    robot_type_arg = DeclareLaunchArgument('robot_type', default_value='quadruped', description='Type of the robot: quadruped, red_rover, star_robot, or quadrotor') # robot type 
 
     # Opaque function to launch nodes
     def launch_setup(context, *args, **kwargs):
@@ -45,11 +52,30 @@ def generate_launch_description():
         use_hardware = convert_str_to_bool(LaunchConfiguration('use_hardware').perform(context))
         use_onboard_localization = convert_str_to_bool(LaunchConfiguration('use_onboard_localization').perform(context))
         depth_camera_name = LaunchConfiguration('depth_camera_name').perform(context)
+        robot_type = LaunchConfiguration('robot_type').perform(context) 
+        
+        print(f"DEFAULT Z: {z}")
+        print(f"ROBOT TYPE: {robot_type}")
+        print(f"USE HARDWARE: {use_hardware}")
+        print(f"ROBOT TYPE == RED_ROVER: {robot_type == RED_ROVER}")
+        # Robot specific parameters 
+        cmd_vel_topic_name = 'cmd_vel_auto' 
+        if not use_hardware: 
+            param_file_name = 'mighty.yaml'
+        elif robot_type == QUADRUPED: 
+            param_file_name = 'hw_mighty_quadruped.yaml'
+        elif robot_type == RED_ROVER: 
+            param_file_name = 'hw_mighty_rover.yaml'
+        elif robot_type == STAR_ROBOT: 
+            param_file_name = 'hw_mighty_star.yaml'
+        elif robot_type == QUADROTOR: 
+            param_file_name = 'hw_mighty.yaml' 
+
+        # Get param file for appropriate robot 
+        parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', param_file_name)  
 
         # The path to the urdf file
-        urdf_path=PathJoinSubstitution([FindPackageShare('mighty'), 'urdf', 'quadrotor.urdf.xacro'])
-        param_file_name = 'hw_mighty.yaml' if use_hardware else 'mighty.yaml'
-        parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', param_file_name)
+        urdf_path=PathJoinSubstitution([FindPackageShare('mighty'), 'urdf', 'quadrotor.urdf.xacro'])          
 
         # Get the dict of parameters from the yaml file
         with open(parameters_path, 'r') as file:
@@ -123,6 +149,43 @@ def generate_launch_description():
             remappings=[('point_cloud', tracker_point_cloud_topic)],
         )
 
+        # Convert goal to cmd_vel for ground robot
+        goal_to_cmd_vel_node = Node(
+            package='mighty',
+            executable='convert_goal_to_cmd_vel',
+            name='convert_goal_to_cmd_vel',
+            namespace=namespace,
+            emulate_tty=True,
+            output='screen',
+            parameters=[parameters,
+                        {"x": float(x),
+                         "y": float(y),
+                         "z": float(z),
+                         "yaw": float(yaw),
+                         "cmd_vel_topic_name": cmd_vel_topic_name}],
+            # prefix='xterm -e gdb -ex run --args', # gdb debugging
+            # arguments=['--ros-args', '--log-level', 'error']
+        )
+
+        # Convert goal to cmd_vel for quadruped
+        quadruped_goal_to_cmd_vel_node = Node(
+            package='mighty',
+            # executable='quadruped_convert_goal_to_cmd_vel',
+            executable='convert_goal_to_cmd_vel',
+            name='quadruped_convert_goal_to_cmd_vel',
+            namespace=namespace,
+            emulate_tty=True,
+            output='screen',
+            parameters=[parameters,
+                        {"x": float(x),
+                         "y": float(y),
+                         "z": float(z),
+                         "yaw": float(yaw),
+                         "cmd_vel_topic_name": cmd_vel_topic_name}],
+            # prefix='xterm -e gdb -ex run --args', # gdb debugging
+            # arguments=['--ros-args', '--log-level', 'error']
+        )
+
         # Convert odom (from T265) to state
         odom_to_state_node = Node(
             package='mighty',
@@ -137,6 +200,34 @@ def generate_launch_description():
             output='screen',
             # prefix='xterm -e gdb -ex run --args', # gdb debugging
             # arguments=['--ros-args', '--log-level', 'error']
+        )
+
+        # Converyt odom to state (for quadruped)
+        quadruped_odom_to_state_node = Node(
+            package='mighty',
+            executable='quadruped_convert_odom_to_state',
+            name='quadruped_convert_odom_to_state',
+            namespace=namespace,
+            remappings=[
+                ('odom', 'dlio/odom_node/odom'),  # Remap incoming Odometry topic
+                ('state', 'state')  # Remap outgoing State topic
+            ],
+            emulate_tty=True,
+            output='screen',
+            # prefix='xterm -e gdb -ex run --args', # gdb debugging
+            # arguments=['--ros-args', '--log-level', 'error']
+        )
+
+        # Create a static transform publisher node (this is for quadruped)
+        static_tf_node = Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_tf_map_to_odom',
+            output='screen',
+            # The arguments are:
+            # x, y, z, qx, qy, qz, qw, parent_frame, child_frame
+            # For an identity transform: translation is (0,0,0) and rotation is (0,0,0,1)
+            arguments=['0', '0', '0', '0', '0', '0', '1', f'{namespace}/map', f'{namespace}/odom']
         )
 
         # Convert pose and twist (from Vicon) to state
@@ -174,7 +265,13 @@ def generate_launch_description():
 
         # Return launch description
         if use_hardware and use_onboard_localization:
-            nodes_to_start = [mighty_node, odom_to_state_node] # use T265 for localization
+            if robot_type == QUADROTOR: 
+                nodes_to_start = [mighty_node, odom_to_state_node] # use T265 for localization
+            elif robot_type == QUADRUPED: 
+                nodes_to_start = [mighty_node, quadruped_odom_to_state_node, quadruped_goal_to_cmd_vel_node, static_tf_node]
+            elif robot_type == STAR_ROBOT or robot_type == RED_ROVER: 
+                print("ENTERED STATIC TF NODE CASE")
+                nodes_to_start = [mighty_node, odom_to_state_node, goal_to_cmd_vel_node, static_tf_node]
         elif use_hardware and not use_onboard_localization:
             nodes_to_start = [mighty_node, pose_twist_to_state_node] # use Vicon for localization
         else:
@@ -198,5 +295,6 @@ def generate_launch_description():
         use_hardware_arg,
         use_onboard_localization_arg,
         depth_camera_name_arg,
+        robot_type_arg, 
         OpaqueFunction(function=launch_setup)
     ])
