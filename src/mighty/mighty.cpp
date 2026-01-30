@@ -658,11 +658,17 @@ bool MIGHTY::planLocalTrajectory(vec_Vecf<3> &global_path)
   getA_time(A_time);
 
   // If the global path's size is < 3 after trimming, we cannot proceed
-  if (global_path.empty() || global_path.size() < 3)
+  if (global_path.empty() || global_path.size() < 2)
   {
-    std::cout << bold << red << "Global path's size is < 3 after trimming" << reset << std::endl;
+    std::cout << bold << red << "Global path's size is < 2 after trimming" << reset << std::endl;
     replanning_failure_count_++;
     return false;
+  }
+
+  if (global_path.size() == 2)
+  {
+    auto mid = (global_path[0] + global_path[1]) / 2.0;
+    global_path.insert(global_path.begin() + 1, mid);
   }
 
   // convex decomposition
