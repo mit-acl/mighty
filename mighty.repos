@@ -3,7 +3,7 @@ repositories:
   mighty:
     type: git
     url: git@github.com:mit-acl/mighty.git
-    version: multiagent_sim
+    version: 4f5bb367dbab0683f1666ebe3838a7c4807c88b7
 
   # ROS 2 dependencies (build with colcon)
   acl-mapping:
