@@ -1,0 +1,29 @@
+repositories:
+  mighty:
+    type: git
+    url: git@github.com:mit-acl/mighty.git
+    version: multiagent_sim
+  acl-mapping:
+    type: git
+    url: https://gitlab.com/mit-acl/lab/acl-mapping.git
+    version: ros2
+  dynus_interfaces:
+    type: git
+    url: https://github.com/kotakondo/dynus_interfaces.git
+    version: master
+  gazebo_ros_pkgs:
+    type: git
+    url: https://github.com/kotakondo/gazebo_ros_pkgs.git
+    version: ros2
+  livox_laser_simulation_ros2:
+    type: git
+    url: https://github.com/kotakondo/livox_laser_simulation_ros2.git
+    version: main
+  realsense_gazebo_plugin:
+    type: git
+    url: https://github.com/kotakondo/realsense_gazebo_plugin.git
+    version: foxy-devel
+  uav_simulator:
+    type: git
+    url: https://github.com/kotakondo/uav_simulator.git
+    version: main

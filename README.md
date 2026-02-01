@@ -2,6 +2,33 @@
 
 If you like this project, please consider starring ⭐ the repo!
 
+## Quick Setup
+
+```bash
+# Create workspace
+mkdir -p ~/mighty_ws/src
+cd ~/mighty_ws/src
+
+# Clone mighty
+git clone git@github.com:mit-acl/mighty.git
+cd ../
+
+# Import all dependencies at tested commits
+vcs import src < src/mighty/mighty.repos
+
+# Install ROS dependencies
+rosdep install --from-paths src --ignore-src -r -y
+
+# Build
+source /opt/ros/humble/setup.bash
+colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+# Source workspace
+source install/setup.bash
+```
+
+The `mighty.repos` file specifies all dependency repositories and their tested commits, ensuring a reproducible setup.
+
 ### **Submitted to the IEEE Robotics and Automation Letters (RA-L)**
 
 | **Trajectory** | **Forest** |
