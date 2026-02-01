@@ -10,7 +10,7 @@ typedef timer::Timer MyTimer;
 static inline double clamp01(double x) { return x < -1.0 ? -1.0 : (x > 1.0 ? 1.0 : x); }
 static inline double hypot2d(double x, double y) { return std::sqrt(x * x + y * y); }
 
-GraphSearch::GraphSearch(const int *cMap, const std::shared_ptr<mighty::VoxelMapUtil> &map_util, int xDim, int yDim, int zDim, double eps, bool verbose, std::string global_planner, double w_unknown, double w_align, double decay_len_cells, double w_side) : cMap_(cMap), map_util_(map_util), xDim_(xDim), yDim_(yDim), zDim_(zDim), eps_(eps), verbose_(verbose), global_planner_(global_planner), w_unknown_(w_unknown), w_align_(w_align), decay_len_cells_(decay_len_cells), w_side_(w_side)
+GraphSearch::GraphSearch(const int8_t *cMap, const std::shared_ptr<mighty::VoxelMapUtil> &map_util, int xDim, int yDim, int zDim, double eps, bool verbose, std::string global_planner, double w_unknown, double w_align, double decay_len_cells, double w_side) : cMap_(cMap), map_util_(map_util), xDim_(xDim), yDim_(yDim), zDim_(zDim), eps_(eps), verbose_(verbose), global_planner_(global_planner), w_unknown_(w_unknown), w_align_(w_align), decay_len_cells_(decay_len_cells), w_side_(w_side)
 {
   hm_.assign(xDim_ * yDim_ * zDim_, nullptr);
   seen_.assign(xDim_ * yDim_ * zDim_, false);

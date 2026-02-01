@@ -2227,6 +2227,20 @@ double SolverLBFGS::evaluateObjectiveAndGradientFused(const Eigen::VectorXd &z, 
             for (int j = 0; j < 3; ++j)
                 D3s[j] = CP[s][j + 3] - 3.0 * CP[s][j + 2] + 3.0 * CP[s][j + 1] - CP[s][j];
 
+            // Pack control points into matrices for vectorized evaluation
+            Eigen::Matrix<double, 3, 6> CP_mat;
+            Eigen::Matrix<double, 3, 5> D1_mat;
+            Eigen::Matrix<double, 3, 4> D2_mat;
+            Eigen::Matrix<double, 3, 3> D3_mat;
+            for (int k = 0; k < 6; ++k)
+                CP_mat.col(k) = CP[s][k];
+            for (int k = 0; k < 5; ++k)
+                D1_mat.col(k) = D1[k];
+            for (int k = 0; k < 4; ++k)
+                D2_mat.col(k) = D2s[k];
+            for (int k = 0; k < 3; ++k)
+                D3_mat.col(k) = D3s[k];
+
             for (int j = 0; j <= kappa; ++j)
             {
                 // Basis (cached)
@@ -2236,20 +2250,16 @@ double SolverLBFGS::evaluateObjectiveAndGradientFused(const Eigen::VectorXd &z, 
                 const auto &b2 = B2[j];
                 const double wseg = wj[j] * dt;
 
-                // x, d1s, d2s, d3s in shape-space
-                Vec3 x = Vec3::Zero();
-                Vec3 d1 = Vec3::Zero();
-                Vec3 d2 = Vec3::Zero();
-                Vec3 d3 = Vec3::Zero();
+                // Vectorized Bernstein basis evaluation using matrix-vector multiply
+                Eigen::Map<const Eigen::Matrix<double, 6, 1>> b5_vec(b5.data());
+                Eigen::Map<const Eigen::Matrix<double, 5, 1>> b4_vec(b4.data());
+                Eigen::Map<const Eigen::Matrix<double, 4, 1>> b3_vec(b3.data());
+                Eigen::Map<const Eigen::Matrix<double, 3, 1>> b2_vec(b2.data());
 
-                for (int k = 0; k < 6; ++k)
-                    x += b5[k] * CP[s][k];
-                for (int k = 0; k < 5; ++k)
-                    d1 += b4[k] * D1[k];
-                for (int k = 0; k < 4; ++k)
-                    d2 += b3[k] * D2s[k];
-                for (int k = 0; k < 3; ++k)
-                    d3 += b2[k] * D3s[k];
+                const Vec3 x = CP_mat * b5_vec;
+                const Vec3 d1 = D1_mat * b4_vec;
+                const Vec3 d2 = D2_mat * b3_vec;
+                const Vec3 d3 = D3_mat * b2_vec;
 
                 // Convert to physical derivatives
                 const Vec3 v = 5.0 * invT * d1;
@@ -2257,11 +2267,15 @@ double SolverLBFGS::evaluateObjectiveAndGradientFused(const Eigen::VectorXd &z, 
                 const Vec3 jrk = 60.0 * invT3 * d3;
 
                 // ---------- Static corridor: viol = Co_ + (A x - b)
+                // Batched constraint checking using matrix-vector multiply
                 if (has_planes)
                 {
+                    // Compute all violations at once: Aseg * x - bseg
+                    Eigen::VectorXd gvals = Aseg * x - bseg;
+
                     for (int h = 0; h < Aseg.rows(); ++h)
                     {
-                        const double gval = Aseg.row(h).dot(x) - bseg[h];
+                        const double gval = gvals[h];
                         const double viol = gval + Co_;
                         J_stat += smoothed_l1(viol, mu) * wseg;
 
@@ -2364,8 +2378,10 @@ double SolverLBFGS::evaluateObjectiveAndGradientFused(const Eigen::VectorXd &z, 
                     const Vec3 n = acc + g * e3;
                     const double r = std::sqrt(n.squaredNorm() + 1e-24);
                     const Vec3 b3_rate = n / r;
-                    const Eigen::Matrix3d Pmat = Eigen::Matrix3d::Identity() - b3_rate * b3_rate.transpose();
-                    const Vec3 b3dot = (Pmat * jrk) / r;
+                    // Replace Pmat * jrk with direct formula: jrk - (jrk.dot(b3_rate)) * b3_rate
+                    // Saves 9 multiplications + 6 additions (matrix-vector mult) -> 5 ops (dot + scale + subtract)
+                    const Vec3 Pjrk = jrk - jrk.dot(b3_rate) * b3_rate;
+                    const Vec3 b3dot = Pjrk / r;
                     const double yom = b3dot.squaredNorm() - Om2;
                     J_om += smoothed_l1(yom, mu) * wseg;
 
@@ -2374,15 +2390,16 @@ double SolverLBFGS::evaluateObjectiveAndGradientFused(const Eigen::VectorXd &z, 
                         const double phi_p = smoothed_l1_prime(yom, mu);
                         const Vec3 gb = (2.0 * phi_p) * b3dot * (dyn_constr_bodyrate_weight_ * wseg); // ∂J/∂b3dot
 
-                        const Vec3 Pgb = Pmat * gb;
-                        const Vec3 Pj = Pmat * jrk;
-                        const double alpha = Pj.dot(gb);
+                        // Apply projection formula directly instead of matrix multiply
+                        const Vec3 Pgb = gb - gb.dot(b3_rate) * b3_rate;
+                        // Pjrk already computed above
+                        const double alpha = Pjrk.dot(gb);
                         const double beta = b3_rate.dot(jrk);
                         const double gamma = b3_rate.dot(gb);
 
                         // ∂J/∂j, ∂J/∂a (physical)
                         const Vec3 g3_phys = Pgb / r;
-                        const Vec3 ga_phys = -(beta * Pgb + alpha * b3_rate + gamma * Pj) / (r * r);
+                        const Vec3 ga_phys = -(beta * Pgb + alpha * b3_rate + gamma * Pjrk) / (r * r);
 
                         // Map to shape derivatives and push to CP
                         const Vec3 g2 = ga_phys * invT2; // 20 in stencil
@@ -3461,26 +3478,28 @@ void SolverLBFGS::dJ_limits_and_static_dz(const VecXd &z,
             const Vec3 n = acc + g * e3;
             const double r = std::sqrt(n.squaredNorm() + 1e-24);
             const Vec3 b3 = n / r;
-            const Eigen::Matrix3d Pmat = Eigen::Matrix3d::Identity() - b3 * b3.transpose();
+            // Replace Pmat with direct projection formula for efficiency
+            const Vec3 Pjrk = jrk - jrk.dot(b3) * b3;
 
             // --- Body-rate: y = ||b3dot||^2 - Ω^2, with b3dot = (P j)/r ---
             {
-                const Vec3 b3dot = (Pmat * jrk) / r;
+                const Vec3 b3dot = Pjrk / r;
                 const double yom = b3dot.squaredNorm() - Om2;
                 if (yom > 0.0)
                 {
                     const double phi_p = smoothed_l1_prime(yom, mu);
                     const Vec3 gb = (2.0 * phi_p) * b3dot * (dyn_constr_bodyrate_weight_ * wseg); // ∂J/∂b3dot
 
-                    const Vec3 Pgb = Pmat * gb;
-                    const Vec3 Pj = Pmat * jrk;
-                    const double alpha = Pj.dot(gb);
+                    // Apply projection formula directly
+                    const Vec3 Pgb = gb - gb.dot(b3) * b3;
+                    // Pjrk already computed above
+                    const double alpha = Pjrk.dot(gb);
                     const double beta = b3.dot(jrk);
                     const double gamma = b3.dot(gb);
 
                     // ∂J/∂j, ∂J/∂a (physical)
                     const Vec3 g3_phys = Pgb / r;
-                    const Vec3 ga_phys = -(beta * Pgb + alpha * b3 + gamma * Pj) / (r * r);
+                    const Vec3 ga_phys = -(beta * Pgb + alpha * b3 + gamma * Pjrk) / (r * r);
 
                     // Convert to shape-space derivatives and push to CP:
                     const Vec3 g2_d2s = ga_phys / (Ts * Ts);

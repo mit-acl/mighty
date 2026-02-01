@@ -185,7 +185,7 @@ python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/inst
 python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash
 
 # Gazebo with custom goal position
-python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash --goal 100 50 3
+python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash --goal 100 0 3
 
 # Gazebo with different environment
 python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash --env easy_forest

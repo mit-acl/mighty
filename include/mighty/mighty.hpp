@@ -94,7 +94,7 @@ public:
   void getA_time(double &A_time);
   void setA_time(double A_time);
   void getState(state &state);
-  void getTrajs(std::vector<std::shared_ptr<dynTraj>> &out);            
+  std::vector<std::shared_ptr<dynTraj>> getTrajs();
   void getLastPlanState(state &state);                                 
   void cleanUpOldTrajs(double current_time);
   void addTraj(std::shared_ptr<dynTraj> new_traj, double current_time);

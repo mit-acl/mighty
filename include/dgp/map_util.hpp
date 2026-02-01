@@ -16,7 +16,8 @@ namespace mighty
 {
 
   // The type of map data Tmap is defined as a 1D array
-  using Tmap = std::vector<int>;
+  // Using int8_t saves 75% memory compared to int (only need 3 values: -1, 0, 100)
+  using Tmap = std::vector<int8_t>;
   typedef timer::Timer MyTimer;
 
   /**
@@ -127,6 +128,7 @@ namespace mighty
 
       // 8) Update metadata
       dim_ = Veci<3>(dimX, dimY, dimZ);
+      dim_xy_ = dimX * dimY; // Cache the stride for fast indexing
       total_size_ = total;
       origin_d_ = origin;
       center_map_ = center_map;
@@ -216,14 +218,15 @@ namespace mighty
           return;
         }
 
-        // Get the neighboring indices
+        // Get the neighboring indices - preallocate to avoid repeated allocations
         std::vector<int> neighbor_indices;
+        neighbor_indices.reserve(1000); // Pre-allocate for typical case
 
         // Increase the radius until a free point is found
         for (float radius = 1.0; radius < 5.0; radius += 0.5) // TODO: expose the radius as a parameter
         {
           neighbor_indices.clear();
-          getNeighborIndices(point_int, neighbor_indices, radius);
+          getNeighborIndicesSphere(point_int, neighbor_indices, radius);
 
           // Find the closest free point
           float min_dist = std::numeric_limits<float>::max();
@@ -283,6 +286,57 @@ namespace mighty
             if (x >= 0 && x < dim_(0) && y >= 0 && y < dim_(1) && z >= 0 && z < dim_(2))
             {
 
+              Veci<3> neighbor_int(x, y, z);
+              int index = getIndex(neighbor_int);
+              if (index >= 0 && index < total_size_)
+              {
+                neighbor_indices.push_back(index);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    /**
+     * @brief Get indices of neighbors within spherical radius (optimized)
+     * @param Veci<3> point_int : Center point
+     * @param std::vector<int>& neighbor_indices : Output indices
+     * @param float radius : Spherical radius
+     * @return void
+     */
+    void getNeighborIndicesSphere(const Veci<3> &point_int, std::vector<int> &neighbor_indices, float radius)
+    {
+      // Get the radius in int
+      float radius_int = radius / res_;
+      int r_int = static_cast<int>(std::ceil(radius_int));
+      float r_sq = radius_int * radius_int;
+
+      // Get the bounding box
+      int x_min = std::max(0, point_int[0] - r_int);
+      int x_max = std::min(dim_(0) - 1, point_int[0] + r_int);
+      int y_min = std::max(0, point_int[1] - r_int);
+      int y_max = std::min(dim_(1) - 1, point_int[1] + r_int);
+      int z_min = std::max(0, point_int[2] - r_int);
+      int z_max = std::min(dim_(2) - 1, point_int[2] + r_int);
+
+      // Iterate over the bounding box and check spherical distance
+      for (int x = x_min; x <= x_max; ++x)
+      {
+        int dx = x - point_int[0];
+        int dx_sq = dx * dx;
+        for (int y = y_min; y <= y_max; ++y)
+        {
+          int dy = y - point_int[1];
+          int dxy_sq = dx_sq + dy * dy;
+          for (int z = z_min; z <= z_max; ++z)
+          {
+            int dz = z - point_int[2];
+            float dist_sq = dxy_sq + dz * dz;
+
+            // Only include points within spherical radius
+            if (dist_sq <= r_sq)
+            {
               Veci<3> neighbor_int(x, y, z);
               int index = getIndex(neighbor_int);
               if (index >= 0 && index < total_size_)
@@ -402,7 +456,7 @@ namespace mighty
     // Get index of a cell
     inline int getIndex(const Veci<Dim> &pn) const
     {
-      return Dim == 2 ? pn(0) + dim_(0) * pn(1) : pn(0) + dim_(0) * pn(1) + dim_(0) * dim_(1) * pn(2);
+      return Dim == 2 ? pn(0) + dim_(0) * pn(1) : pn(0) + dim_(0) * pn(1) + dim_xy_ * pn(2);
     }
     // Get index of a cell in old map
     inline int getOldIndex(const Veci<Dim> &pn) const
@@ -646,9 +700,21 @@ namespace mighty
 
       if (Dim == 3)
       {
+        // Store thread-local clouds to avoid serialization in critical section
+        std::vector<vec_Vecf<Dim>> thread_clouds;
+        int num_threads = 1;
+
 #pragma omp parallel
         {
-          vec_Vecf<Dim> local_cloud;
+#pragma omp single
+          {
+            num_threads = omp_get_num_threads();
+            thread_clouds.resize(num_threads);
+          }
+
+          int tid = omp_get_thread_num();
+          vec_Vecf<Dim> &local_cloud = thread_clouds[tid];
+
 // Collapse the three nested loops into one for OpenMP
 #pragma omp for collapse(3) nowait
           for (int i = min_point_int(0); i < max_point_int(0); ++i)
@@ -667,17 +733,33 @@ namespace mighty
               }
             }
           }
-#pragma omp critical
-          {
-            cloud.insert(cloud.end(), local_cloud.begin(), local_cloud.end());
-          }
         }
+
+        // Merge all thread-local clouds serially (no critical section bottleneck)
+        size_t total_size = 0;
+        for (const auto &tc : thread_clouds)
+          total_size += tc.size();
+        cloud.reserve(total_size);
+        for (const auto &tc : thread_clouds)
+          cloud.insert(cloud.end(), tc.begin(), tc.end());
       }
       else if (Dim == 2)
       {
+        // Store thread-local clouds to avoid serialization in critical section
+        std::vector<vec_Vecf<Dim>> thread_clouds;
+        int num_threads = 1;
+
 #pragma omp parallel
         {
-          vec_Vecf<Dim> local_cloud;
+#pragma omp single
+          {
+            num_threads = omp_get_num_threads();
+            thread_clouds.resize(num_threads);
+          }
+
+          int tid = omp_get_thread_num();
+          vec_Vecf<Dim> &local_cloud = thread_clouds[tid];
+
 #pragma omp for collapse(2) nowait
           for (int i = min_point_int(0); i < max_point_int(0); ++i)
           {
@@ -691,11 +773,15 @@ namespace mighty
               }
             }
           }
-#pragma omp critical
-          {
-            cloud.insert(cloud.end(), local_cloud.begin(), local_cloud.end());
-          }
         }
+
+        // Merge all thread-local clouds serially (no critical section bottleneck)
+        size_t total_size = 0;
+        for (const auto &tc : thread_clouds)
+          total_size += tc.size();
+        cloud.reserve(total_size);
+        for (const auto &tc : thread_clouds)
+          cloud.insert(cloud.end(), tc.begin(), tc.end());
       }
 
       return cloud;
@@ -830,6 +916,8 @@ namespace mighty
     Vecf<Dim> center_map_;
     // Dimension, int type
     Veci<Dim> dim_, prev_dim_;
+    // Cached stride for 3D indexing (dim[0] * dim[1])
+    int dim_xy_ = 0;
     // Map values
     float x_map_min_, x_map_max_, y_map_min_, y_map_max_, z_map_min_, z_map_max_;
     float x_min_, x_max_, y_min_, y_max_, z_min_, z_max_;

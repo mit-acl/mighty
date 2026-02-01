@@ -127,7 +127,7 @@ mighty_node:
         
         # Debug flags
         global_planner_verbose: false           # debug output
-        debug_verbose: false                    # [-] Verbose the debug information
+        debug_verbose: true                    # [-] Verbose the debug information
         closed_form_traj_verbose: false         # Verbosity of closed-form traj.
         verbose_computation_time: false         # [-] Verbose the computation time
 
