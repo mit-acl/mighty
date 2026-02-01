@@ -30,21 +30,59 @@ class GoalMonitorNode(Node):
         self.current_goal_index = 0
 
         # Define goal points (x, y, z) in the world frame
+        # Agents are on a circle of radius 10.0 at z=1.0 and swap with their opposite partner (i <-> i+5).
+
         if self.namespace == 'NX01':
-            self.goal_points = [[105.0, 15.0, 3.0]]
-            # for y = 10, …, -10, append [0,y,3] then [105,y,3]
-            for y in range(10, -15, -5):
-                self.goal_points.append([-5.0, float(y), 3.0])
-                self.goal_points.append([105.0, float(y), 3.0])
+            # start: ( 10.000,  0.000) ↔ opposite: (-10.000,  0.000) (NX06)
+            self.goal_points = [[-10.000,  0.000, 1.0], [ 10.000,  0.000, 1.0]]
+
         elif self.namespace == 'NX02':
-            self.goal_points = [[13.0, -3.0, 3.0], [-3.0, 1.5, 3.0]]
+            # start: (  8.090,  5.878) ↔ opposite: ( -8.090, -5.878) (NX07)
+            self.goal_points = [[ -8.090, -5.878, 1.0], [  8.090,  5.878, 1.0]]
+
         elif self.namespace == 'NX03':
-            self.goal_points = [[13.0, 3.0, 3.0], [-3.0, -1.5, 3.0]]
+            # start: (  3.090,  9.511) ↔ opposite: ( -3.090, -9.511) (NX08)
+            self.goal_points = [[ -3.090, -9.511, 1.0], [  3.090,  9.511, 1.0]]
+
         elif self.namespace == 'NX04':
-            self.goal_points = [[15.0, 1.5, 3.0], [0.0, -3.0, 3.0]]
+            # start: ( -3.090,  9.511) ↔ opposite: (  3.090, -9.511) (NX09)
+            self.goal_points = [[  3.090, -9.511, 1.0], [ -3.090,  9.511, 1.0]]
+
+        elif self.namespace == 'NX05':
+            # start: ( -8.090,  5.878) ↔ opposite: (  8.090, -5.878) (NX10)
+            self.goal_points = [[  8.090, -5.878, 1.0], [ -8.090,  5.878, 1.0]]
+
+        elif self.namespace == 'NX06':
+            # opposite of NX01
+            self.goal_points = [[ 10.000,  0.000, 1.0], [-10.000,  0.000, 1.0]]
+
+        elif self.namespace == 'NX07':
+            # opposite of NX02
+            self.goal_points = [[  8.090,  5.878, 1.0], [ -8.090, -5.878, 1.0]]
+
+        elif self.namespace == 'NX08':
+            # opposite of NX03
+            self.goal_points = [[  3.090,  9.511, 1.0], [ -3.090, -9.511, 1.0]]
+
+        elif self.namespace == 'NX09':
+            # opposite of NX04
+            self.goal_points = [[ -3.090,  9.511, 1.0], [  3.090, -9.511, 1.0]]
+
+        elif self.namespace == 'NX10':
+            # opposite of NX05
+            self.goal_points = [[ -8.090,  5.878, 1.0], [  8.090, -5.878, 1.0]]
+            
         else:
             self.get_logger().error(f"Unknown namespace: {self.namespace}. No goal points defined.")
             self.goal_points = [[0.0, 0.0, 0.0]]  # Default goal point if namespace is unknown
+
+        # repeat the two-goal pattern N times
+        num_iterations = 3
+        self.goal_points = self.goal_points * num_iterations
+
+        # repeat pattern
+        num_iterations = 3
+        self.goal_points = self.goal_points * num_iterations
 
         # Publishers and Subscribers
         self.state_sub = self.create_subscription(State, 'state', self.state_callback, 10)

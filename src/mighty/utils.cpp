@@ -56,6 +56,57 @@ namespace mighty_utils
     return pwp_msg;
   }
 
+  dynus_interfaces::msg::QuinticPWPTraj convertPwp2PwpMsg(const PieceWiseQuinticPol &pwp)
+  {
+    dynus_interfaces::msg::QuinticPWPTraj pwp_msg;
+
+    for (int i = 0; i < pwp.times.size(); i++)
+    {
+      pwp_msg.times.push_back(pwp.times[i]);
+    }
+
+    // push x
+    for (auto coeff_x_i : pwp.coeff_x)
+    {
+      dynus_interfaces::msg::QuinticCoeffPoly3 coeff_poly5;
+      coeff_poly5.a = coeff_x_i(0);
+      coeff_poly5.b = coeff_x_i(1);
+      coeff_poly5.c = coeff_x_i(2);
+      coeff_poly5.d = coeff_x_i(3);
+      coeff_poly5.e = coeff_x_i(4);
+      coeff_poly5.f = coeff_x_i(5);
+      pwp_msg.coeff_x.push_back(coeff_poly5);
+    }
+
+    // push y
+    for (auto coeff_y_i : pwp.coeff_y)
+    {
+      dynus_interfaces::msg::QuinticCoeffPoly3 coeff_poly5;
+      coeff_poly5.a = coeff_y_i(0);
+      coeff_poly5.b = coeff_y_i(1);
+      coeff_poly5.c = coeff_y_i(2);
+      coeff_poly5.d = coeff_y_i(3);
+      coeff_poly5.e = coeff_y_i(4);
+      coeff_poly5.f = coeff_y_i(5);
+      pwp_msg.coeff_y.push_back(coeff_poly5);
+    }
+
+    // push z
+    for (auto coeff_z_i : pwp.coeff_z)
+    {
+      dynus_interfaces::msg::QuinticCoeffPoly3 coeff_poly5;
+      coeff_poly5.a = coeff_z_i(0);
+      coeff_poly5.b = coeff_z_i(1);
+      coeff_poly5.c = coeff_z_i(2);
+      coeff_poly5.d = coeff_z_i(3);
+      coeff_poly5.e = coeff_z_i(4);
+      coeff_poly5.f = coeff_z_i(5);
+      pwp_msg.coeff_z.push_back(coeff_poly5);
+    }
+
+    return pwp_msg;
+  }
+
   PieceWisePol convertPwpMsg2Pwp(const dynus_interfaces::msg::PWPTraj &pwp_msg)
   {
     PieceWisePol pwp;
@@ -83,6 +134,42 @@ namespace mighty_utils
       pwp.coeff_y.push_back(tmp_y);
 
       tmp_z << pwp_msg.coeff_z[i].a, pwp_msg.coeff_z[i].b, pwp_msg.coeff_z[i].c, pwp_msg.coeff_z[i].d;
+      pwp.coeff_z.push_back(tmp_z);
+    }
+
+    return pwp;
+  }
+
+  PieceWiseQuinticPol convertPwpMsg2Pwp(const dynus_interfaces::msg::QuinticPWPTraj &pwp_msg)
+  {
+    PieceWiseQuinticPol pwp;
+
+    if (pwp_msg.coeff_x.size() != pwp_msg.coeff_y.size() || pwp_msg.coeff_x.size() != pwp_msg.coeff_z.size())
+    {
+      std::cout << " coeff_x,coeff_y,coeff_z of pwp_msg should have the same elements" << std::endl;
+      std::cout << " ================================" << std::endl;
+      abort();
+    }
+
+    for (int i = 0; i < pwp_msg.times.size(); i++)
+    {
+      pwp.times.push_back(pwp_msg.times[i]);
+    }
+
+    for (int i = 0; i < pwp_msg.coeff_x.size(); i++)
+    {
+      Eigen::Matrix<double, 6, 1> tmp_x, tmp_y, tmp_z;
+
+      tmp_x << pwp_msg.coeff_x[i].a, pwp_msg.coeff_x[i].b, pwp_msg.coeff_x[i].c,
+               pwp_msg.coeff_x[i].d, pwp_msg.coeff_x[i].e, pwp_msg.coeff_x[i].f;
+      pwp.coeff_x.push_back(tmp_x);
+
+      tmp_y << pwp_msg.coeff_y[i].a, pwp_msg.coeff_y[i].b, pwp_msg.coeff_y[i].c,
+               pwp_msg.coeff_y[i].d, pwp_msg.coeff_y[i].e, pwp_msg.coeff_y[i].f;
+      pwp.coeff_y.push_back(tmp_y);
+
+      tmp_z << pwp_msg.coeff_z[i].a, pwp_msg.coeff_z[i].b, pwp_msg.coeff_z[i].c,
+               pwp_msg.coeff_z[i].d, pwp_msg.coeff_z[i].e, pwp_msg.coeff_z[i].f;
       pwp.coeff_z.push_back(tmp_z);
     }
 

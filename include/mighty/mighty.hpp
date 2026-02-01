@@ -129,7 +129,9 @@ public:
   void applyInitiPoseTransform(PieceWisePol &pwp);
   void applyInitiPoseInverseTransform(PieceWisePol &pwp);
   void updateMap(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr &pclptr_map, const pcl::PointCloud<pcl::PointXYZ>::ConstPtr &pclptr_unk);
-
+  void updateOccupancyMap(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr &pclptr_map);
+  void getPiecewiseQuinticPol(PieceWiseQuinticPol &pwp);
+  
 private:
   // Parameters
   parameters par_;                                                       // Parameters of the planner
@@ -193,6 +195,7 @@ private:
   double previous_yaw_ = 0.0;                      // Previous yaw
   double prev_dyaw_ = 0.0;                         // Previous dyaw
   double dyaw_filtered_ = 0.0;                     // Filtered dyaw
+  PieceWiseQuinticPol pwp_to_share_;                // Piecewise polynomial to share
 
   // Drone status
   int drone_status_ = DroneStatus::GOAL_REACHED; // status_ can be TRAVELING, GOAL_SEEN, GOAL_REACHED

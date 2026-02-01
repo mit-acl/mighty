@@ -10,16 +10,23 @@
 #include "rclcpp/executors/multi_threaded_executor.hpp"
 #include "rclcpp/callback_group.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
+
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "gazebo_msgs/srv/set_entity_state.hpp"
 #include "gazebo_msgs/msg/entity_state.hpp"
+
 #include "tf2_ros/transform_broadcaster.h"
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+
 #include "dynus_interfaces/msg/goal.hpp"
 #include "dynus_interfaces/msg/state.hpp"
 #include "visualization_msgs/msg/marker.hpp"
+
 #include "tf2/LinearMath/Quaternion.h"
+
+#include "nav_msgs/msg/odometry.hpp"
+
 #include <math.h>
 #include <chrono>
 #include <thread>
@@ -29,13 +36,11 @@ using namespace std::chrono_literals;
 
 class FakeSim : public rclcpp::Node
 {
-
 public:
-
-    // Constructor
-    FakeSim() : Node("fake_sim"), br_(this, rclcpp::QoS(10).reliable().durability_volatile()) // Note: adding rclcpp::QoS(10).reliable().durability_volatile() to tf broadcaster helped a lot with the visualization lag.
+    FakeSim()
+        : Node("fake_sim"),
+          br_(this, rclcpp::QoS(10).reliable().durability_volatile())
     {
-
         RCLCPP_INFO(this->get_logger(), "Initializing FakeSim...");
 
         // Initialize callback groups
@@ -49,6 +54,13 @@ public:
         this->declare_parameter<double>("default_goal_z", 0.3);
         this->declare_parameter<int>("visual_level", 0);
 
+        // New parameters for odometry publishing
+        this->declare_parameter<bool>("publish_odom", false);
+        this->declare_parameter<std::string>("odom_topic", "odom");
+        this->declare_parameter<std::string>("odom_frame_id", "map");
+        // If empty, we will set base_frame_id_ = target_frame_ (ns_/base_link)
+        this->declare_parameter<std::string>("base_frame_id", "");
+
         // Get parameters
         auto start_pos = this->get_parameter("start_pos").as_double_array();
         double yaw = this->get_parameter("start_yaw").as_double();
@@ -56,12 +68,21 @@ public:
         default_goal_z_ = this->get_parameter("default_goal_z").as_double();
         int visual_level = this->get_parameter("visual_level").as_int();
 
+        publish_odom_ = this->get_parameter("publish_odom").as_bool();
+        odom_topic_ = this->get_parameter("odom_topic").as_string();
+        odom_frame_id_ = this->get_parameter("odom_frame_id").as_string();
+        base_frame_id_param_ = this->get_parameter("base_frame_id").as_string();
+
         // Print parameters
         RCLCPP_INFO(this->get_logger(), "Start position: %f, %f, %f", start_pos[0], start_pos[1], start_pos[2]);
         RCLCPP_INFO(this->get_logger(), "Start yaw: %f", yaw);
         RCLCPP_INFO(this->get_logger(), "Send state to Gazebo: %d", send_state_to_gazebo_);
         RCLCPP_INFO(this->get_logger(), "Default goal z: %f", default_goal_z_);
         RCLCPP_INFO(this->get_logger(), "Visual level: %d", visual_level);
+        RCLCPP_INFO(this->get_logger(), "Publish odom: %d", publish_odom_);
+        RCLCPP_INFO(this->get_logger(), "Odom topic: %s", odom_topic_.c_str());
+        RCLCPP_INFO(this->get_logger(), "Odom frame: %s", odom_frame_id_.c_str());
+        RCLCPP_INFO(this->get_logger(), "Base frame param: %s", base_frame_id_param_.c_str());
 
         // Initialize state
         state_ = dynus_interfaces::msg::State();
@@ -80,107 +101,135 @@ public:
         // Get namespace
         ns_ = get_namespace();
         if (!ns_.empty() && ns_[0] == '/')
-            ns_ = ns_.substr(1); // Create a substring starting from the second character
-
-        // Publishers
-        pub_state_ = this->create_publisher<dynus_interfaces::msg::State>("state", rclcpp::QoS(10).reliable().durability_volatile());
-        pub_marker_drone_ = this->create_publisher<visualization_msgs::msg::Marker>("drone_marker", rclcpp::QoS(10).reliable().durability_volatile());
-
-        // Subscribers
-        sub_goal_ = this->create_subscription<dynus_interfaces::msg::Goal>("goal", 10, std::bind(&FakeSim::goalCallback, this, std::placeholders::_1));
-
-        // Timer to simulate TF broadcast
-        // Not sure buf calling TF periodically suffers from latency
-        timer_ = this->create_wall_timer(10ms, std::bind(&FakeSim::pubCallback, this), cb_group_me_1_);
+            ns_ = ns_.substr(1);
 
         // Initialize the tf2 buffer and listener
         tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
         tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
+
         target_frame_ = ns_ + "/base_link";
 
-        // Initialize t_
+        // base frame for odom (child_frame_id)
+        if (!base_frame_id_param_.empty())
+            base_frame_id_ = base_frame_id_param_;
+        else
+            base_frame_id_ = target_frame_;
+
+        // Initialize TF message
         t_.header.frame_id = "map";
         t_.child_frame_id = target_frame_;
 
+        // Publishers
+        pub_state_ = this->create_publisher<dynus_interfaces::msg::State>(
+            "state", rclcpp::QoS(10).reliable().durability_volatile());
+
+        pub_marker_drone_ = this->create_publisher<visualization_msgs::msg::Marker>(
+            "drone_marker", rclcpp::QoS(10).reliable().durability_volatile());
+
+        // Optional odometry publisher
+        if (publish_odom_)
+        {
+            pub_odom_ = this->create_publisher<nav_msgs::msg::Odometry>(
+                odom_topic_, rclcpp::QoS(10).reliable().durability_volatile());
+            RCLCPP_INFO(this->get_logger(), "Odometry publisher created on topic '%s'", odom_topic_.c_str());
+        }
+
+        // Subscribers
+        sub_goal_ = this->create_subscription<dynus_interfaces::msg::Goal>(
+            "goal", 10, std::bind(&FakeSim::goalCallback, this, std::placeholders::_1));
+
+        // Timer to simulate TF broadcast
+        timer_ = this->create_wall_timer(10ms, std::bind(&FakeSim::pubCallback, this), cb_group_me_1_);
+
         // Gazebo service client
         gazebo_client_ = this->create_client<gazebo_msgs::srv::SetEntityState>("/plug/set_entity_state");
-        while (!gazebo_client_->wait_for_service(10s))
+        if (send_state_to_gazebo_)
         {
-            RCLCPP_INFO(this->get_logger(), "Gazebo service not available, waiting again...");
+            while (!gazebo_client_->wait_for_service(10s))
+            {
+                RCLCPP_INFO(this->get_logger(), "Gazebo service not available, waiting again...");
+            }
         }
 
         // Delay before sending the initial state to Gazebo
-        // threads_.push_back(std::thread(&FakeSim::sendGazeboState, this));
-        std::thread(&FakeSim::sendGazeboState, this).detach();
+        if (send_state_to_gazebo_)
+            std::thread(&FakeSim::sendGazeboState, this).detach();
 
         // Flag to publish drone marker
-        if (visual_level > 0)
-        {
-            publish_marker_drone_ = true;
-        }
-        else
-        {
-            publish_marker_drone_ = false;
-        }
+        publish_marker_drone_ = (visual_level > 0);
 
         // Publish the initial state
         std::this_thread::sleep_for(5s);
         state_.header.stamp = this->get_clock()->now();
         pub_state_->publish(state_);
 
+        // Also publish initial odom if enabled
+        if (publish_odom_)
+        {
+            publishOdometry();
+        }
+
         // Package path
         package_path_ = ament_index_cpp::get_package_share_directory("mighty");
 
         RCLCPP_INFO(this->get_logger(), "Package path: %s", package_path_.c_str());
         RCLCPP_INFO(this->get_logger(), "FakeSim initialized");
-
-    } // end of constructor
+    }
 
 private:
-    // std::vector<std::thread> threads_; // thread to handle service calls
     std::string package_path_;
     std::string ns_;
+
     rclcpp::CallbackGroup::SharedPtr cb_group_me_1_;
     rclcpp::CallbackGroup::SharedPtr cb_group_re_1_;
+
     rclcpp::Publisher<dynus_interfaces::msg::State>::SharedPtr pub_state_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_marker_drone_;
+    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom_;
+
     rclcpp::Subscription<dynus_interfaces::msg::Goal>::SharedPtr sub_goal_;
     rclcpp::Client<gazebo_msgs::srv::SetEntityState>::SharedPtr gazebo_client_;
     rclcpp::TimerBase::SharedPtr timer_;
+
     dynus_interfaces::msg::State state_;
-    bool publish_marker_drone_;
-    bool send_state_to_gazebo_ = true;
+    bool publish_marker_drone_{false};
+    bool send_state_to_gazebo_{true};
+
     std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
     std::string target_frame_;
-    double default_goal_z_;
-    int drone_marker_id_ = 1;
+
+    double default_goal_z_{0.3};
+    int drone_marker_id_{1};
+
     tf2_ros::TransformBroadcaster br_;
     geometry_msgs::msg::TransformStamped t_;
+
+    // Odometry options
+    bool publish_odom_{false};
+    std::string odom_topic_{"odom"};
+    std::string odom_frame_id_{"map"};
+    std::string base_frame_id_param_{""};
+    std::string base_frame_id_{""};
 
     // This is for ground robot
     void updateStateFromTF()
     {
         try
         {
-            // Lookup the transform from "map" to the namespace-specific base link
-            geometry_msgs::msg::TransformStamped transform = tf2_buffer_->lookupTransform("map", target_frame_, tf2::TimePointZero);
+            geometry_msgs::msg::TransformStamped transform =
+                tf2_buffer_->lookupTransform("map", target_frame_, tf2::TimePointZero);
 
-            // Update state based on the transform
             state_.header.stamp = this->get_clock()->now();
             state_.pos.x = transform.transform.translation.x;
             state_.pos.y = transform.transform.translation.y;
-
-            // Ground is detected as obstacles, so DYNUS is planning at default_goal_z_ altitude, so we set the z position to default_goal_z_ here
-            // This doesn't affect ground robot controller in convert_goal_to_cmd_vel.cpp since it doesn't use z position
-            state_.pos.z = default_goal_z_; // instead of state_.pos.z = transform.transform.translation.z;
+            state_.pos.z = default_goal_z_;
 
             state_.quat.x = transform.transform.rotation.x;
             state_.quat.y = transform.transform.rotation.y;
             state_.quat.z = transform.transform.rotation.z;
             state_.quat.w = transform.transform.rotation.w;
 
-            // Publish the updated state
             pub_state_->publish(state_);
         }
         catch (const tf2::TransformException &ex)
@@ -196,10 +245,9 @@ private:
         thrust << data->a.x, data->a.y, data->a.z + 9.81;
         Eigen::Vector3d thrust_normaized = thrust.normalized();
 
-        double a, b, c;
-        a = thrust_normaized.x();
-        b = thrust_normaized.y();
-        c = thrust_normaized.z();
+        double a = thrust_normaized.x();
+        double b = thrust_normaized.y();
+        double c = thrust_normaized.z();
 
         tf2::Quaternion qabc;
         tf2::Quaternion qpsi;
@@ -220,7 +268,7 @@ private:
 
         tf2::Quaternion w_q_b = qabc * qpsi;
 
-        // Publish state if not using ground robot (if using ground robot, we publish state using tf with updateStateFromTF)
+        // Update state (even if you later choose to publish state from TF for ground robot)
         state_.header.stamp = this->get_clock()->now();
         state_.pos = data->p;
         state_.vel = data->v;
@@ -228,7 +276,6 @@ private:
         state_.quat.x = w_q_b.x();
         state_.quat.y = w_q_b.y();
         state_.quat.z = w_q_b.z();
-
     }
 
     void sendGazeboState()
@@ -248,12 +295,11 @@ private:
 
         try
         {
-            auto result = future.get();
-            // RCLCPP_INFO(this->get_logger(), "Gazebo state sent");
+            (void)future.get();
         }
-        catch (const std::exception &e)
+        catch (const std::exception &)
         {
-            // RCLCPP_ERROR(this->get_logger(), "Failed to call service");
+            // Keep silent (same behavior as your original code)
         }
     }
 
@@ -271,20 +317,61 @@ private:
         t_.transform.rotation.w = state_.quat.w;
     }
 
+    void publishOdometry()
+    {
+        if (!publish_odom_ || !pub_odom_)
+        {
+            return;
+        }
+
+        nav_msgs::msg::Odometry odom;
+        odom.header.stamp = this->get_clock()->now();
+        odom.header.frame_id = odom_frame_id_;
+        odom.child_frame_id = base_frame_id_;
+
+        // Pose from state_
+        odom.pose.pose.position.x = state_.pos.x;
+        odom.pose.pose.position.y = state_.pos.y;
+        odom.pose.pose.position.z = state_.pos.z;
+
+        odom.pose.pose.orientation.x = state_.quat.x;
+        odom.pose.pose.orientation.y = state_.quat.y;
+        odom.pose.pose.orientation.z = state_.quat.z;
+        odom.pose.pose.orientation.w = state_.quat.w;
+
+        // Twist from state_ (if your dynus_interfaces::msg::State vel is in map/world frame,
+        // then this is consistent with header.frame_id = odom_frame_id_. If it's body-frame,
+        // you may want to rotate it.)
+        odom.twist.twist.linear.x = state_.vel.x;
+        odom.twist.twist.linear.y = state_.vel.y;
+        odom.twist.twist.linear.z = state_.vel.z;
+
+        // Angular velocity is unknown here; leave as zeros.
+
+        pub_odom_->publish(odom);
+    }
+
     void pubCallback()
     {
         // Publish the transform
         getTransformStamped();
         br_.sendTransform(t_);
 
+        // Publish odometry (optional)
+        if (publish_odom_)
+        {
+            publishOdometry();
+        }
+
         // Publish drone marker
         if (publish_marker_drone_)
+        {
             pub_marker_drone_->publish(getDroneMarker());
+        }
 
         // Send the state to Gazebo
         if (send_state_to_gazebo_)
         {
-            // threads_.push_back(std::thread(&FakeSim::sendGazeboState, this));
             std::thread(&FakeSim::sendGazeboState, this).detach();
         }
 
@@ -313,7 +400,6 @@ private:
 
         marker.mesh_use_embedded_materials = true;
         marker.mesh_resource = "package://mighty/meshes/quadrotor/quadrotor.dae";
-        std::cout << "Mesh resource: " << marker.mesh_resource << std::endl;
         marker.scale.x = 0.75;
         marker.scale.y = 0.75;
         marker.scale.z = 0.75;
@@ -329,7 +415,6 @@ int main(int argc, char **argv)
     rclcpp::executors::MultiThreadedExecutor executor;
     executor.add_node(node);
     executor.spin();
-
     rclcpp::shutdown();
     return 0;
 }

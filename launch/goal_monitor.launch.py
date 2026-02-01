@@ -4,15 +4,15 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 def generate_launch_description():
-    # keep your tolerance arg
+    # tolerance arg
     goal_tol_arg = DeclareLaunchArgument(
         'goal_tolerance',
         default_value='0.5',
         description='Distance tolerance to consider a goal reached'
     )
-
     # list out the four namespaces you want
-    namespaces = ['NX01']
+    namespaces = ['NX01', 'NX02', 'NX03', 'NX04', 'NX05',
+                  'NX06', 'NX07', 'NX08', 'NX09', 'NX10']
 
     # for each namespace, create one Node
     nodes = []

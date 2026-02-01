@@ -1610,7 +1610,7 @@ void SolverLBFGS::getPieceWisePol(PieceWiseQuinticPol &pwp)
     // 1) reset
     pwp.clear();
 
-    // 2) build the time‐breaks
+    // 2) build the time‐breaks (absolute times)
     pwp.times.push_back(t0_);
     double t_acc = 0.0;
     for (int i = 0; i < M_; ++i)
@@ -1622,46 +1622,54 @@ void SolverLBFGS::getPieceWisePol(PieceWiseQuinticPol &pwp)
     // 3) for each segment, convert Hermite → power basis:
     for (int s = 0; s < M_; ++s)
     {
-        double T = T_opt_[s];
+        double T  = T_opt_[s];
         double T2 = T * T, T3 = T2 * T, T4 = T3 * T, T5 = T4 * T;
 
         // Hermite endpoints
-        const auto &P0 = P_opt_[s], &P1 = P_opt_[s + 1];
-        const auto &V0 = V_opt_[s], &V1 = V_opt_[s + 1];
-        const auto &A0 = A_opt_[s], &A1 = A_opt_[s + 1];
+        const auto &P0 = P_opt_[s],     &P1 = P_opt_[s + 1];
+        const auto &V0 = V_opt_[s],     &V1 = V_opt_[s + 1];
+        const auto &A0 = A_opt_[s],     &A1 = A_opt_[s + 1];
 
-        // helper deltas
+        // helper deltas (same as before)
         Eigen::Vector3d C0 = P1 - (P0 + V0 * T + 0.5 * A0 * T2);
         Eigen::Vector3d C1 = V1 - (V0 + A0 * T);
         Eigen::Vector3d C2 = A1 - A0;
 
-        // build coeff vector [a0, a1, a2, a3, a4, a5]^T per axis
+        // We want coefficients for:
+        // p(u) = a*u^5 + b*u^4 + c*u^3 + d*u^2 + e*u + f
+        // stored as [a b c d e f]^T
+
         Eigen::Matrix<double, 6, 1> cx, cy, cz;
 
-        // a0, a1, a2
-        cx(0) = P0.x();
-        cx(1) = V0.x();
-        cx(2) = 0.5 * A0.x();
-        // a3, a4, a5
-        cx(3) = (10 * C0.x() - 4 * C1.x() + 0.5 * C2.x()) / T3;
-        cx(4) = (-15 * C0.x() + 7 * C1.x() - C2.x()) / T4;
-        cx(5) = (6 * C0.x() - 3 * C1.x() + 0.5 * C2.x()) / T5;
+        // ---- x ----
+        const double f_x = P0.x();
+        const double e_x = V0.x();
+        const double d_x = 0.5 * A0.x();
+        const double c_x = (10.0 * C0.x() - 4.0 * C1.x() + 0.5 * C2.x()) / T3;
+        const double b_x = (-15.0 * C0.x() + 7.0 * C1.x() - C2.x()) / T4;
+        const double a_x = (  6.0 * C0.x() - 3.0 * C1.x() + 0.5 * C2.x()) / T5;
 
-        // same for y
-        cy(0) = P0.y();
-        cy(1) = V0.y();
-        cy(2) = 0.5 * A0.y();
-        cy(3) = (10 * C0.y() - 4 * C1.y() + 0.5 * C2.y()) / T3;
-        cy(4) = (-15 * C0.y() + 7 * C1.y() - C2.y()) / T4;
-        cy(5) = (6 * C0.y() - 3 * C1.y() + 0.5 * C2.y()) / T5;
+        cx << a_x, b_x, c_x, d_x, e_x, f_x;
 
-        // …and z
-        cz(0) = P0.z();
-        cz(1) = V0.z();
-        cz(2) = 0.5 * A0.z();
-        cz(3) = (10 * C0.z() - 4 * C1.z() + 0.5 * C2.z()) / T3;
-        cz(4) = (-15 * C0.z() + 7 * C1.z() - C2.z()) / T4;
-        cz(5) = (6 * C0.z() - 3 * C1.z() + 0.5 * C2.z()) / T5;
+        // ---- y ----
+        const double f_y = P0.y();
+        const double e_y = V0.y();
+        const double d_y = 0.5 * A0.y();
+        const double c_y = (10.0 * C0.y() - 4.0 * C1.y() + 0.5 * C2.y()) / T3;
+        const double b_y = (-15.0 * C0.y() + 7.0 * C1.y() - C2.y()) / T4;
+        const double a_y = (  6.0 * C0.y() - 3.0 * C1.y() + 0.5 * C2.y()) / T5;
+
+        cy << a_y, b_y, c_y, d_y, e_y, f_y;
+
+        // ---- z ----
+        const double f_z = P0.z();
+        const double e_z = V0.z();
+        const double d_z = 0.5 * A0.z();
+        const double c_z = (10.0 * C0.z() - 4.0 * C1.z() + 0.5 * C2.z()) / T3;
+        const double b_z = (-15.0 * C0.z() + 7.0 * C1.z() - C2.z()) / T4;
+        const double a_z = (  6.0 * C0.z() - 3.0 * C1.z() + 0.5 * C2.z()) / T5;
+
+        cz << a_z, b_z, c_z, d_z, e_z, f_z;
 
         // store it
         pwp.coeff_x.push_back(cx);
@@ -2507,6 +2515,7 @@ double SolverLBFGS::evaluateObjectiveAndGradientFused(const Eigen::VectorXd &z, 
 
             for (const auto &obs : obstacles_)
             {
+
                 if (!obs)
                     continue;
 

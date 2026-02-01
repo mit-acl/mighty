@@ -34,6 +34,9 @@ struct polytope
 struct parameters
 {
 
+  // Sim enviroment
+  std::string sim_env;
+
   // UAV or Ground robot
   std::string vehicle_type;
   bool provide_goal_in_global_frame;
@@ -66,8 +69,8 @@ struct parameters
 
   // LOS post processing parameters
   int los_cells;
-  double min_len;   // [m] minimum length between two waypoints after post processing
-  double min_turn;  // [deg] minimum turn angle after post processing
+  double min_len;  // [m] minimum length between two waypoints after post processing
+  double min_turn; // [deg] minimum turn angle after post processing
 
   // Path push visualization parameters
   bool use_state_update;
@@ -104,12 +107,11 @@ struct parameters
   double fov_visual_y_deg;
 
   // number of segments parameters
-  int num_N;
   double max_dist_vertexes; // [m] Maximum distance between two consecutive vertexes
-  double w_unknown;      // [-] Weight for the unknown cells in the global planner
-  double w_align;     // strength of alignment penalty (cells)
-  double decay_len_cells; // e-folding distance from the start (cells)
-  double w_side;      // side (handedness) tie-break strength (cells)
+  double w_unknown;         // [-] Weight for the unknown cells in the global planner
+  double w_align;           // strength of alignment penalty (cells)
+  double decay_len_cells;   // e-folding distance from the start (cells)
+  double w_side;            // side (handedness) tie-break strength (cells)
 
   // Initial guess parameters
   bool use_multiple_initial_guesses; // [-] Use multiple initial guesses
@@ -135,22 +137,22 @@ struct parameters
   double dyn_constr_acc_weight;
   double dyn_constr_jerk_weight;
   int num_dyn_obst_samples; // Number of dynamic obstacle samples
-  double planner_Co; // for static obstacle avoidance
+  double planner_Co;        // for static obstacle avoidance
   double planner_Cw;
   std::vector<double> drone_bbox;
   double goal_radius;
   double goal_seen_radius;
-  double init_turn_bf;             // initial turn buffer in degrees
+  double init_turn_bf;     // initial turn buffer in degrees
   int integral_resolution; // resolution for the integral in the optimization
-  double hinge_mu;           // hinge mu for the optimization
-  double omega_max;         // max body rate in rad/s
-  double tilt_max_rad;      // max tilt in radians
+  double hinge_mu;         // hinge mu for the optimization
+  double omega_max;        // max body rate in rad/s
+  double tilt_max_rad;     // max tilt in radians
   double f_min;            // min thrust in N
   double f_max;            // max thrust in N
   double mass;             // mass in kg
   double g;                // gravity in m/s^2
-  double fopt_threshold; // threshold for the fopt to consider the optimization successful
-  
+  double fopt_threshold;   // threshold for the fopt to consider the optimization successful
+
   // L-BFGS parameters
   double f_dec_coeff;     // allow larger Armijo steps
   double cautious_factor; // always accept BFGS update
@@ -181,7 +183,6 @@ struct parameters
 
   // Debug flag
   bool debug_verbose;
-
 };
 
 struct BasisConverter
@@ -949,8 +950,8 @@ struct dynTraj
     Analytic
   } mode{Mode::Analytic};
 
-  // --- piecewise cubic branch ---
-  PieceWisePol pwp;
+  // --- piecewise quintic branch ---
+  PieceWiseQuinticPol pwp;
 
   // --- single‐segment quintic branch ---
   double poly_start_time = 0.0;
@@ -1013,7 +1014,7 @@ struct dynTraj
   }
 
   /// Switch to a piecewise cubic representation
-  inline void setPiecewise(const PieceWisePol &poly)
+  inline void setPiecewise(const PieceWiseQuinticPol &poly)
   {
     mode = Mode::Piecewise;
     pwp = poly;
@@ -1095,41 +1096,45 @@ struct dynTraj
     return Eigen::Vector3d::Zero();
   }
 
-  static inline double poly5_abs(const Eigen::Matrix<double,6,1>& c, double tau) {
-    double v = c(5);
-    v = v * tau + c(4);
-    v = v * tau + c(3);
+  // p(τ) = a τ^5 + b τ^4 + c τ^3 + d τ^2 + e τ + f  with c = [a,b,c,d,e,f]
+  static inline double poly5_abs(const Eigen::Matrix<double, 6, 1> &c, double tau)
+  {
+    double v = c(0);
+    v = v * tau + c(1);
     v = v * tau + c(2);
-    v = v * tau + c(1);
-    v = v * tau + c(0);
+    v = v * tau + c(3);
+    v = v * tau + c(4);
+    v = v * tau + c(5);
     return v;
   }
-  
-  // p'(τ) = c1 + 2 c2 τ + 3 c3 τ^2 + 4 c4 τ^3 + 5 c5 τ^4
-  static inline double dpoly5_abs(const Eigen::Matrix<double,6,1>& c, double tau) {
-    double v = 5 * c(5);
-    v = v * tau + 4 * c(4);
-    v = v * tau + 3 * c(3);
-    v = v * tau + 2 * c(2);
-    v = v * tau + c(1);
+
+  // p'(τ) = 5 a τ^4 + 4 b τ^3 + 3 c τ^2 + 2 d τ + e
+  static inline double dpoly5_abs(const Eigen::Matrix<double, 6, 1> &c, double tau)
+  {
+    double v = 5 * c(0);
+    v = v * tau + 4 * c(1);
+    v = v * tau + 3 * c(2);
+    v = v * tau + 2 * c(3);
+    v = v * tau + c(4);
     return v;
   }
-  
-  // p''(τ) = 2 c2 + 6 c3 τ + 12 c4 τ^2 + 20 c5 τ^3
-  static inline double ddpoly5_abs(const Eigen::Matrix<double,6,1>& c, double tau) {
-    double v = 20 * c(5);
-    v = v * tau + 12 * c(4);
-    v = v * tau + 6 * c(3);
-    v = v * tau + 2 * c(2);
+
+  // p''(τ) = 20 a τ^3 + 12 b τ^2 + 6 c τ + 2 d
+  static inline double ddpoly5_abs(const Eigen::Matrix<double, 6, 1> &c, double tau)
+  {
+    double v = 20 * c(0);
+    v = v * tau + 12 * c(1);
+    v = v * tau + 6 * c(2);
+    v = v * tau + 2 * c(3);
     return v;
   }
 
   // --- normalized-time evaluation: u = (t - t0) / (tf - t0) clamped to [0,1] ---
 
-  
-  inline Eigen::Vector3d evalQuinticPos(double t) const {
-    const double tau = t - poly_start_time;     // absolute time from segment start
-    return { poly5_abs(cx, tau), poly5_abs(cy, tau), poly5_abs(cz, tau) };
+  inline Eigen::Vector3d evalQuinticPos(double t) const
+  {
+    const double tau = t - poly_start_time; // absolute time from segment start
+    return {poly5_abs(cx, tau), poly5_abs(cy, tau), poly5_abs(cz, tau)};
   }
 
   inline Eigen::Vector3d evalAnalyticPos(double t) const
@@ -1162,10 +1167,11 @@ struct dynTraj
     return Eigen::Vector3d::Zero();
   }
 
-  inline Eigen::Vector3d velocityQuintic(double t) const {
+  inline Eigen::Vector3d velocityQuintic(double t) const
+  {
     const double tau = t - poly_start_time;
     // derivative w.r.t. absolute time (NO 1/duration factor)
-    return { dpoly5_abs(cx, tau), dpoly5_abs(cy, tau), dpoly5_abs(cz, tau) };
+    return {dpoly5_abs(cx, tau), dpoly5_abs(cy, tau), dpoly5_abs(cz, tau)};
   }
 
   inline Eigen::Vector3d velocityAnalytic(double t) const
@@ -1201,9 +1207,10 @@ struct dynTraj
     return Eigen::Vector3d::Zero();
   }
 
-  inline Eigen::Vector3d accelQuintic(double t) const {
+  inline Eigen::Vector3d accelQuintic(double t) const
+  {
     const double tau = t - poly_start_time;
-    return { ddpoly5_abs(cx, tau), ddpoly5_abs(cy, tau), ddpoly5_abs(cz, tau) };
+    return {ddpoly5_abs(cx, tau), ddpoly5_abs(cy, tau), ddpoly5_abs(cz, tau)};
   }
 
   inline Eigen::Vector3d accelAnalytic(double t) const
@@ -1218,12 +1225,18 @@ struct dynTraj
     return (v2 - v1) / (2 * dt);
   }
 
-  static const char* modeName(dynTraj::Mode m) {
-    switch (m) {
-      case dynTraj::Mode::Piecewise: return "Piecewise";
-      case dynTraj::Mode::Quintic:   return "Quintic";
-      case dynTraj::Mode::Analytic:  return "Analytic";
-      default: return "Unknown";
+  static const char *modeName(dynTraj::Mode m)
+  {
+    switch (m)
+    {
+    case dynTraj::Mode::Piecewise:
+      return "Piecewise";
+    case dynTraj::Mode::Quintic:
+      return "Quintic";
+    case dynTraj::Mode::Analytic:
+      return "Analytic";
+    default:
+      return "Unknown";
     }
   }
 
@@ -1258,7 +1271,6 @@ struct dynTraj
       std::cout << "  analytic_compiled=" << analytic_compiled << "\n";
     }
   }
-
 };
 
 struct state

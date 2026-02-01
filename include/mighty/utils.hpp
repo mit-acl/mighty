@@ -46,8 +46,14 @@ namespace mighty_utils
     // Convert a PieceWisePol Message to a PieceWisePol
     PieceWisePol convertPwpMsg2Pwp(const dynus_interfaces::msg::PWPTraj& pwp_msg);
 
+    // Convert a PieceWiseQuinticPol Message to a PieceWiseQuinticPol
+    PieceWiseQuinticPol convertPwpMsg2Pwp(const dynus_interfaces::msg::QuinticPWPTraj &pwp_msg);
+    
     // Convert a PieceWisePol to a PieceWisePol Message
     dynus_interfaces::msg::PWPTraj convertPwp2PwpMsg(const PieceWisePol& pwp);
+    
+    // Convert a PieceWiseQuinticPol Message to a PieceWiseQuinticPol
+    dynus_interfaces::msg::QuinticPWPTraj convertPwp2PwpMsg(const PieceWiseQuinticPol &pwp);
 
     // Convert a PieceWisePol to a Colored Marker Array
     visualization_msgs::msg::MarkerArray convertPwp2ColoredMarkerArray(PieceWisePol& pwp, int samples);

@@ -114,7 +114,7 @@ class BenchmarkNode(Node):
         sleep(10)
         
         # Onboard
-        self.sim_process_onboard = subprocess.Popen(["ros2", "launch", "mighty", "onboard_mighty.launch.py", f"x:={start_x}", f"y:={start_y}", f"z:={self.goal_z}", "yaw:=0", "namespace:=NX01", f"use_obstacle_tracker:={self.use_dyn_obs}", f"data_file:={csv_folder_path}/num_{self.current_run}.csv", "global_planner:=sjps", "use_benchmark:=true", "depth_camera_name:=d435"], preexec_fn=os.setsid)
+        self.sim_process_onboard = subprocess.Popen(["ros2", "launch", "mighty", "onboard_mighty.launch.py", f"x:={start_x}", f"y:={start_y}", f"z:={self.goal_z}", "yaw:=0", "namespace:=NX01", f"use_obstacle_tracker:={self.use_dyn_obs}", f"data_file:={csv_folder_path}/num_{self.current_run}.csv", "global_planner:=sjps", "use_benchmark:=true"], preexec_fn=os.setsid)
         
         # Bag recording
         self.sim_bag_record = subprocess.Popen(["python3", "/home/kkondo/code/dynus_ws/src/dynus/scripts/bag_record.py", "--bag_number", str(self.current_run), "--bag_path", f"{bag_folder_path}", "--agents", "['NX01']"], preexec_fn=os.setsid)

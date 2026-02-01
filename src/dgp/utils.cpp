@@ -8,7 +8,7 @@
 
 #include <dgp/utils.hpp>
 
-void printStateDeque(std::deque<state>& data)
+void printStateDeque(std::deque<state> &data)
 {
   for (int i = 0; i < data.size(); i++)
   {
@@ -16,7 +16,7 @@ void printStateDeque(std::deque<state>& data)
   }
 }
 
-void printStateVector(std::vector<state>& data)
+void printStateVector(std::vector<state> &data)
 {
   for (int i = 0; i < data.size(); i++)
   {
@@ -24,21 +24,22 @@ void printStateVector(std::vector<state>& data)
   }
 }
 
-void vectorOfVectors2MarkerArray(vec_Vecf<3> traj, visualization_msgs::msg::MarkerArray* m_array, std_msgs::msg::ColorRGBA color,
+void vectorOfVectors2MarkerArray(vec_Vecf<3> traj, visualization_msgs::msg::MarkerArray *m_array, std_msgs::msg::ColorRGBA color,
                                  int type, std::vector<double> radii)
 {
 
-  if (traj.size() == 0) return;
+  if (traj.size() == 0)
+    return;
   geometry_msgs::msg::Point p_last = eigen2point(traj[0]);
 
   bool first_element = true;
-  int i = 50000;  // large enough to prevent conflict with other markers
+  int i = 50000; // large enough to prevent conflict with other markers
   int j = 0;
 
-  for (const auto& it : traj)
+  for (const auto &it : traj)
   {
     i++;
-    if (first_element and type == visualization_msgs::msg::Marker::ARROW)  // skip the first element
+    if (first_element and type == visualization_msgs::msg::Marker::ARROW) // skip the first element
     {
       first_element = false;
       continue;
@@ -65,9 +66,9 @@ void vectorOfVectors2MarkerArray(vec_Vecf<3> traj, visualization_msgs::msg::Mark
     }
     else
     {
-      double scale = 0.1;  // Scale is the diameter of the sphere
+      double scale = 0.1; // Scale is the diameter of the sphere
       if (radii.size() != 0)
-      {  // If argument provided
+      { // If argument provided
         scale = 2 * radii[j];
       }
       m.scale.x = scale;
@@ -83,41 +84,48 @@ void vectorOfVectors2MarkerArray(vec_Vecf<3> traj, visualization_msgs::msg::Mark
 std_msgs::msg::ColorRGBA getColorJet(double v, double vmin, double vmax)
 {
   std_msgs::msg::ColorRGBA c;
-  c.r = 1;
-  c.g = 1;
-  c.b = 1;
-  c.a = 1;
-  // white
-  double dv;
-  
+  c.a = 1.0;
+
+  // Clamp
   if (v < vmin)
     v = vmin;
   if (v > vmax)
     v = vmax;
-  dv = vmax - vmin;
 
-  if (v < (vmin + 0.25 * dv))
+  const double dv = vmax - vmin;
+  if (dv <= 1e-9)
   {
-    c.r = 0;
-    c.g = 4 * (v - vmin) / dv;
-  }
-  else if (v < (vmin + 0.5 * dv))
-  {
-    c.r = 0;
-    c.b = 1 + 4 * (vmin + 0.25 * dv - v) / dv;
-  }
-  else if (v < (vmin + 0.75 * dv))
-  {
-    c.r = 4 * (v - vmin - 0.5 * dv) / dv;
-    c.b = 0;
-  }
-  else
-  {
-    c.g = 1 + 4 * (vmin + 0.75 * dv - v) / dv;
-    c.b = 0;
+    // Degenerate range -> just return a dull red
+    c.r = 0.8;
+    c.g = 0.2;
+    c.b = 0.2;
+    return c;
   }
 
-  return (c);
+  // Normalize: t=0 -> slow (red), t=1 -> fast (green)
+  const double t = (v - vmin) / dv;
+
+  // Red -> Yellow -> Green (no blue)
+  // Equivalent to: r = 1-t, g = t, b = 0 (gives yellow in the middle)
+  c.r = 1.0 - t;
+  c.g = t;
+  c.b = 0.0;
+
+  // --- Make colors duller (optional but recommended) ---
+  // 1) Blend toward gray (desaturate)
+  const double gray = 0.9; // 0..1
+  const double sat = 0.8;  // 1.0 original, smaller = duller
+  c.r = sat * c.r + (1.0 - sat) * gray;
+  c.g = sat * c.g + (1.0 - sat) * gray;
+  c.b = sat * c.b + (1.0 - sat) * gray;
+
+  // 2) Reduce brightness
+  const double bright = 0.95; // 1.0 original, smaller = darker
+  c.r *= bright;
+  c.g *= bright;
+  c.b *= bright;
+
+  return c;
 }
 
 std_msgs::msg::ColorRGBA color(int id)
@@ -167,17 +175,17 @@ std_msgs::msg::ColorRGBA color(int id)
   yellow.g = 1;
   yellow.b = 0;
   yellow.a = 1;
-  std_msgs::msg::ColorRGBA orange;  // orange 
+  std_msgs::msg::ColorRGBA orange; // orange
   orange.r = 1;
   orange.g = 0.5;
   orange.b = 0;
   orange.a = 1;
-  std_msgs::msg::ColorRGBA orange_trans;  // orange transparent
+  std_msgs::msg::ColorRGBA orange_trans; // orange transparent
   orange_trans.r = 1;
   orange_trans.g = 0.5;
   orange_trans.b = 0;
   orange_trans.a = 0.3;
-  std_msgs::msg::ColorRGBA green_trans_trans;  // green transparent
+  std_msgs::msg::ColorRGBA green_trans_trans; // green transparent
   green_trans_trans.r = 0;
   green_trans_trans.g = 1;
   green_trans_trans.b = 0;
@@ -185,66 +193,66 @@ std_msgs::msg::ColorRGBA color(int id)
 
   switch (id)
   {
-    case RED:
-      return red;
-      break;
-    case RED_TRANS:
-      return red_trans;
-      break;
-    case RED_TRANS_TRANS:
-      return red_trans_trans;
-      break;
-    case BLUE:
-      return blue;
-      break;
-    case BLUE_TRANS:
-      return blue_trans;
-      break;
-    case BLUE_TRANS_TRANS:
-      return blue_trans_trans;
-      break;
-    case BLUE_LIGHT:
-      return blue_light;
-      break;
-    case GREEN:
-      return green;
-      break;
-    case YELLOW:
-      return yellow;
-      break;
-    case ORANGE:
-      return orange;
-      break;
-    case ORANGE_TRANS:
-      return orange_trans;
-      break;
-    case GREEN_TRANS_TRANS:
-      return green_trans_trans;
-      break;
-    default:
-      PCL_ERROR("COLOR NOT DEFINED");
+  case RED:
+    return red;
+    break;
+  case RED_TRANS:
+    return red_trans;
+    break;
+  case RED_TRANS_TRANS:
+    return red_trans_trans;
+    break;
+  case BLUE:
+    return blue;
+    break;
+  case BLUE_TRANS:
+    return blue_trans;
+    break;
+  case BLUE_TRANS_TRANS:
+    return blue_trans_trans;
+    break;
+  case BLUE_LIGHT:
+    return blue_light;
+    break;
+  case GREEN:
+    return green;
+    break;
+  case YELLOW:
+    return yellow;
+    break;
+  case ORANGE:
+    return orange;
+    break;
+  case ORANGE_TRANS:
+    return orange_trans;
+    break;
+  case GREEN_TRANS_TRANS:
+    return green_trans_trans;
+    break;
+  default:
+    PCL_ERROR("COLOR NOT DEFINED");
   }
 }
 
-//## From Wikipedia - http://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-void quaternion2Euler(tf2::Quaternion q, double& roll, double& pitch, double& yaw)
+// ## From Wikipedia - http://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+void quaternion2Euler(tf2::Quaternion q, double &roll, double &pitch, double &yaw)
 {
   tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
 }
 
-void quaternion2Euler(Eigen::Quaterniond q, double& roll, double& pitch, double& yaw)
+void quaternion2Euler(Eigen::Quaterniond q, double &roll, double &pitch, double &yaw)
 {
   tf2::Quaternion tf_q(q.x(), q.y(), q.z(), q.w());
   quaternion2Euler(tf_q, roll, pitch, yaw);
 }
 
-void quaternion2Euler(geometry_msgs::msg::Quaternion q, double& roll, double& pitch, double& yaw)
+void quaternion2Euler(geometry_msgs::msg::Quaternion q, double &roll, double &pitch, double &yaw)
 {
   tf2::Quaternion tf_q(q.x, q.y, q.z, q.w);
   quaternion2Euler(tf_q, roll, pitch, yaw);
 }
 
-void saturate(double& var, double min, double max)
+void saturate(double &var, double min, double max)
 {
   // std::cout << "min=" << min << " max=" << max << std::endl;
   if (var < min)
@@ -275,7 +283,7 @@ visualization_msgs::msg::Marker getMarkerSphere(double scale, int my_color)
   return marker;
 }
 
-double angleBetVectors(const Eigen::Vector3d& a, const Eigen::Vector3d& b)
+double angleBetVectors(const Eigen::Vector3d &a, const Eigen::Vector3d &b)
 {
   // printf("In angleBetVEctors\n");
   // std::cout << a.transpose() << std::endl;
@@ -288,7 +296,7 @@ double angleBetVectors(const Eigen::Vector3d& a, const Eigen::Vector3d& b)
 }
 
 // returns the points around B sampled in the sphere with radius r and center center.
-std::vector<Eigen::Vector3d> samplePointsSphere(Eigen::Vector3d& B, double r, Eigen::Vector3d& center)
+std::vector<Eigen::Vector3d> samplePointsSphere(Eigen::Vector3d &B, double r, Eigen::Vector3d &center)
 {
   std::vector<Eigen::Vector3d> tmp;
 
@@ -312,12 +320,12 @@ std::vector<Eigen::Vector3d> samplePointsSphere(Eigen::Vector3d& B, double r, Ei
       Eigen::Vector3d trans = center;
       p2 = rot_z * rot_y * p1 + trans;
 
-      if (p2[2] > 0)  // If below the ground, discard
+      if (p2[2] > 0) // If below the ground, discard
       {
         tmp.push_back(p2);
       }
       if (theta == 0)
-      {  // to avoid including multiple times the pointB
+      { // to avoid including multiple times the pointB
         break;
       }
     }
@@ -326,7 +334,7 @@ std::vector<Eigen::Vector3d> samplePointsSphere(Eigen::Vector3d& B, double r, Ei
   return tmp;
 }
 
-void printElementsOfJPS(vec_Vecf<3>& path)
+void printElementsOfJPS(vec_Vecf<3> &path)
 {
   // printf("Elements of the path given:\n");
   for (int i = 0; i < path.size(); i++)
@@ -340,8 +348,8 @@ void printElementsOfJPS(vec_Vecf<3>& path)
 // last_index_inside_sphere is the the index of the last point that is inside the sphere (should be provided as a
 // parameter to this function)
 // B is the first intersection of JPS with the sphere
-std::vector<Eigen::Vector3d> samplePointsSphereWithJPS(Eigen::Vector3d& B, double r, Eigen::Vector3d& center_sent,
-                                                       vec_Vecf<3>& path_sent, int last_index_inside_sphere)
+std::vector<Eigen::Vector3d> samplePointsSphereWithJPS(Eigen::Vector3d &B, double r, Eigen::Vector3d &center_sent,
+                                                       vec_Vecf<3> &path_sent, int last_index_inside_sphere)
 {
   printf("In samplePointsSphereWithJPS\n");
   // printElementsOfJPS(path_sent);
@@ -350,7 +358,7 @@ std::vector<Eigen::Vector3d> samplePointsSphereWithJPS(Eigen::Vector3d& B, doubl
 
   for (int i = 0; i < path_sent.size(); i++)
   {
-    path.push_back(path_sent[i]);  // Local copy of path_sent
+    path.push_back(path_sent[i]); // Local copy of path_sent
   }
 
   Eigen::Vector3d center(center_sent[0], center_sent[1], center_sent[2]);
@@ -376,16 +384,16 @@ std::vector<Eigen::Vector3d> samplePointsSphereWithJPS(Eigen::Vector3d& B, doubl
 
   // printf("last_index_inside_sphere=%d", last_index_inside_sphere);
 
-  path[last_index_inside_sphere + 1] = B;  // path will always have last_index_inside_sphere + 2 elements at least
+  path[last_index_inside_sphere + 1] = B; // path will always have last_index_inside_sphere + 2 elements at least
   // std::vector<Eigen::Vector2d> proj;     // Projection of the waypoints in the sphere, in spherical coordinates
-  std::vector<Eigen::Vector3d> samples;  // Points sampled in the sphere
+  std::vector<Eigen::Vector3d> samples; // Points sampled in the sphere
   Eigen::Vector3d dir;
   double x, y, z;
 
   for (int i = last_index_inside_sphere + 1; i >= 1; i--)
   {
-    Eigen::Vector3d point_i = (path[i] - center);        // point i expressed with origin=origin sphere
-    Eigen::Vector3d point_im1 = (path[i - 1] - center);  // point i minus 1
+    Eigen::Vector3d point_i = (path[i] - center);       // point i expressed with origin=origin sphere
+    Eigen::Vector3d point_im1 = (path[i - 1] - center); // point i minus 1
 
     /*    Eigen::Vector3d& point_i_ref(point_i);      // point i expressed with origin=origin sphere
         Eigen::Vector3d& point_im1_ref(point_im1);  // point i minus 1*/
@@ -414,7 +422,7 @@ std::vector<Eigen::Vector3d> samplePointsSphereWithJPS(Eigen::Vector3d& B, doubl
     else
     {
       samples.push_back(B);
-      continue;  // it's weird, but solves the problem when the vectors a and b are the same ones...
+      continue; // it's weird, but solves the problem when the vectors a and b are the same ones...
     }
     /*    std::cout << "a=" << a.transpose() << std::endl;
         std::cout << "b=" << b.transpose() << std::endl;
@@ -431,7 +439,7 @@ std::vector<Eigen::Vector3d> samplePointsSphereWithJPS(Eigen::Vector3d& B, doubl
        cvxgen)
         }*/
 
-    Eigen::Vector3d perp = (point_i.cross(point_im1)).normalized();  // perpendicular vector to point_i and point_ip1;
+    Eigen::Vector3d perp = (point_i.cross(point_im1)).normalized(); // perpendicular vector to point_i and point_ip1;
     printf("Perpendicular vector=\n");
     std::cout << perp << std::endl;
 
@@ -494,7 +502,7 @@ std::vector<Eigen::Vector3d> samplePointsSphereWithJPS(Eigen::Vector3d& B, doubl
     }*/
 
   samples.insert(samples.end(), uniform_samples.begin(),
-                 uniform_samples.end());  // concatenate samples and uniform samples
+                 uniform_samples.end()); // concatenate samples and uniform samples
 
   printf("**y despues samples vale:\n");
   for (int i = 0; i < samples.size(); i++)
@@ -506,7 +514,7 @@ std::vector<Eigen::Vector3d> samplePointsSphereWithJPS(Eigen::Vector3d& B, doubl
   return samples;
 }
 
-void angle_wrap(double& diff)
+void angle_wrap(double &diff)
 {
   diff = fmod(diff + M_PI, 2 * M_PI);
   if (diff < 0)
@@ -514,7 +522,7 @@ void angle_wrap(double& diff)
   diff -= M_PI;
 }
 
-pcl::PointXYZ eigenPoint2pclPoint(Eigen::Vector3d& p)
+pcl::PointXYZ eigenPoint2pclPoint(Eigen::Vector3d &p)
 {
   // std::cout << "solving\n" << coeff << std::endl;
   pcl::PointXYZ tmp(p[0], p[1], p[2]);
@@ -566,7 +574,7 @@ float solvePolyOrder2(Eigen::Vector3f coeff)
   float dis = b * b - 4 * a * c;
   if (dis >= 0)
   {
-    float x1 = (-b - sqrt(dis)) / (2 * a);  // x1 will always be smaller than x2
+    float x1 = (-b - sqrt(dis)) / (2 * a); // x1 will always be smaller than x2
     float x2 = (-b + sqrt(dis)) / (2 * a);
 
     if (x1 >= 0)
@@ -641,7 +649,7 @@ template <typename T>
 using vec_E = std::vector<T, Eigen::aligned_allocator<T>>;
 
 template <int N>
-using Vecf = Eigen::Matrix<decimal_t, N, 1>;  // Be CAREFUL, because this is with doubles!
+using Vecf = Eigen::Matrix<decimal_t, N, 1>; // Be CAREFUL, because this is with doubles!
 
 template <int N>
 using vec_Vecf = vec_E<Vecf<N>>;
@@ -649,8 +657,8 @@ using vec_Vecf = vec_E<Vecf<N>>;
 // returns 1 if there is an intersection between the segment P1-P2 and the plane given by coeff=[A B C D]
 // (Ax+By+Cz+D==0)  returns 0 if there is no intersection.
 // The intersection point is saved in "intersection"
-bool getIntersectionWithPlane(const Eigen::Vector3d& P1, const Eigen::Vector3d& P2, const Eigen::Vector4d& coeff,
-                              Eigen::Vector3d& intersection)
+bool getIntersectionWithPlane(const Eigen::Vector3d &P1, const Eigen::Vector3d &P2, const Eigen::Vector4d &coeff,
+                              Eigen::Vector3d &intersection)
 {
   /*  std::cout << "Coefficients" << std::endl;
     std::cout << coeff.transpose() << std::endl;
@@ -679,7 +687,7 @@ bool getIntersectionWithPlane(const Eigen::Vector3d& P1, const Eigen::Vector3d& 
   (intersection)[2] = z1 + c * t;
   // printf("t=%f\n", t);
   bool result =
-      (t < 0 || t > 1) ? false : true;  // False if the intersection is with the line P1-P2, not with the segment P1-P2
+      (t < 0 || t > 1) ? false : true; // False if the intersection is with the line P1-P2, not with the segment P1-P2
   // std::cout << "result vale" << result << std::endl;
   /*  if (result)
     {
@@ -689,7 +697,7 @@ bool getIntersectionWithPlane(const Eigen::Vector3d& P1, const Eigen::Vector3d& 
   return result;
 }
 
-double normJPS(vec_Vecf<3>& path, int index_start)
+double normJPS(vec_Vecf<3> &path, int index_start)
 {
   double distance = 0;
   for (int i = index_start; i < path.size() - 1; i++)
@@ -700,7 +708,7 @@ double normJPS(vec_Vecf<3>& path, int index_start)
 }
 
 // Crop the end of a JPS path by a given distance
-void reduceJPSbyDistance(vec_Vecf<3>& path, double d)
+void reduceJPSbyDistance(vec_Vecf<3> &path, double d)
 {
   /*  std::cout<<"In reduceJPSbyDistance, path=\n";
     printElementsOfJPS(path);*/
@@ -724,14 +732,14 @@ void reduceJPSbyDistance(vec_Vecf<3>& path, double d)
 
 // given 2 points (A inside and B outside the sphere) it computes the intersection of the lines between
 // that 2 points and the sphere
-Eigen::Vector3d getIntersectionWithSphere(Eigen::Vector3d& A, Eigen::Vector3d& B, double r, Eigen::Vector3d& center)
+Eigen::Vector3d getIntersectionWithSphere(Eigen::Vector3d &A, Eigen::Vector3d &B, double r, Eigen::Vector3d &center)
 {
   // http://www.ambrsoft.com/TrigoCalc/Sphere/SpherLineIntersection_.htm
   /*  std::cout << "Center=" << std::endl << center << std::endl;
     std::cout << "Radius=" << std::endl << r << std::endl;
     std::cout << "First Point=" << std::endl << A << std::endl;
     std::cout << "Second Point=" << std::endl << B << std::endl;*/
-    
+
   float x1 = A[0];
   float y1 = A[1];
   float z1 = A[2];
@@ -794,15 +802,15 @@ Eigen::Vector3d getIntersectionWithSphere(Eigen::Vector3d& A, Eigen::Vector3d& B
 // it returns its first intersection with a sphere of radius=r and center=center
 // the center is added as the first point of the path to ensure that the first element of the path is inside the sphere
 // (to avoid issues with the first point of JPS2)
-Eigen::Vector3d getFirstIntersectionWithSphere(vec_Vecf<3>& path, double r, Eigen::Vector3d& center,
-                                               int* last_index_inside_sphere, bool* noPointsOutsideSphere)
+Eigen::Vector3d getFirstIntersectionWithSphere(vec_Vecf<3> &path, double r, Eigen::Vector3d &center,
+                                               int *last_index_inside_sphere, bool *noPointsOutsideSphere)
 {
   // printf("Utils: In getFirstIntersectionWithSphere\n");
   // printElementsOfJPS(path);
   // std::cout << "Utils: center=" << center.transpose() << std::endl;
   // printf("here\n");
   if (noPointsOutsideSphere != NULL)
-  {  // this argument has been provided
+  { // this argument has been provided
     *noPointsOutsideSphere = false;
   }
   // printf("here2\n");
@@ -816,7 +824,7 @@ Eigen::Vector3d getFirstIntersectionWithSphere(vec_Vecf<3>& path, double r, Eige
     if (dist > r)
     {
       // std::cout << "dist>r!" << std::endl;
-      index = i;  // This is the first point outside the sphere
+      index = i; // This is the first point outside the sphere
       break;
     }
   }
@@ -828,51 +836,51 @@ Eigen::Vector3d getFirstIntersectionWithSphere(vec_Vecf<3>& path, double r, Eige
   // std::cout << "Utils: index=" << index << std::endl;
   switch (index)
   {
-    case -1:  // no points are outside the sphere --> return last element
-      // std::cout << "Utils: no points are outside the sphere!!!" << std::endl;
-      A = center;
-      B = path[path.size() - 1];
-      if (last_index_inside_sphere != NULL)
-      {
-        *last_index_inside_sphere = path.size() - 1;
-      }
-      if (noPointsOutsideSphere != NULL)
-      {  // this argument has been provided
-        *noPointsOutsideSphere = true;
-      }
-      // std::cout << "Calling intersecion1 with A=" << A.transpose() << "  and B=" << B.transpose() << std::endl;
-      intersection = getIntersectionWithSphere(A, B, r, center);
+  case -1: // no points are outside the sphere --> return last element
+    // std::cout << "Utils: no points are outside the sphere!!!" << std::endl;
+    A = center;
+    B = path[path.size() - 1];
+    if (last_index_inside_sphere != NULL)
+    {
+      *last_index_inside_sphere = path.size() - 1;
+    }
+    if (noPointsOutsideSphere != NULL)
+    { // this argument has been provided
+      *noPointsOutsideSphere = true;
+    }
+    // std::cout << "Calling intersecion1 with A=" << A.transpose() << "  and B=" << B.transpose() << std::endl;
+    intersection = getIntersectionWithSphere(A, B, r, center);
 
-      // intersection = path[path.size() - 1];
+    // intersection = path[path.size() - 1];
 
-      // std::cout << "Utils: Returning intersection=" << intersection.transpose() << std::endl;
-      // intersection = path[path.size() - 1];
-      if (last_index_inside_sphere != NULL)
-      {
-        *last_index_inside_sphere = path.size() - 1;
-      }
-      break;
-    case 0:  // First element is outside the sphere
-      printf("First element is still oustide the sphere, there is sth wrong, returning the first element\n");
-      intersection = path[0];
-      // std::cout << "radius=" << r << std::endl;
-      // std::cout << "dist=" << (path[0] - center).norm() << std::endl;
-      if (last_index_inside_sphere != NULL)
-      {
-        *last_index_inside_sphere = 1;
-      }
-      break;
-    default:
-      A = path[index - 1];
-      B = path[index];
-      // std::cout << "Utils: calling intersecion2 with A=" << A.transpose() << "  and B=" << B.transpose() <<
-      // std::endl;
-      intersection = getIntersectionWithSphere(A, B, r, center);
-      // printf("index-1=%d\n", index - 1);
-      if (last_index_inside_sphere != NULL)
-      {
-        *last_index_inside_sphere = index - 1;
-      }
+    // std::cout << "Utils: Returning intersection=" << intersection.transpose() << std::endl;
+    // intersection = path[path.size() - 1];
+    if (last_index_inside_sphere != NULL)
+    {
+      *last_index_inside_sphere = path.size() - 1;
+    }
+    break;
+  case 0: // First element is outside the sphere
+    printf("First element is still oustide the sphere, there is sth wrong, returning the first element\n");
+    intersection = path[0];
+    // std::cout << "radius=" << r << std::endl;
+    // std::cout << "dist=" << (path[0] - center).norm() << std::endl;
+    if (last_index_inside_sphere != NULL)
+    {
+      *last_index_inside_sphere = 1;
+    }
+    break;
+  default:
+    A = path[index - 1];
+    B = path[index];
+    // std::cout << "Utils: calling intersecion2 with A=" << A.transpose() << "  and B=" << B.transpose() <<
+    // std::endl;
+    intersection = getIntersectionWithSphere(A, B, r, center);
+    // printf("index-1=%d\n", index - 1);
+    if (last_index_inside_sphere != NULL)
+    {
+      *last_index_inside_sphere = index - 1;
+    }
   }
 
   // bool thereIsIntersec;
@@ -891,7 +899,7 @@ Eigen::Vector3d getLastIntersectionWithSphere(vec_Vecf<3> path, double r, Eigen:
     double dist = (path[i] - center).norm();
     if (dist < r)
     {
-      index = i;  // This is the first point inside the sphere
+      index = i; // This is the first point inside the sphere
       break;
     }
   }
@@ -916,7 +924,7 @@ Eigen::Vector3d getLastIntersectionWithSphere(vec_Vecf<3> path, double r, Eigen:
   return intersection;
 }
 
-double getDistancePath(vec_Vecf<3>& path)
+double getDistancePath(vec_Vecf<3> &path)
 {
   double distance = 0;
   for (int i = 0; i < path.size() - 1; i++)
@@ -928,7 +936,7 @@ double getDistancePath(vec_Vecf<3>& path)
 
 // Same as the previous one, but also returns dist = the distance form the last intersection to the goal (following
 // the path)
-Eigen::Vector3d getLastIntersectionWithSphere(vec_Vecf<3> path, double r, Eigen::Vector3d center, double* Jdist)
+Eigen::Vector3d getLastIntersectionWithSphere(vec_Vecf<3> path, double r, Eigen::Vector3d center, double *Jdist)
 {
   /*  printf("********************In getLastIntersectionWithSphere\n");
 
@@ -946,7 +954,7 @@ Eigen::Vector3d getLastIntersectionWithSphere(vec_Vecf<3> path, double r, Eigen:
     double dist = (path[i] - center).norm();
     if (dist < r)
     {
-      index = i;  // This is the first point inside the sphere
+      index = i; // This is the first point inside the sphere
       break;
     }
   }
@@ -961,8 +969,8 @@ Eigen::Vector3d getLastIntersectionWithSphere(vec_Vecf<3> path, double r, Eigen:
   }
 
   // Note that it's guaranteed that index>=1, since the path[0] is always inside the sphere.
-  Eigen::Vector3d A = path[index];      // point inside the sphere
-  Eigen::Vector3d B = path[index + 1];  // point outside the sphere
+  Eigen::Vector3d A = path[index];     // point inside the sphere
+  Eigen::Vector3d B = path[index + 1]; // point outside the sphere
 
   Eigen::Vector3d intersection = getIntersectionWithSphere(A, B, r, center);
 
@@ -1032,56 +1040,66 @@ vec_Vecf<3> copyJPS(vec_Vecf<3> path)
   return tmp;
 }
 
-visualization_msgs::msg::MarkerArray stateVector2ColoredMarkerArray(const std::vector<state>& data, int type,
-                                                               double max_value,
-                                                               const rclcpp::Time &stamp)
+visualization_msgs::msg::MarkerArray stateVector2ColoredMarkerArray(
+    const std::vector<state> &data, int type, double max_value, const rclcpp::Time &stamp)
 {
   visualization_msgs::msg::MarkerArray marker_array;
-
-  if (data.size() == 0)
-  {
+  if (data.empty())
     return marker_array;
-  }
+
+  visualization_msgs::msg::Marker m;
+  m.header.frame_id = "map";
+  m.header.stamp = stamp;
+  m.ns = "state_vec";
+  m.id = type; // single marker per type
+  m.action = visualization_msgs::msg::Marker::ADD;
+  m.type = visualization_msgs::msg::Marker::LINE_LIST; // lighter than ARROW
+  m.pose.orientation.w = 1.0;
+
+  // Line width
+  m.scale.x = 0.15; // adjust thickness
+
+  // Reserve to avoid reallocations
+  const size_t total_sample_number = 100;
+  const size_t step = std::max(1, static_cast<int>(data.size() / total_sample_number));
+  const size_t segs = (data.size() > step) ? (data.size() / step) : 0;
+  m.points.reserve(2 * segs);
+  m.colors.reserve(2 * segs);
+
   geometry_msgs::msg::Point p_last;
   p_last.x = data[0].pos(0);
   p_last.y = data[0].pos(1);
   p_last.z = data[0].pos(2);
 
-  int j = type * 9000;
-  for (int i = 0; i < data.size(); i = i + 2)
+  for (size_t i = 0; i < data.size(); i += step)
   {
-    j = j + 1;
-    double vel = data[i].vel.norm();
-    visualization_msgs::msg::Marker m;
-    m.type = visualization_msgs::msg::Marker::ARROW;
-    m.header.frame_id = "map";
-    // m.header.stamp = rclcpp::Time();
-    m.header.stamp = stamp;
-    m.action = visualization_msgs::msg::Marker::ADD;
-    m.id = j;
-    m.color = getColorJet(vel, 0, max_value);  // note that par_.v_max is per axis!
-    m.scale.x = 0.15;
-    m.scale.y = 0;
-    m.scale.z = 0;
-    // std::cout << "Mandando bloque" << X.block(i, 0, 1, 3) << std::endl;
     geometry_msgs::msg::Point p;
     p.x = data[i].pos(0);
     p.y = data[i].pos(1);
     p.z = data[i].pos(2);
+
+    // velocity-based color (apply same color to both endpoints of the segment)
+    const double vel = data[i].vel.norm();
+    const std_msgs::msg::ColorRGBA c = getColorJet(vel, 0, max_value);
+
     m.points.push_back(p_last);
+    m.colors.push_back(c);
+
     m.points.push_back(p);
-    // std::cout << "pushing marker\n" << m << std::endl;
+    m.colors.push_back(c);
+
     p_last = p;
-    marker_array.markers.push_back(m);
   }
+
+  marker_array.markers.push_back(m);
   return marker_array;
 }
 
-void deleteVertexes(vec_Vecf<3>& JPS_path, int max_value)
+void deleteVertexes(vec_Vecf<3> &JPS_path, int max_value)
 {
-  if (JPS_path.size() > max_value + 1)  // If I have more than (max_value + 1) vertexes
+  if (JPS_path.size() > max_value + 1) // If I have more than (max_value + 1) vertexes
   {
     JPS_path.erase(JPS_path.begin() + max_value + 1,
-                   JPS_path.end());  // Force JPS to have less than max_value elements
+                   JPS_path.end()); // Force JPS to have less than max_value elements
   }
 }

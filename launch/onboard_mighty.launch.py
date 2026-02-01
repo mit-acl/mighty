@@ -27,8 +27,16 @@ def generate_launch_description():
     global_planner_arg = DeclareLaunchArgument('global_planner', default_value='sjps', description='Global planner to use') # global planner
     use_benchmark_arg = DeclareLaunchArgument('use_benchmark', default_value='false', description='Flag to indicate whether to use the global planner benchmark') # global planner benchmark
     use_hardware_arg = DeclareLaunchArgument('use_hardware', default_value='false', description='Flag to indicate whether to use hardware or simulation') # flag to indicte if this is hardware or simulation
-    use_onboard_localization_arg = DeclareLaunchArgument('use_onboard_localization', default_value='false', description='Flag to indicate whether to use t265 or vicon for localization') # flag to indicate whether to use t265 (odom) or vicon (pose & twist) for localization
-    depth_camera_name_arg = DeclareLaunchArgument('depth_camera_name', default_value='d435', description='Depth camera name') # depth camera name
+    publish_odom_arg  = DeclareLaunchArgument('publish_odom', default_value='true')
+    odom_topic_arg    = DeclareLaunchArgument('odom_topic', default_value='visual_slam/odom')
+    odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='map')
+    sim_env_arg = DeclareLaunchArgument('sim_env', default_value='', description='Simulation environment: gazebo or fake_sim (empty = use mighty.yaml default)')
+
+    # Need to be the same as simulartor.launch.py
+    map_size_x_arg = DeclareLaunchArgument('map_size_x', default_value='20.0')
+    map_size_y_arg = DeclareLaunchArgument('map_size_y', default_value='20.0')
+    map_size_z_arg = DeclareLaunchArgument('map_size_z', default_value='6.0')
+    odometry_topic_arg = DeclareLaunchArgument('odometry_topic', default_value='visual_slam/odom')
 
     # Opaque function to launch nodes
     def launch_setup(context, *args, **kwargs):
@@ -43,8 +51,15 @@ def generate_launch_description():
         global_planner = LaunchConfiguration('global_planner').perform(context)
         use_benchmark = convert_str_to_bool(LaunchConfiguration('use_benchmark').perform(context))
         use_hardware = convert_str_to_bool(LaunchConfiguration('use_hardware').perform(context))
-        use_onboard_localization = convert_str_to_bool(LaunchConfiguration('use_onboard_localization').perform(context))
-        depth_camera_name = LaunchConfiguration('depth_camera_name').perform(context)
+        publish_odom = convert_str_to_bool(LaunchConfiguration('publish_odom').perform(context))
+        odom_topic = LaunchConfiguration('odom_topic').perform(context)
+        odom_frame_id = LaunchConfiguration('odom_frame_id').perform(context)
+        base_frame_id = namespace + '/base_link'
+        map_size_x = float(LaunchConfiguration('map_size_x').perform(context))
+        map_size_y = float(LaunchConfiguration('map_size_y').perform(context))
+        map_size_z = float(LaunchConfiguration('map_size_z').perform(context))
+        odometry_topic = LaunchConfiguration('odometry_topic').perform(context)
+        sim_env = LaunchConfiguration('sim_env').perform(context)
 
         # The path to the urdf file
         urdf_path=PathJoinSubstitution([FindPackageShare('mighty'), 'urdf', 'quadrotor.urdf.xacro'])
@@ -57,13 +72,16 @@ def generate_launch_description():
 
         # Extract specific node parameters
         parameters = parameters['mighty_node']['ros__parameters']
-    
+
+        # Override sim_env if provided via launch argument
+        if sim_env:
+            parameters['sim_env'] = sim_env
+
         # Update parameters for benchmarking
         parameters['file_path'] = data_file
         parameters['use_benchmark'] = bool(use_benchmark)
         if use_benchmark:
             parameters['global_planner'] = global_planner
-        lidar_point_cloud_topic = 'livox/lidar' if use_hardware else 'mid360_PointCloud2'
    
         # Create a Dynus node
         mighty_node = Node(
@@ -74,10 +92,8 @@ def generate_launch_description():
                     output='screen',
                     emulate_tty=True,
                     parameters=[parameters],
-                    remappings=[('lidar_cloud_in', lidar_point_cloud_topic),
-                                ('depth_camera_cloud_in', f'{depth_camera_name}/depth/color/points')],
+                    arguments=['--ros-args', '--log-level', 'error']
                     # prefix='xterm -e gdb -q -ex run --args', # gdb debugging
-                    # arguments=['--ros-args', '--log-level', 'error']
         )
 
         # Robot state publisher node
@@ -120,23 +136,7 @@ def generate_launch_description():
             parameters=[parameters],
             # prefix='xterm -e gdb -ex run --args', # gdb debugging
             output='screen',
-            remappings=[('point_cloud', tracker_point_cloud_topic)],
-        )
-
-        # Convert odom (from T265) to state
-        odom_to_state_node = Node(
-            package='mighty',
-            executable='convert_odom_to_state',
-            name='convert_odom_to_state',
-            namespace=namespace,
-            remappings=[
-                ('odom', 'dlio/odom_node/odom'),  # Remap incoming Odometry topic
-                ('state', 'state')  # Remap outgoing State topic
-            ],
-            emulate_tty=True,
-            output='screen',
-            # prefix='xterm -e gdb -ex run --args', # gdb debugging
-            # arguments=['--ros-args', '--log-level', 'error']
+            remappings=[('point_cloud', f'd435/depth/color/points')],
         )
 
         # Convert pose and twist (from Vicon) to state
@@ -167,19 +167,52 @@ def generate_launch_description():
                     emulate_tty=True,
                     parameters=[{"start_pos": [float(x), float(y), float(z)], 
                                  "start_yaw": float(yaw),
-                                 "send_state_to_gazebo": True,
-                                 "visual_level": parameters['visual_level']}],
+                                 "send_state_to_gazebo": parameters['sim_env'] == 'gazebo',
+                                #  "visual_level": parameters['visual_level'],
+                                 "publish_odom": publish_odom,
+                                 "odom_topic": odom_topic,
+                                 "odom_frame_id": odom_frame_id,
+                                 "base_frame_id": base_frame_id}],
                     # prefix='xterm -e gdb -q -ex run --args', # gdb debugging
+                    output='screen',
+        )
+
+        camera_file = os.path.join( 
+        get_package_share_directory('local_sensing'), 
+        'config', 
+        'camera.yaml' 
+        )
+
+        pcl_render_node = Node(
+            package='local_sensing',
+            executable='pcl_render_node',
+            namespace=namespace,
+            name='pcl_render_node',
+            output='screen',
+            parameters=[
+                {'sensing_horizon': 5.0},
+                {'sensing_rate': 30.0},
+                {'estimation_rate': 30.0},
+                {'map/x_size': map_size_x},
+                {'map/y_size': map_size_y},
+                {'map/z_size': map_size_z},
+                camera_file
+            ],
+            remappings=[
+                ('global_map', '/map_generator/global_cloud'),
+                ('odometry', odometry_topic),
+                ('depth', 'pcl_render_node/depth')
+            ],
+            # prefix='xterm -e gdb -q -ex run --args', # gdb debugging
         )
 
         # Return launch description
-        if use_hardware and use_onboard_localization:
-            nodes_to_start = [mighty_node, odom_to_state_node] # use T265 for localization
-        elif use_hardware and not use_onboard_localization:
-            nodes_to_start = [mighty_node, pose_twist_to_state_node] # use Vicon for localization
-        else:
-            nodes_to_start = [mighty_node, robot_state_publisher_node, spawn_entity_node, fake_sim_node] # simulation
-
+        nodes_to_start = [mighty_node]
+        nodes_to_start.append(pose_twist_to_state_node) if use_hardware else None
+        nodes_to_start.append(fake_sim_node) if not use_hardware else None
+        nodes_to_start.append(robot_state_publisher_node) if parameters['sim_env'] == 'gazebo' else None
+        nodes_to_start.append(spawn_entity_node) if parameters['sim_env'] == 'gazebo' else None
+        nodes_to_start.append(pcl_render_node) if parameters['sim_env'] == 'fake_sim' else None
         nodes_to_start.append(obstacle_tracker_node) if use_obstacle_tracker else None
 
         return nodes_to_start
@@ -196,7 +229,13 @@ def generate_launch_description():
         global_planner_arg,
         use_benchmark_arg,
         use_hardware_arg,
-        use_onboard_localization_arg,
-        depth_camera_name_arg,
+        publish_odom_arg,
+        odom_topic_arg,
+        odom_frame_id_arg,
+        map_size_x_arg,
+        map_size_y_arg,
+        map_size_z_arg,
+        odometry_topic_arg,
+        sim_env_arg,
         OpaqueFunction(function=launch_setup)
     ])

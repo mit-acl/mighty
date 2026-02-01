@@ -50,7 +50,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   this->cb_group_re_7_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   this->cb_group_re_8_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   this->cb_group_re_9_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-  this->cb_group_map_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  this->cb_group_map_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   this->cb_group_replan_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   this->cb_group_goal_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
@@ -99,6 +99,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   pub_own_traj_ = this->create_publisher<dynus_interfaces::msg::DynTraj>("/trajs", critical_qos);
   pub_goal_ = this->create_publisher<dynus_interfaces::msg::Goal>("goal", critical_qos);
   pub_goal_reached_ = this->create_publisher<std_msgs::msg::Empty>("goal_reached", critical_qos);
+  pub_command_to_exec_time_ = this->create_publisher<std_msgs::msg::Float64>("command_to_exec_time", 10);
 
   // Subscribers
   sub_traj_ = this->create_subscription<dynus_interfaces::msg::DynTraj>("/trajs", critical_qos, std::bind(&MIGHTY_NODE::trajCallback, this, std::placeholders::_1), options_re_1);
@@ -142,11 +143,22 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   // Initialize the initial pose topic name
   initial_pose_topic_ = ns_ + "/init_pose";
 
-  // Synchronize the occupancy grid and unknown grid
-  occup_grid_sub_.subscribe(this, "occupancy_grid", rmw_qos_profile_sensor_data, options_map);
-  unknown_grid_sub_.subscribe(this, "unknown_grid", rmw_qos_profile_sensor_data, options_map);
-  sync_.reset(new Sync(MySyncPolicy(10), occup_grid_sub_, unknown_grid_sub_));
-  sync_->registerCallback(std::bind(&MIGHTY_NODE::mapCallback, this, std::placeholders::_1, std::placeholders::_2));
+  if (par_.sim_env == "fake_sim")
+  {
+    sub_fake_sim_occupancy_map_ = this->create_subscription<sensor_msgs::msg::PointCloud2>("sensor_point_cloud",
+    rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)),
+    std::bind(&MIGHTY_NODE::occupancyMapCallback, this, std::placeholders::_1),
+    options_map);
+
+  }
+  else
+  {
+    // Synchronize the occupancy grid and unknown grid
+    occup_grid_sub_.subscribe(this, "occupancy_grid", rmw_qos_profile_sensor_data, options_map);
+    unknown_grid_sub_.subscribe(this, "unknown_grid", rmw_qos_profile_sensor_data, options_map);
+    sync_.reset(new Sync(MySyncPolicy(10), occup_grid_sub_, unknown_grid_sub_));
+    sync_->registerCallback(std::bind(&MIGHTY_NODE::mapCallback, this, std::placeholders::_1, std::placeholders::_2));
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -167,6 +179,10 @@ MIGHTY_NODE::~MIGHTY_NODE()
  */
 void MIGHTY_NODE::declareParameters()
 {
+
+  // Sim enviroment
+  this->declare_parameter("sim_env", "fake_sim");
+
   // UAV or Ground robot
   this->declare_parameter("vehicle_type", "uav");
   this->declare_parameter("provide_goal_in_global_frame", false);
@@ -198,7 +214,6 @@ void MIGHTY_NODE::declareParameters()
   this->declare_parameter("free_start_factor", 1.0);
   this->declare_parameter("use_free_goal", false);
   this->declare_parameter("free_goal_factor", 1.0);
-  this->declare_parameter("num_N", 3);
   this->declare_parameter("max_dist_vertexes", 5.0);
   this->declare_parameter("w_unknown", 1.0);
   this->declare_parameter("w_align", 60.0);
@@ -326,6 +341,9 @@ void MIGHTY_NODE::setParameters()
 {
   // Set the parameters
 
+  // Sim enviroment
+  par_.sim_env = this->get_parameter("sim_env").as_string();
+
   // Vehicle type (UAV, Wheeled Robit, or Quadruped)
   par_.vehicle_type = this->get_parameter("vehicle_type").as_string();
   par_.provide_goal_in_global_frame = this->get_parameter("provide_goal_in_global_frame").as_bool();
@@ -356,7 +374,6 @@ void MIGHTY_NODE::setParameters()
   par_.free_start_factor = this->get_parameter("free_start_factor").as_double();
   par_.use_free_goal = this->get_parameter("use_free_goal").as_bool();
   par_.free_goal_factor = this->get_parameter("free_goal_factor").as_double();
-  par_.num_N = this->get_parameter("num_N").as_int();
   par_.max_dist_vertexes = this->get_parameter("max_dist_vertexes").as_double();
   par_.w_unknown = this->get_parameter("w_unknown").as_double();
   par_.w_align = this->get_parameter("w_align").as_double();
@@ -497,6 +514,9 @@ void MIGHTY_NODE::printParameters()
 {
   // Print the parameters
 
+  // Sim enviroment
+  RCLCPP_INFO(this->get_logger(), "Sim Enviroment: %s", par_.sim_env.c_str());
+
   // Vehicle type (UAV, Wheeled Robit, or Quadruped)
   RCLCPP_INFO(this->get_logger(), "Vehicle Type: %d", par_.vehicle_type);
   RCLCPP_INFO(this->get_logger(), "Provide Goal in Global Frame: %d", par_.provide_goal_in_global_frame);
@@ -527,7 +547,6 @@ void MIGHTY_NODE::printParameters()
   RCLCPP_INFO(this->get_logger(), "Free Start Factor: %f", par_.free_start_factor);
   RCLCPP_INFO(this->get_logger(), "Use Free Goal?: %d", par_.use_free_goal);
   RCLCPP_INFO(this->get_logger(), "Free Goal Factor: %f", par_.free_goal_factor);
-  RCLCPP_INFO(this->get_logger(), "Num N: %d", par_.num_N);
   RCLCPP_INFO(this->get_logger(), "max_dist_vertexes: %f", par_.max_dist_vertexes);
   RCLCPP_INFO(this->get_logger(), "w_unknown: %f", par_.w_unknown);
   RCLCPP_INFO(this->get_logger(), "w_align: %f", par_.w_align);
@@ -752,7 +771,7 @@ void MIGHTY_NODE::replanCallback()
   // Set computation times to zero
   setComputationTimesToZero();
 
-  // Replan (TODO: clean up)
+  // Replan
   auto [replanning_result, dgp_result] = mighty_ptr_->replan(replanning_computation_time_, current_time);
 
   // Get computation time (used to find point A) - note this value is not updated in the replan function
@@ -767,6 +786,17 @@ void MIGHTY_NODE::replanCallback()
   // To share trajectory with other agents
   if (replanning_result)
     publishOwnTraj();
+
+  // Publish command-to-execution time (time from goal received to first trajectory)
+  if (replanning_result && waiting_for_first_traj_)
+  {
+    double command_to_exec_time_ms = (this->now() - goal_received_time_).seconds() * 1000.0;
+    std_msgs::msg::Float64 time_msg;
+    time_msg.data = command_to_exec_time_ms;
+    pub_command_to_exec_time_->publish(time_msg);
+    waiting_for_first_traj_ = false;
+    RCLCPP_INFO(this->get_logger(), "Command to execution time: %.2f ms", command_to_exec_time_ms);
+  }
 
   // For visualization of global path
   if (dgp_result && par_.visual_level >= 1)
@@ -833,6 +863,9 @@ void MIGHTY_NODE::replanCallback()
  */
 void MIGHTY_NODE::terminalGoalCallback(const geometry_msgs::msg::PoseStamped &msg)
 {
+  // Record the time when goal is received (for command-to-execution timing)
+  goal_received_time_ = this->now();
+  waiting_for_first_traj_ = true;
 
   // Set the terminal goal
   state G_term;
@@ -973,7 +1006,7 @@ void MIGHTY_NODE::convertDynTrajMsg2DynTraj(const dynus_interfaces::msg::DynTraj
   // Get pwp
   if (msg.mode == "pwp")
   {
-    traj->pwp = mighty_utils::convertPwpMsg2Pwp(msg.pwp);
+    traj->pwp = mighty_utils::convertPwpMsg2Pwp(msg.quintic_pwp);
     traj->mode = dynTraj::Mode::Piecewise;
   }
 
@@ -1409,6 +1442,10 @@ void MIGHTY_NODE::publishState(const state &data, const rclcpp::Publisher<geomet
 void MIGHTY_NODE::publishOwnTraj()
 {
 
+  // Get the piecewise quintic polynomial trajectory to share
+  mighty_ptr_->getPiecewiseQuinticPol(pwp_to_share_);
+
+  // Create the message
   dynus_interfaces::msg::DynTraj msg;
   msg.header.stamp = this->now();
   msg.header.frame_id = "map";
@@ -1416,7 +1453,8 @@ void MIGHTY_NODE::publishOwnTraj()
   msg.bbox.push_back(par_.drone_bbox[1]);
   msg.bbox.push_back(par_.drone_bbox[2]);
   msg.id = id_;
-  // msg.pwp = mighty_utils::convertPwp2PwpMsg(pwp_to_share_);
+  msg.mode = "pwp";
+  msg.quintic_pwp = mighty_utils::convertPwp2PwpMsg(pwp_to_share_);
   msg.is_agent = true;
 
   // Get the terminal goal
@@ -1894,6 +1932,18 @@ void MIGHTY_NODE::mapCallback(
   pcl::fromROSMsg(*unk_msg, *unk_pc);
 
   mighty_ptr_->updateMap(map_pc, unk_pc);
+}
+
+// ----------------------------------------------------------------------------
+
+void MIGHTY_NODE::occupancyMapCallback(
+    const sensor_msgs::msg::PointCloud2::ConstPtr &map_msg)
+{
+  // use PCL’s own Ptr (boost::shared_ptr)
+  pcl::PointCloud<pcl::PointXYZ>::Ptr map_pc(new pcl::PointCloud<pcl::PointXYZ>());
+  pcl::fromROSMsg(*map_msg, *map_pc);
+
+  mighty_ptr_->updateOccupancyMap(map_pc);
 }
 
 // ----------------------------------------------------------------------------

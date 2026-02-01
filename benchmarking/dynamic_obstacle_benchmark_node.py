@@ -107,7 +107,7 @@ class BenchmarkNode(Node):
         sleep(10)
         
         # Onboard
-        self.sim_process_onboard = subprocess.Popen(["ros2", "launch", "mighty", "onboard_mighty.launch.py", f"x:={start_x}", f"y:={start_y}", f"z:={self.start_goal_z}", "yaw:=0", "namespace:=NX01", f"use_obstacle_tracker:={self.use_dyn_obs}", f"data_file:={csv_folder_path}/num_{self.current_run}.csv", f"global_planner:={global_planner_algorithm}", "use_benchmark:=true", "depth_camera_name:=d435", f"num_N:={self.num_N}"], preexec_fn=os.setsid)
+        self.sim_process_onboard = subprocess.Popen(["ros2", "launch", "mighty", "onboard_mighty.launch.py", f"x:={start_x}", f"y:={start_y}", f"z:={self.start_goal_z}", "yaw:=0", "namespace:=NX01", f"use_obstacle_tracker:={self.use_dyn_obs}", f"data_file:={csv_folder_path}/num_{self.current_run}.csv", f"global_planner:={global_planner_algorithm}", "use_benchmark:=true", f"num_N:={self.num_N}"], preexec_fn=os.setsid)
         
         time_to_sleep = 100 if self.env == "empty_wo_ground" else 50
         sleep(time_to_sleep)

@@ -26,6 +26,7 @@
 #include <visualization_msgs/msg/marker.hpp>
 #include <std_msgs/msg/empty.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/float64.hpp>
 
 #include <pcl_conversions/pcl_conversions.h>
 #include <fstream>                                         // for flie operations
@@ -93,6 +94,7 @@ namespace mighty
         void stateCallback(const dynus_interfaces::msg::State::SharedPtr msg);
         void terminalGoalCallback(const geometry_msgs::msg::PoseStamped &msg);
         void mapCallback(const sensor_msgs::msg::PointCloud2::ConstPtr &pcl2ptr_map_ros, const sensor_msgs::msg::PointCloud2::ConstPtr &pcl2ptr_unk_ros);
+        void occupancyMapCallback(const sensor_msgs::msg::PointCloud2::ConstPtr &map_msg);
         void goalReachedCheckCallback();
         void convertDynTrajMsg2DynTraj(const dynus_interfaces::msg::DynTraj &msg, std::shared_ptr<dynTraj> &traj, double current_time);
         void cleanUpOldTrajsCallback();
@@ -205,6 +207,7 @@ namespace mighty
         rclcpp::Subscription<dynus_interfaces::msg::DynTraj>::SharedPtr sub_predicted_traj_;
         rclcpp::Subscription<dynus_interfaces::msg::State>::SharedPtr sub_state_;
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_terminal_goal_;
+        rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_fake_sim_occupancy_map_;
 
         // Time synchronizer
         message_filters::Subscriber<sensor_msgs::msg::PointCloud2> occup_grid_sub_;
@@ -297,7 +300,7 @@ namespace mighty
         int p_points_id_ = 0;
 
         // Trajectory sharing
-        // PieceWisePol pwp_to_share_; // Piecewise polynomial
+        PieceWiseQuinticPol pwp_to_share_; // Piecewise polynomial
 
         // Flags
         bool state_initialized_ = false;             // State initialized
@@ -328,6 +331,11 @@ namespace mighty
         // Timer to make sure we don't sample point cloud too often
         rclcpp::Time last_lidar_callback_time_;
         rclcpp::Time last_depth_camera_callback_time_;
+
+        // Command-to-execution timing (time from goal received to first trajectory)
+        rclcpp::Time goal_received_time_;
+        bool waiting_for_first_traj_ = false;
+        rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr pub_command_to_exec_time_;
 
     };
 
