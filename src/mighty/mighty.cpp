@@ -1235,7 +1235,7 @@ void MIGHTY::updateState(state data)
   state_ = data;
   mtx_state_.unlock();
 
-  if (state_initialized_ == false || drone_status_ == DroneStatus::YAWING)
+  if ((state_initialized_ == false || drone_status_ == DroneStatus::YAWING) && (!par_.use_hardware || terminal_goal_initialized_))
   {
 
     // create temporary state

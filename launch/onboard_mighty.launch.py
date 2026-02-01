@@ -63,7 +63,8 @@ def generate_launch_description():
 
         # The path to the urdf file
         urdf_path=PathJoinSubstitution([FindPackageShare('mighty'), 'urdf', 'quadrotor.urdf.xacro'])
-        parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', 'mighty.yaml')
+        param_file_name = 'hw_mighty.yaml' if use_hardware else 'mighty.yaml'
+        parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', param_file_name)
 
         # Get the dict of parameters from the yaml file
         with open(parameters_path, 'r') as file:
@@ -125,6 +126,7 @@ def generate_launch_description():
         )
         
         # Create an obstacle tracker node
+        tracker_point_cloud_topic = lidar_point_cloud_topic if use_hardware else f'{depth_camera_name}/depth/color/points'
         obstacle_tracker_node = Node(
             package='mighty',
             executable='obstacle_tracker_node',
