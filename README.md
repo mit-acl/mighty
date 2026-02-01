@@ -4,30 +4,85 @@ If you like this project, please consider starring ⭐ the repo!
 
 ## Quick Setup
 
+### One-Command Installation (Recommended)
+
+```bash
+# Clone and run setup script
+git clone git@github.com:mit-acl/mighty.git
+cd mighty
+./setup.sh
+```
+
+**That's it!** The script will:
+1. ✅ Install ROS 2 Humble (if not already installed)
+2. ✅ Install all system dependencies
+3. ✅ Import all repositories from `mighty.repos` at tested commits
+4. ✅ Build DecompROS2 (decomp_util first, then rest)
+5. ✅ Build Livox-SDK2 (non-ROS binary)
+6. ✅ Build livox_ros_driver2 (using its special build script)
+7. ✅ Build MIGHTY and all ROS dependencies
+8. ✅ Configure your ~/.bashrc for future use
+
+**Notes:**
+- You'll be prompted for sudo password once at the start
+- The script keeps sudo alive so you won't be asked again
+- Safe to re-run if something fails
+- Skips already-installed components
+
+### Manual Installation
+
+If you prefer manual control or want to understand the process:
+
 ```bash
 # Create workspace
-mkdir -p ~/mighty_ws/src
+mkdir -p ~/mighty_ws/src ~/decomp_ws/src ~/livox_ws/src ~/Livox-SDK2
 cd ~/mighty_ws/src
 
 # Clone mighty
 git clone git@github.com:mit-acl/mighty.git
-cd ../
+cd ~/mighty_ws
 
-# Import all dependencies at tested commits
+# Import all dependencies
 vcs import src < src/mighty/mighty.repos
 
-# Install ROS dependencies
-rosdep install --from-paths src --ignore-src -r -y
+# Move special dependencies to separate workspaces
+mv src/DecompROS2 ~/decomp_ws/src/
+mv src/livox_ros_driver2 ~/livox_ws/src/
+mv src/Livox-SDK2 ~/Livox-SDK2
 
-# Build
+# Build DecompROS2 (decomp_util MUST be built first)
+cd ~/decomp_ws
 source /opt/ros/humble/setup.bash
+colcon build --packages-select decomp_util --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
 colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 
-# Source workspace
-source install/setup.bash
+# Build Livox-SDK2
+cd ~/Livox-SDK2
+mkdir build && cd build
+cmake .. && make -j && sudo make install
+
+# Build livox_ros_driver2
+cd ~/livox_ws/src/livox_ros_driver2
+source /opt/ros/humble/setup.bash
+./build.sh humble
+
+# Build MIGHTY workspace
+cd ~/mighty_ws
+source /opt/ros/humble/setup.bash
+source ~/decomp_ws/install/setup.bash
+export CMAKE_PREFIX_PATH=~/livox_ws/install/livox_ros_driver2:~/decomp_ws/install/decomp_util:$CMAKE_PREFIX_PATH
+export LD_LIBRARY_PATH=~/livox_ws/install/livox_ros_driver2/lib:$LD_LIBRARY_PATH
+colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
-The `mighty.repos` file specifies all dependency repositories and their tested commits, ensuring a reproducible setup.
+### Dependencies Tracked in mighty.repos
+
+All dependencies are version-controlled in `mighty.repos`:
+- **ROS 2 packages**: acl-mapping, dynus_interfaces, gazebo_ros_pkgs, livox_laser_simulation_ros2, realsense_gazebo_plugin, uav_simulator
+- **DecompROS2**: Decomposition utilities (requires decomp_util to build first)
+- **Livox-SDK2**: Livox LiDAR SDK (non-ROS binary)
+- **livox_ros_driver2**: Livox ROS 2 driver (uses custom build.sh)
 
 ### **Submitted to the IEEE Robotics and Automation Letters (RA-L)**
 

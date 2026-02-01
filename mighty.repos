@@ -1,29 +1,48 @@
 repositories:
+  # Main MIGHTY package
   mighty:
     type: git
     url: git@github.com:mit-acl/mighty.git
     version: multiagent_sim
+
+  # ROS 2 dependencies (build with colcon)
   acl-mapping:
     type: git
     url: https://gitlab.com/mit-acl/lab/acl-mapping.git
-    version: ros2
+    version: c3b27af1549ef1ab549acbe1143bf810a900da95
   dynus_interfaces:
     type: git
     url: https://github.com/kotakondo/dynus_interfaces.git
-    version: master
+    version: 8b7237d293299a73a5986d044f5460ce432c4a8f
   gazebo_ros_pkgs:
     type: git
     url: https://github.com/kotakondo/gazebo_ros_pkgs.git
-    version: ros2
+    version: ed1f7b886971d7bf898e6e0f59c622df929c0521
   livox_laser_simulation_ros2:
     type: git
     url: https://github.com/kotakondo/livox_laser_simulation_ros2.git
-    version: main
+    version: 246040d802ec2d7374f38ffd07e5e7fc49e297fb
   realsense_gazebo_plugin:
     type: git
     url: https://github.com/kotakondo/realsense_gazebo_plugin.git
-    version: foxy-devel
+    version: 8c357e69da2160f54328db70915bd9b28eb975bf
   uav_simulator:
     type: git
     url: https://github.com/kotakondo/uav_simulator.git
-    version: main
+    version: b196208d3cbf0269b8e80220f7cc1cc992b6c7f8
+
+  # Decomp (needs to build decomp_util first, then rest)
+  DecompROS2:
+    type: git
+    url: https://github.com/kotakondo/DecompROS2.git
+    version: a2bc42ed46bf934323994706f17af8a3883860ea
+
+  # Livox dependencies (special build)
+  livox_ros_driver2:
+    type: git
+    url: https://github.com/kotakondo/livox_ros_driver2.git
+    version: 274aad204b5dfce15c648e88dfd375fa5d7b3026
+  Livox-SDK2:
+    type: git
+    url: https://github.com/Livox-SDK/Livox-SDK2.git
+    version: 6a940156dd7151c3ab6a52442d86bc83613bd11b
