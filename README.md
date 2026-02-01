@@ -1,90 +1,8 @@
-# MIGHTY: Hermite Spline-based Efficient Trajectory Planning #
+# MIGHTY: Hermite Spline-based Efficient Trajectory Planning
 
 If you like this project, please consider starring ⭐ the repo!
 
-## Quick Setup
-
-### One-Command Installation (Recommended)
-
-```bash
-# Clone and run setup script
-git clone git@github.com:mit-acl/mighty.git
-cd mighty
-./setup.sh
-```
-
-**That's it!** The script will:
-1. ✅ Install ROS 2 Humble (if not already installed)
-2. ✅ Install all system dependencies
-3. ✅ Import all repositories from `mighty.repos` at tested commits
-4. ✅ Build DecompROS2 (decomp_util first, then rest)
-5. ✅ Build Livox-SDK2 (non-ROS binary)
-6. ✅ Build livox_ros_driver2 (using its special build script)
-7. ✅ Build MIGHTY and all ROS dependencies
-8. ✅ Configure your ~/.bashrc for future use
-
-**Notes:**
-- You'll be prompted for sudo password once at the start
-- The script keeps sudo alive so you won't be asked again
-- Safe to re-run if something fails
-- Skips already-installed components
-
-### Manual Installation
-
-If you prefer manual control or want to understand the process:
-
-```bash
-# Create workspace
-mkdir -p ~/mighty_ws/src ~/decomp_ws/src ~/livox_ws/src ~/Livox-SDK2
-cd ~/mighty_ws/src
-
-# Clone mighty
-git clone git@github.com:mit-acl/mighty.git
-cd ~/mighty_ws
-
-# Import all dependencies
-vcs import src < src/mighty/mighty.repos
-
-# Move special dependencies to separate workspaces
-mv src/DecompROS2 ~/decomp_ws/src/
-mv src/livox_ros_driver2 ~/livox_ws/src/
-mv src/Livox-SDK2 ~/Livox-SDK2
-
-# Build DecompROS2 (decomp_util MUST be built first)
-cd ~/decomp_ws
-source /opt/ros/humble/setup.bash
-colcon build --packages-select decomp_util --cmake-args -DCMAKE_BUILD_TYPE=Release
-source install/setup.bash
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
-
-# Build Livox-SDK2
-cd ~/Livox-SDK2
-mkdir build && cd build
-cmake .. && make -j && sudo make install
-
-# Build livox_ros_driver2
-cd ~/livox_ws/src/livox_ros_driver2
-source /opt/ros/humble/setup.bash
-./build.sh humble
-
-# Build MIGHTY workspace
-cd ~/mighty_ws
-source /opt/ros/humble/setup.bash
-source ~/decomp_ws/install/setup.bash
-export CMAKE_PREFIX_PATH=~/livox_ws/install/livox_ros_driver2:~/decomp_ws/install/decomp_util:$CMAKE_PREFIX_PATH
-export LD_LIBRARY_PATH=~/livox_ws/install/livox_ros_driver2/lib:$LD_LIBRARY_PATH
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
-```
-
-### Dependencies Tracked in mighty.repos
-
-All dependencies are version-controlled in `mighty.repos`:
-- **ROS 2 packages**: acl-mapping, dynus_interfaces, gazebo_ros_pkgs, livox_laser_simulation_ros2, realsense_gazebo_plugin, uav_simulator
-- **DecompROS2**: Decomposition utilities (requires decomp_util to build first)
-- **Livox-SDK2**: Livox LiDAR SDK (non-ROS binary)
-- **livox_ros_driver2**: Livox ROS 2 driver (uses custom build.sh)
-
-### **Submitted to the IEEE Robotics and Automation Letters (RA-L)**
+**Submitted to the IEEE Robotics and Automation Letters (RA-L)**
 
 | **Trajectory** | **Forest** |
 | ------------------------- | ------------------------- |
@@ -104,83 +22,85 @@ All dependencies are version-controlled in `mighty.repos`:
 
 ## Paper
 
-MIGHTY: Hermite Spline-based Efficient Trajectory Planning is available [https://arxiv.org/abs/2511.10822](https://arxiv.org/abs/2511.10822)!
+MIGHTY: Hermite Spline-based Efficient Trajectory Planning is available at [https://arxiv.org/abs/2511.10822](https://arxiv.org/abs/2511.10822)!
 
 ```bibtex
 @article{kondo2025mighty,
-      title={MIGHTY: Hermite Spline-based Efficient Trajectory Planning}, 
+      title={MIGHTY: Hermite Spline-based Efficient Trajectory Planning},
       author={Kota Kondo and Yuwei Wu and Vijay Kumar and Jonathan P. How},
       year={2025},
       eprint={2511.10822},
       archivePrefix={arXiv},
       primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2511.10822}, 
+      url={https://arxiv.org/abs/2511.10822},
 }
 ```
 
 ## Video
 
-The full video is available [https://youtu.be/Pvb-VPUdLvg](https://youtu.be/Pvb-VPUdLvg).
+The full video is available at [https://youtu.be/Pvb-VPUdLvg](https://youtu.be/Pvb-VPUdLvg).
 
 ## Interactive Demo
 
-If you are interested in an interactive demo of MIGHTY, please switch to the `interactive_demo` branch [https://github.com/mit-acl/mighty/tree/interactive_demo] by running:
-
+For an interactive demo of MIGHTY, please switch to the `interactive_demo` branch:
 ```bash
 git checkout interactive_demo
 ```
 and follow the setup instructions in the README of that branch.
 
-## Fork
+**Note:** When forking this repository, unselect "Copy the main branch only" to include the `interactive_demo` branch.
 
-Since you might want to use interactive demos, when you fork this repository, please make sure to also include the `interactive_demo` branch by unselecting the "Copy the main branch only" option.
+---
 
-## Setup
+## Installation
 
-MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 with ROS 2 Humble.
+MIGHTY has been tested on Ubuntu 22.04 with ROS 2 Humble.
 
-### Use Docker (Recommended)
+### Docker Installation (Recommended)
 
-1. **Install Docker:**  
-   Follow the [official Docker installation guide for Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+**1. Install Docker**
 
-2. **Clone the Repository and Navigate to the Docker Folder:**
-   ```bash
-   mkdir -p ~/code/ws/src
-   cd ~/code/ws/src
-   git clone https://github.com/mit-acl/mighty.git
-   cd mighty/docker
-   ```
+Follow the [official Docker installation guide for Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
 
-3. **BUILD:**
-    - Navigate to the docker folder in your mighty repo (eg. `cd ~/code/ws/src/mighty/docker/`) and run this
-      ```bash
-      make build
+**2. Clone the Repository**
 
-      # Or build without cache (useful when dependencies change)
-      make build-no-cache
-      ```
+```bash
+mkdir -p ~/code/ws/src
+cd ~/code/ws/src
+git clone https://github.com/mit-acl/mighty.git
+cd mighty/docker
+```
 
-4. **Run Simulation**
-    ```bash
-    # Multi-agent simulation (default: 10 agents)
-    make run
+**3. Build the Docker Image**
 
-    # Multi-agent with custom number of agents
-    make run-multiagent NUM_AGENTS=5
+```bash
+make build
 
-    # Single-agent Gazebo simulation
-    make run-gazebo
+# Or build without cache (useful when dependencies change)
+make build-no-cache
+```
 
-    # Gazebo with custom goal
-    make run-gazebo GOAL_X=100 GOAL_Y=50 GOAL_Z=3
+**4. Run Simulations**
 
-    # Gazebo with different environment (default: hard_forest)
-    make run-gazebo ENV=easy_forest
+```bash
+# Multi-agent simulation (default: 10 agents)
+make run
 
-    # Interactive shell (for debugging)
-    make shell
-    ```
+# Multi-agent with custom number of agents
+make run-multiagent NUM_AGENTS=5
+
+# Single-agent Gazebo simulation
+make run-gazebo
+
+# Gazebo with custom goal
+make run-gazebo GOAL_X=100 GOAL_Y=50 GOAL_Z=3
+
+# Gazebo with different environment (default: hard_forest)
+make run-gazebo ENV=easy_forest
+
+# Interactive shell (for debugging)
+make shell
+```
 
 <details>
   <summary><b>Docker Make Targets Reference</b></summary>
@@ -216,83 +136,66 @@ MIGHTY has been tested on both Docker and native installations on Ubuntu 22.04 w
 
 </details>
 
+---
+
 ### Native Installation
 
-1. **Clone the Repository and Navigate to the Workspace Folder:**
-   ```bash
-   mkdir -p ~/code/ws
-   cd ~/code/ws
-   git clone https://github.com/mit-acl/mighty.git
-   cd mighty
-   ```
+**1. Clone the Repository**
 
-2. **Run the Setup Script:**
-   ```bash
-   ./setup.sh
-   ```
-   This script will first install ROS 2 Humble, then MIGHTY and its dependencies. Please note that this script modifies your `~/.bashrc` file.
+```bash
+mkdir -p ~/code
+cd ~/code
+git clone https://github.com/mit-acl/mighty.git mighty_ws/src/mighty
+cd mighty_ws/src/mighty
+```
 
- 3. **Run the Simulation**
+**2. Run the Setup Script**
 
-    Use the unified simulation launcher script `run_sim.py`:
+```bash
+./setup.sh
+```
 
-    ```bash
-    cd ~/code/mighty_ws
+This automated script will:
+- ✅ Install ROS 2 Humble (if not already installed)
+- ✅ Install all system dependencies
+- ✅ Import all repositories from `mighty.repos` at tested commits
+- ✅ Build DecompROS2, Livox-SDK2, and livox_ros_driver2
+- ✅ Build MIGHTY and all ROS dependencies
+- ✅ Configure your `~/.bashrc` for future use
 
-    # Multi-agent simulation with fake sensing (10 agents)
-    python3 src/mighty/scripts/run_sim.py --mode multiagent --setup-bash ~/code/mighty_ws/install/setup.bash
+**Notes:**
+- You'll be prompted for sudo password once at the start
+- Safe to re-run if something fails (skips already-installed components)
+- After completion, run `source ~/.bashrc` to use MIGHTY immediately
 
-    # Single-agent Gazebo simulation with ACL mapper
-    python3 src/mighty/scripts/run_sim.py --mode gazebo --setup-bash ~/code/mighty_ws/install/setup.bash
+**3. Run Simulations**
 
-    # Gazebo with custom goal position
-    python3 src/mighty/scripts/run_sim.py --mode gazebo --setup-bash ~/code/mighty_ws/install/setup.bash --goal 100 50 3
-    ```
+Use the unified simulation launcher script `run_sim.py`:
 
-### Simulation Launcher Options
+```bash
+cd ~/code/mighty_ws
 
-The `run_sim.py` script automatically handles:
-- Setting `sim_env` via launch argument (no manual YAML editing needed)
-- Launching all required nodes via tmux
+# Multi-agent simulation (default: 10 agents)
+python3 src/mighty/scripts/run_sim.py --mode multiagent --setup-bash ~/code/mighty_ws/install/setup.bash
 
-<details>
-  <summary><b>Multi-Agent Simulation (Fake Sensing)</b></summary>
+# Multi-agent with custom number of agents
+python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/install/setup.bash --num-agents 5
 
-  ```bash
-  # Default: 10 agents in a circle formation
-  python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/install/setup.bash
+# Single-agent Gazebo simulation
+python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash
 
-  # Custom number of agents
-  python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/install/setup.bash --num-agents 5
+# Gazebo with custom goal position
+python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash --goal 100 50 3
 
-  # Custom circle radius
-  python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/install/setup.bash --radius 15
-  ```
-</details>
+# Gazebo with different environment
+python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash --env easy_forest
 
-<details>
-  <summary><b>Single-Agent Gazebo Simulation</b></summary>
-
-  ```bash
-  # Default goal (305, 0, 3)
-  python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash
-
-  # Custom goal
-  python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash --goal 100 50 3
-
-  # Custom start position
-  python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash --start 5 5 3
-
-  # Different environment
-  python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash --env easy_forest
-
-  # Enable Gazebo GUI
-  python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash --gazebo-gui
-  ```
-</details>
+# Gazebo with GUI enabled
+python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash --gazebo-gui
+```
 
 <details>
-  <summary><b>All Options</b></summary>
+  <summary><b>All Simulation Options</b></summary>
 
   ```
   --mode, -m          Required. 'multiagent' or 'gazebo'
@@ -310,20 +213,41 @@ The `run_sim.py` script automatically handles:
   ```
 </details>
 
-### Notes
+---
+
+## Additional Information
+
+<details>
+  <summary><b>Dependencies</b></summary>
+
+  All dependencies are version-controlled in `mighty.repos`:
+  - **ROS 2 packages**: acl-mapping, dynus_interfaces, gazebo_ros_pkgs, livox_laser_simulation_ros2, realsense_gazebo_plugin, uav_simulator
+  - **DecompROS2**: Decomposition utilities (requires decomp_util to build first)
+  - **Livox-SDK2**: Livox LiDAR SDK (non-ROS binary)
+  - **livox_ros_driver2**: Livox ROS 2 driver (uses custom build.sh)
+</details>
+
+<details>
+  <summary><b>Paper Benchmarking</b></summary>
+
+  The simple, complex, jerk weight sweep, and reference position/velocity benchmarking is available at:
+  ```bash
+  https://github.com/kotakondo/GCOPTER
+  ```
+</details>
 
 <details>
   <summary><b>Bag Recording</b></summary>
 
-  - ```bash
-    python3 src/mighty/scripts/bag_record.py --bag_number 3
-    ```
+  ```bash
+  python3 src/mighty/scripts/bag_record.py --bag_number 3
+  ```
 </details>
 
 <details>
   <summary><b>Goal Command Example</b></summary>
 
-  - ```bash
-    ros2 topic pub /NX01/term_goal geometry_msgs/msg/PoseStamped "{header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'map'}, pose: {position: {x: 305.0, y: 0.0, z: 3.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}" --once
-    ```
+  ```bash
+  ros2 topic pub /NX01/term_goal geometry_msgs/msg/PoseStamped "{header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'map'}, pose: {position: {x: 305.0, y: 0.0, z: 3.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}" --once
+  ```
 </details>

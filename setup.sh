@@ -174,18 +174,33 @@ vcs import src < src/mighty/mighty.repos || true
 
 # Move special dependencies to their workspaces
 if [ -d "$MIGHTY_WS/src/DecompROS2" ]; then
-    echo "Moving DecompROS2 to decomp_ws..."
-    mv "$MIGHTY_WS/src/DecompROS2" "$DECOMP_WS/src/"
+    if [ -d "$DECOMP_WS/src/DecompROS2" ]; then
+        echo "DecompROS2 already exists in decomp_ws, skipping move..."
+        rm -rf "$MIGHTY_WS/src/DecompROS2"
+    else
+        echo "Moving DecompROS2 to decomp_ws..."
+        mv "$MIGHTY_WS/src/DecompROS2" "$DECOMP_WS/src/"
+    fi
 fi
 
 if [ -d "$MIGHTY_WS/src/livox_ros_driver2" ]; then
-    echo "Moving livox_ros_driver2 to livox_ws..."
-    mv "$MIGHTY_WS/src/livox_ros_driver2" "$LIVOX_WS/src/"
+    if [ -d "$LIVOX_WS/src/livox_ros_driver2" ]; then
+        echo "livox_ros_driver2 already exists in livox_ws, skipping move..."
+        rm -rf "$MIGHTY_WS/src/livox_ros_driver2"
+    else
+        echo "Moving livox_ros_driver2 to livox_ws..."
+        mv "$MIGHTY_WS/src/livox_ros_driver2" "$LIVOX_WS/src/"
+    fi
 fi
 
 if [ -d "$MIGHTY_WS/src/Livox-SDK2" ]; then
-    echo "Moving Livox-SDK2 to parent directory..."
-    mv "$MIGHTY_WS/src/Livox-SDK2" "$LIVOX_SDK_DIR"
+    if [ -d "$LIVOX_SDK_DIR" ]; then
+        echo "Livox-SDK2 already exists in parent directory, skipping move..."
+        rm -rf "$MIGHTY_WS/src/Livox-SDK2"
+    else
+        echo "Moving Livox-SDK2 to parent directory..."
+        mv "$MIGHTY_WS/src/Livox-SDK2" "$LIVOX_SDK_DIR"
+    fi
 fi
 
 # ============================================
