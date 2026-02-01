@@ -36,16 +36,44 @@ echo "  LIVOX_SDK_DIR: $LIVOX_SDK_DIR"
 echo ""
 
 # ============================================
-# STEP 1: System Updates and Basic Software
+# STEP 1: Fix Repository Issues
 # ============================================
 echo "============================================="
-echo "STEP 1: System Updates and Basic Software"
+echo "STEP 1: Fixing Repository Issues"
+echo "============================================="
+
+# Fix duplicate ROS 2 repository entries
+if [ -f /etc/apt/sources.list.d/ros2-latest.list ] && [ -f /etc/apt/sources.list.d/ros2.list ]; then
+    echo "Removing duplicate ROS 2 repository..."
+    sudo rm -f /etc/apt/sources.list.d/ros2-latest.list
+fi
+
+# Fix expired ROS 2 GPG key
+echo "Updating ROS 2 GPG key..."
+sudo rm -f /usr/share/keyrings/ros-archive-keyring.gpg
+sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+# Disable problematic repositories temporarily
+if [ -f /etc/apt/sources.list.d/github-cli.list ]; then
+    echo "Temporarily disabling GitHub CLI repository..."
+    sudo mv /etc/apt/sources.list.d/github-cli.list /etc/apt/sources.list.d/github-cli.list.disabled || true
+fi
+
+if [ -f /etc/apt/sources.list.d/spotify.list ]; then
+    echo "Temporarily disabling Spotify repository..."
+    sudo mv /etc/apt/sources.list.d/spotify.list /etc/apt/sources.list.d/spotify.list.disabled || true
+fi
+
+# ============================================
+# STEP 2: System Updates and Basic Software
+# ============================================
+echo ""
+echo "============================================="
+echo "STEP 2: System Updates and Basic Software"
 echo "============================================="
 sudo rm -rf /var/lib/apt/lists/*
 sudo apt update
 sudo apt upgrade -y
-sudo apt-get update
-sudo apt-get upgrade -y
 sudo apt-get install -q -y --no-install-recommends \
     git tmux vim wget tmuxp make openssh-server net-tools g++ xterm python3-pip
 
@@ -53,25 +81,33 @@ pip install pymavlink
 sudo apt install -y libomp-dev libpcl-dev libeigen3-dev
 
 # ============================================
-# STEP 2: ROS 2 Humble Installation
+# STEP 3: ROS 2 Humble Installation
 # ============================================
 echo ""
 echo "============================================="
-echo "STEP 2: Installing ROS 2 Humble"
+echo "STEP 3: Installing ROS 2 Humble"
 echo "============================================="
 
 # Check if ROS 2 is already installed
 if [ ! -d "/opt/ros/humble" ]; then
     echo "Installing ROS 2 Humble..."
-    sudo apt update && sudo apt install locales
+    sudo apt update && sudo apt install -y locales
     sudo locale-gen en_US en_US.UTF-8
     sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
     export LANG=en_US.UTF-8
-    sudo apt install software-properties-common
+    sudo apt install -y software-properties-common
     echo -e "\n" | sudo add-apt-repository universe
-    sudo apt update && sudo apt install curl -y
+    sudo apt update && sudo apt install -y curl
+
+    # Ensure ROS 2 GPG key is properly set up
+    sudo rm -f /usr/share/keyrings/ros-archive-keyring.gpg
     sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+    # Add ROS 2 repository (remove old one first to avoid duplicates)
+    sudo rm -f /etc/apt/sources.list.d/ros2*.list
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+    sudo apt update
     sudo apt install -y ros-humble-desktop
     sudo apt install -y ros-dev-tools
 else
@@ -82,11 +118,11 @@ export ROS_DISTRO=humble
 source /opt/ros/humble/setup.bash
 
 # ============================================
-# STEP 3: ROS Dependencies
+# STEP 4: ROS Dependencies
 # ============================================
 echo ""
 echo "============================================="
-echo "STEP 3: Installing ROS Dependencies"
+echo "STEP 4: Installing ROS Dependencies"
 echo "============================================="
 sudo apt-get install -y \
     ros-${ROS_DISTRO}-gazebo-* \
@@ -106,11 +142,11 @@ sudo apt-get install -y \
     build-essential
 
 # ============================================
-# STEP 4: Create Workspaces and Import Repositories
+# STEP 5: Create Workspaces and Import Repositories
 # ============================================
 echo ""
 echo "============================================="
-echo "STEP 4: Creating Workspaces and Importing Repos"
+echo "STEP 5: Creating Workspaces and Importing Repos"
 echo "============================================="
 
 # Create all workspaces
@@ -157,7 +193,7 @@ fi
 # ============================================
 echo ""
 echo "============================================="
-echo "STEP 5: Building DecompROS2"
+echo "STEP 6: Building DecompROS2"
 echo "============================================="
 cd "$DECOMP_WS"
 source /opt/ros/humble/setup.bash
@@ -174,7 +210,7 @@ colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 # ============================================
 echo ""
 echo "============================================="
-echo "STEP 6: Building Livox-SDK2"
+echo "STEP 7: Building Livox-SDK2"
 echo "============================================="
 cd "$LIVOX_SDK_DIR"
 mkdir -p build
@@ -188,7 +224,7 @@ sudo make install
 # ============================================
 echo ""
 echo "============================================="
-echo "STEP 7: Building livox_ros_driver2"
+echo "STEP 8: Building livox_ros_driver2"
 echo "============================================="
 cd "$LIVOX_WS/src/livox_ros_driver2"
 source /opt/ros/humble/setup.bash
@@ -199,7 +235,7 @@ source /opt/ros/humble/setup.bash
 # ============================================
 echo ""
 echo "============================================="
-echo "STEP 8: Building MIGHTY Workspace"
+echo "STEP 9: Building MIGHTY Workspace"
 echo "============================================="
 cd "$MIGHTY_WS"
 source /opt/ros/humble/setup.bash
@@ -214,7 +250,7 @@ colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 # ============================================
 echo ""
 echo "============================================="
-echo "STEP 9: Setting Up Bash Configuration"
+echo "STEP 10: Setting Up Bash Configuration"
 echo "============================================="
 
 # Add to bashrc if not already there
@@ -246,7 +282,7 @@ else
 fi
 
 # ============================================
-# STEP 10: Summary
+# STEP 11: Summary
 # ============================================
 echo ""
 echo "============================================="
