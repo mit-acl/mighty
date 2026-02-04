@@ -218,6 +218,8 @@ namespace mighty
     bool select_planner(StatePtr &currNode_ptr, int max_expand, int start_id, int goal_id, std::chrono::milliseconds timeout_duration);
     /// Main planning loop for Static JPS
     bool static_jps_plan(StatePtr &currNode_ptr, int max_expand, int start_id, int goal_id, std::chrono::milliseconds timeout_duration);
+    /// Main planning loop for A* with heat map
+    bool astar_heat_plan(StatePtr &currNode_ptr, int max_expand, int start_id, int goal_id, std::chrono::milliseconds timeout_duration);
     /// Main planning loop for Dynamic A*
     bool dynamic_astar_plan(StatePtr &currNode_ptr, int max_expand, int start_id, int goal_id, std::chrono::milliseconds timeout_duration);
     /// Main planning loop for Dynamic JPS++
@@ -287,6 +289,7 @@ namespace mighty
 
     int xGoal_, yGoal_, zGoal_;
     bool use_jps_ = false;
+    bool use_heat_ = false;  // only true when global_planner=="astar_heat"
 
     priorityQueue pq_;
     std::vector<StatePtr> hm_;

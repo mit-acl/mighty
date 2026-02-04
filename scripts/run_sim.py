@@ -208,8 +208,8 @@ def main():
         type=float,
         nargs=3,
         metavar=('X', 'Y', 'Z'),
-        default=[305.0, 0.0, 3.0],
-        help='Goal position for gazebo mode (default: 305.0 0.0 3.0)'
+        default=[105.0, 0.0, 3.0],
+        help='Goal position for gazebo mode (default: 105.0 0.0 3.0)'
     )
 
     parser.add_argument(

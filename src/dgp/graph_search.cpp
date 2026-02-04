@@ -115,7 +115,13 @@ bool GraphSearch::select_planner(StatePtr &currNode_ptr, int max_expand, int sta
 
   if (global_planner_ == "sjps") // Static JPS planner
   {
+    use_heat_ = false;
     return static_jps_plan(currNode_ptr, max_expand, start_id, goal_id, timeout_duration);
+  }
+  else if (global_planner_ == "astar_heat") // A* with heat map
+  {
+    use_heat_ = true;
+    return astar_heat_plan(currNode_ptr, max_expand, start_id, goal_id, timeout_duration);
   }
   else // Error
   {
@@ -283,6 +289,122 @@ bool GraphSearch::static_jps_plan(StatePtr &currNode_ptr, int max_expand, int st
   // updateGValues(); // this gives correct g values
 
   return true;
+}
+
+bool GraphSearch::astar_heat_plan(StatePtr &currNode_ptr, int max_expand, int start_id, int goal_id, std::chrono::milliseconds timeout_duration)
+{
+  // Record the start time
+  auto start_time = std::chrono::steady_clock::now();
+
+  if (!currNode_ptr)
+  {
+    std::cerr << "Error: currNode_ptr is null!" << std::endl;
+    return false;
+  }
+
+  // Insert start node
+  currNode_ptr->heapkey = pq_.push(currNode_ptr);
+  currNode_ptr->opened = true;
+  hm_[currNode_ptr->id] = currNode_ptr;
+  seen_[currNode_ptr->id] = true;
+
+  int expand_iteration = 0;
+  cMap_ = (map_util_->map_).data();
+
+  while (true)
+  {
+    expand_iteration++;
+
+    // Check if timeout has occurred
+    auto current_time = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time) > timeout_duration)
+    {
+      std::cerr << "Timeout occurred in astar_heat. Exiting safely.\n";
+      return false;
+    }
+
+    if (pq_.empty())
+    {
+      std::cerr << "Error: Priority queue is empty in astar_heat!" << std::endl;
+      return false;
+    }
+
+    // Explore node with lowest f-value
+    currNode_ptr = pq_.top();
+    pq_.pop();
+    currNode_ptr->closed = true; // Add to closed list
+
+    // Reached goal
+    if (currNode_ptr->id == goal_id)
+    {
+      if (verbose_)
+      {
+        printf("astar_heat: goal reached, expand_iteration=%d\n", expand_iteration);
+      }
+      path_ = recoverPath(currNode_ptr, start_id);
+      return true;
+    }
+
+    // Get successors with heat cost
+    std::vector<int> succ_ids;
+    std::vector<double> succ_costs;
+    getSucc(currNode_ptr, succ_ids, succ_costs);
+
+    // Process successors
+    for (unsigned int s = 0; s < succ_ids.size(); ++s)
+    {
+      int succ_id = succ_ids[s];
+
+      if (succ_id < 0 || succ_id >= (int)hm_.size())
+        continue;
+
+      // Get child
+      StatePtr &child_ptr = hm_[succ_id];
+      if (!child_ptr)
+      {
+        // Convert id to coordinates
+        int child_x = succ_id % xDim_;
+        int child_y = (succ_id / xDim_) % yDim_;
+        int child_z = succ_id / (xDim_ * yDim_);
+        child_ptr = std::make_shared<State>(succ_id, child_x, child_y, child_z, 0, 0, 0);
+        child_ptr->h = getHeur(child_x, child_y, child_z);
+      }
+
+      if (child_ptr->closed)
+        continue;
+
+      // Calculate tentative g value (includes heat cost via succ_costs)
+      double tentative_gval = currNode_ptr->g + succ_costs[s];
+
+      if (tentative_gval < child_ptr->g)
+      {
+        child_ptr->parentId = currNode_ptr->id;
+        child_ptr->g = tentative_gval;
+
+        // If currently in OPEN, update
+        if (child_ptr->opened && !child_ptr->closed)
+        {
+          pq_.increase(child_ptr->heapkey);
+        }
+        else // New node, add to heap
+        {
+          child_ptr->heapkey = pq_.push(child_ptr);
+          child_ptr->opened = true;
+        }
+      }
+    }
+
+    if (max_expand > 0 && expand_iteration >= max_expand)
+    {
+      if (verbose_)
+      {
+        printf("astar_heat: max_expand [%d] reached\n", max_expand);
+      }
+      return false;
+    }
+  }
+
+  return false;
 }
 
 std::vector<StatePtr> GraphSearch::removeLinePts(const std::vector<StatePtr> &path)
@@ -730,6 +852,19 @@ void GraphSearch::getSucc(const StatePtr &curr, std::vector<int> &succ_ids, std:
     // {
     //   step_cost += w_unknown_ * base;
     // }
+
+    // -------- Dynamic heat-map cost (soft) --------
+    // Static obstacles remain hard-blocked by isOccupied() above.
+    // Heat is time-invariant and precomputed in map_util_ during readMap().
+    if (use_heat_ && map_util_)
+    {
+      const float w_heat = map_util_->getHeatWeight();
+      if (w_heat > 0.0f)
+      {
+        const float h = map_util_->getHeat(new_x, new_y, new_z);
+        step_cost += (double)(w_heat * h);
+      }
+    }
 
     succ_ids.push_back(new_id);
     succ_costs.push_back(step_cost);

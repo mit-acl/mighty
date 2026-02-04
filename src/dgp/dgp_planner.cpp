@@ -171,40 +171,126 @@ vec_Vecf<3> DGPPlanner::removeCornerPts(const vec_Vecf<3> &path)
   if (path.size() < 2)
     return path;
 
-  // cut zigzag segment
-  vec_Vecf<3> optimized_path;
-  Vecf<3> pose1 = path[0];
-  Vecf<3> pose2 = path[1];
-  Vecf<3> prev_pose = pose1;
-  optimized_path.push_back(pose1);
-  decimal_t cost1, cost2, cost3;
+  // Cost-aware shortcutting:
+  // - Collision feasibility still enforced by isBlocked(a,b).
+  // - "Cost" matches global planner intent: length + w_heat * integral(heat) along segment.
+  // - Optional guardrail on peak heat to prevent "cutting through" hot zones when w_heat is moderate.
 
-  if (!map_util_->isBlocked(pose1, pose2))
-    cost1 = (pose1 - pose2).norm();
-  else
-    cost1 = std::numeric_limits<decimal_t>::infinity();
+  const bool heat_on = (map_util_ && (map_util_->dynamicHeatEnabled() || map_util_->staticHeatEnabled()) && map_util_->getHeatWeight() > 0.0f);
+  const double w_heat = heat_on ? (double)map_util_->getHeatWeight() : 0.0;
+  const double res = map_util_ ? (double)map_util_->getRes() : 0.1;
+
+  // Sampling step for segment cost integration (tradeoff: accuracy vs runtime)
+  const double ds = std::max(0.5 * res, 0.05); // ~half-voxel, but not too tiny
+
+  // Guardrail: allow some peak-heat increase, but not large.
+  // Increase if you want more aggressive smoothing; decrease if you want stronger avoidance.
+  const double peak_heat_relax = 0.50; // 50%
+
+  auto segCostAndPeakHeat = [&](const Vecf<3> &a, const Vecf<3> &b, double *peak_heat_out) -> double
+  {
+    if (peak_heat_out)
+      *peak_heat_out = 0.0;
+
+    if (!map_util_ || map_util_->isBlocked(a, b))
+      return std::numeric_limits<decimal_t>::infinity();
+
+    const Vecf<3> d = b - a;
+    const double L = (double)d.norm();
+    if (L < 1e-9)
+      return 0.0;
+
+    // Base geometric term
+    double cost = L;
+
+    // Heat integral term (only when enabled)
+    if (heat_on)
+    {
+      const Vecf<3> u = d / (decimal_t)L;
+      double heat_int = 0.0;
+      double peak_h = 0.0;
+
+      // Sample along [0, L]
+      for (double s = 0.0; s <= L; s += ds)
+      {
+        const Vecf<3> p = a + (decimal_t)s * u;
+        const Veci<3> pi = map_util_->floatToInt(p);
+        const float h = map_util_->getHeat(pi(0), pi(1), pi(2));
+        peak_h = std::max(peak_h, (double)h);
+        heat_int += (double)h * ds;
+      }
+
+      // include endpoint exactly (optional but cheap)
+      {
+        const Veci<3> bi = map_util_->floatToInt(b);
+        const float h = map_util_->getHeat(bi(0), bi(1), bi(2));
+        if ((double)h > peak_h)
+          peak_h = (double)h;
+      }
+
+      if (peak_heat_out)
+        *peak_heat_out = peak_h;
+
+      // Add weighted heat integral
+      cost += w_heat * heat_int;
+    }
+
+    return cost;
+  };
+
+  vec_Vecf<3> optimized_path;
+  optimized_path.reserve(path.size());
+
+  Vecf<3> prev_pose = path.front();
+  optimized_path.push_back(prev_pose);
+
+  // cost1 represents cost(prev_pose -> path[i]) for the "current kept edge" in the logic.
+  // Initialize with edge (0->1).
+  double peak1 = 0.0, peak2 = 0.0, peak3 = 0.0;
+  decimal_t cost1 = (decimal_t)segCostAndPeakHeat(path[0], path[1], &peak1);
 
   for (unsigned int i = 1; i < path.size() - 1; i++)
   {
-    pose1 = path[i];
-    pose2 = path[i + 1];
-    if (!map_util_->isBlocked(pose1, pose2))
-      cost2 = (pose1 - pose2).norm();
-    else
-      cost2 = std::numeric_limits<decimal_t>::infinity();
+    const Vecf<3> pose1 = path[i];
+    const Vecf<3> pose2 = path[i + 1];
 
-    if (!map_util_->isBlocked(prev_pose, pose2))
-      cost3 = (prev_pose - pose2).norm();
-    else
-      cost3 = std::numeric_limits<decimal_t>::infinity();
+    decimal_t cost2 = (decimal_t)segCostAndPeakHeat(pose1, pose2, &peak2);
+    decimal_t cost3 = (decimal_t)segCostAndPeakHeat(prev_pose, pose2, &peak3);
+
+    bool accept_shortcut = false;
 
     if (cost3 < cost1 + cost2)
+    {
+      accept_shortcut = true;
+
+      // Peak-heat guardrail: don't accept a shortcut that significantly increases peak heat
+      // relative to the two edges it replaces.
+      if (heat_on)
+      {
+        const double ref_peak = std::max(peak1, peak2);
+        const double allowed = ref_peak * (1.0 + peak_heat_relax);
+
+        if (peak3 > allowed)
+          accept_shortcut = false;
+      }
+    }
+
+    if (accept_shortcut)
+    {
+      // Keep prev_pose, skip pose1, and update the "current edge cost" to prev_pose->pose2.
       cost1 = cost3;
+      peak1 = peak3;
+    }
     else
     {
-      optimized_path.push_back(path[i]);
-      cost1 = (pose1 - pose2).norm();
+      // Keep pose1.
+      optimized_path.push_back(pose1);
+
+      // Now the "current kept point" advances.
       prev_pose = pose1;
+
+      // Update cost1 for the new kept edge pose1->pose2 (note: peak1 should track that edge too).
+      cost1 = (decimal_t)segCostAndPeakHeat(pose1, pose2, &peak1);
     }
   }
 
@@ -415,11 +501,10 @@ bool DGPPlanner::plan(const Vecf<3> &start, const Vecf<3> &start_vel, const Vecf
 
 void DGPPlanner::cleanUpPath(vec_Vecf<3> &path)
 {
-
-  // Simplify the raw path
+  // 1) Remove perfectly collinear points (purely geometric, safe)
   path = removeLinePts(path);
 
-  // If you activate removeCornerPts, the path will be too simplified for dynamic A*
+  // 2) Cost-aware corner shortcutting (respects heat cost + peak-heat guardrail)
   path = removeCornerPts(path);
   std::reverse(std::begin(path), std::end(path));
   path = removeCornerPts(path);

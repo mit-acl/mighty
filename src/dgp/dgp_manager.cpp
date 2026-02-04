@@ -34,6 +34,47 @@ void DGPManager::setParameters(const parameters &par)
 
     // shared pointer to the map util for actual planning
     map_util_ = std::make_shared<mighty::VoxelMapUtil>(par.factor_dgp * par.res, par.x_min, par.x_max, par.y_min, par.y_max, par.z_min, par.z_max, par.inflation_dgp);
+
+    // ---------------- Configure heat map for astar_heat planner ----------------
+    // When using astar_heat, dynamic obstacles use soft cost (heat) instead of hard occupancy
+    bool use_astar_heat = (par.global_planner == "astar_heat");
+
+    if (use_astar_heat || par.use_heat_map)
+    {
+        // For astar_heat: dynamic obstacles are soft (heat), not hard occupancy
+        bool dynamic_as_soft = use_astar_heat;
+        bool dynamic_as_hard = !dynamic_as_soft;
+
+        // Control whether dynamic obstacles are written as hard obstacles
+        map_util_->dynamic_as_occupied_current_ = par.dynamic_as_occupied_current && dynamic_as_hard;
+        map_util_->dynamic_as_occupied_future_ = par.dynamic_as_occupied_future && dynamic_as_hard;
+
+        // Enable dynamic heat map (soft cost for predicted trajectories)
+        map_util_->setDynamicHeatEnabled(use_astar_heat || par.dynamic_heat_enabled);
+
+        // Configure dynamic heat parameters
+        const float TUBE_GAMMA = use_astar_heat ? 1.0f : par.heat_gamma;  // tube growth rate
+        const float BASE_INFL = par.dyn_base_inflation_m;
+        const float HEAT_WEIGHT = par.heat_weight;
+
+        map_util_->setDynamicHeatParams(
+            par.heat_alpha0, par.heat_alpha1, par.heat_p, par.heat_q,
+            par.heat_tau_ratio, TUBE_GAMMA, par.heat_Hmax, BASE_INFL);
+
+        map_util_->setHeatWeight(HEAT_WEIGHT);
+
+        // Enable static heat (boundary halo around static obstacles)
+        map_util_->setStaticHeatEnabled(use_astar_heat || par.static_heat_enabled);
+
+        // Configure static heat parameters
+        const float STATIC_RMAX = std::max(0.5f, 3.0f * float(par.drone_radius));
+        const float STATIC_ALPHA = use_astar_heat ? 5.0f : par.static_heat_alpha;
+
+        map_util_->setStaticHeatParams(
+            STATIC_ALPHA, par.static_heat_p, par.static_heat_Hmax,
+            STATIC_RMAX, par.static_heat_boundary_only,
+            par.static_heat_apply_on_unknown, par.static_heat_exclude_dynamic);
+    }
 }
 
 void DGPManager::cleanUpPath(vec_Vecf<3> &path)
@@ -413,14 +454,82 @@ bool DGPManager::cvxEllipsoidDecomp(const state &A, const vec_Vecf<3> &path,
     return true;
 }
 
-void DGPManager::updateMap(double wdx, double wdy, double wdz, const Vec3f &center_map, const pcl::PointCloud<pcl::PointXYZ>::ConstPtr &pclptr)
+void DGPManager::updateMap(double wdx, double wdy, double wdz, const Vec3f &center_map, const pcl::PointCloud<pcl::PointXYZ>::ConstPtr &pclptr, const std::vector<std::shared_ptr<dynTraj>> &trajs, double current_time)
 {
 
     // Get the current time to see the computation time for readmap
     auto start_time = std::chrono::high_resolution_clock::now();
 
+    // Extract obstacle positions and bounding boxes from dynamic obstacles
+    vec_Vecf<3> obst_pos, obst_bbox;
+    double traj_max_time = 0.0;
+
+    if (par_.use_heat_map && par_.dynamic_heat_enabled && !trajs.empty())
+    {
+        // Reserve space for efficiency
+        obst_pos.reserve(trajs.size());
+        obst_bbox.reserve(trajs.size());
+
+        // Determine trajectory horizon for heat map computation
+        // Use a configurable lookahead time (default 3 seconds if not specified)
+        const double lookahead_time = 3.0; // Can be made a parameter later
+        traj_max_time = lookahead_time;
+
+        // Extract current position and bounding box for each trajectory
+        for (const auto &traj : trajs)
+        {
+            if (!traj)
+                continue;
+
+            // Get current position by evaluating trajectory at current time
+            Eigen::Vector3d pos = traj->eval(current_time);
+            obst_pos.push_back(pos.cast<double>());
+
+            // Get bounding box (half-extents)
+            // Convert from full dimensions to half-extents
+            Eigen::Vector3d bbox_half = traj->bbox / 2.0;
+            obst_bbox.push_back(bbox_half.cast<double>());
+        }
+
+        // Also set up predicted samples if needed
+        if (par_.heat_num_samples > 0)
+        {
+            std::vector<vec_Vecf<3>> dyn_pred_samples;
+            std::vector<float> dyn_pred_times;
+
+            dyn_pred_samples.resize(trajs.size());
+            const int num_samples = par_.heat_num_samples;
+
+            for (size_t k = 0; k < trajs.size(); ++k)
+            {
+                if (!trajs[k])
+                    continue;
+
+                dyn_pred_samples[k].reserve(num_samples);
+
+                // Sample trajectory at regular intervals
+                for (int j = 0; j < num_samples; ++j)
+                {
+                    const double t = current_time + (double)j * traj_max_time / (double)(num_samples - 1);
+                    Eigen::Vector3d pred_pos = trajs[k]->eval(t);
+                    dyn_pred_samples[k].push_back(pred_pos.cast<double>());
+                }
+            }
+
+            // Time samples (same for all obstacles)
+            dyn_pred_times.resize(num_samples);
+            for (int j = 0; j < num_samples; ++j)
+            {
+                dyn_pred_times[j] = (float)j * (float)traj_max_time / (float)(num_samples - 1);
+            }
+
+            // Set predicted samples in map_util
+            map_util_->setDynamicPredictedSamples(dyn_pred_samples, dyn_pred_times);
+        }
+    }
+
     mtx_map_util_.lock();
-    map_util_->readMap(pclptr, (int)wdx / res_, (int)wdy / res_, (int)wdz / res_, center_map, par_.z_min, par_.z_max, par_.inflation_dgp); // Map read
+    map_util_->readMap(pclptr, (int)wdx / res_, (int)wdy / res_, (int)wdz / res_, center_map, par_.z_min, par_.z_max, par_.inflation_dgp, obst_pos, obst_bbox, traj_max_time); // Map read
     mtx_map_util_.unlock();
 
     // Get the elapsed time for reading the map

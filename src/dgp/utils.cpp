@@ -24,6 +24,68 @@ void printStateVector(std::vector<state> &data)
   }
 }
 
+void pathLineDotsToMarkerArray(
+    const vec_Vecf<3> &traj,
+    visualization_msgs::msg::MarkerArray *m_array,
+    const std_msgs::msg::ColorRGBA &color,
+    double line_width,
+    double dot_diameter,
+    int base_id,
+    const std::string &frame_id,
+    double lifetime_sec)
+{
+  if (!m_array || traj.empty())
+    return;
+
+  // ---------- LINE_STRIP ----------
+  visualization_msgs::msg::Marker line;
+  line.header.frame_id = frame_id;
+  line.header.stamp = rclcpp::Clock().now();
+  line.ns = "global_path_line";
+  line.id = base_id + 1;
+  line.type = visualization_msgs::msg::Marker::LINE_STRIP;
+  line.action = visualization_msgs::msg::Marker::ADD;
+  line.lifetime = rclcpp::Duration::from_seconds(lifetime_sec);
+
+  // RViz uses scale.x as the line width for LINE_STRIP.
+  line.scale.x = line_width;
+
+  line.color = color;
+  line.pose.orientation.w = 1.0;
+
+  line.points.reserve(traj.size());
+  for (const auto &it : traj)
+  {
+    line.points.push_back(eigen2point(it));
+  }
+  m_array->markers.push_back(line);
+
+  // ---------- SPHERE_LIST (dots) ----------
+  visualization_msgs::msg::Marker dots;
+  dots.header.frame_id = frame_id;
+  dots.header.stamp = rclcpp::Clock().now();
+  dots.ns = "global_path_dots";
+  dots.id = base_id + 2;
+  dots.type = visualization_msgs::msg::Marker::SPHERE_LIST;
+  dots.action = visualization_msgs::msg::Marker::ADD;
+  dots.lifetime = rclcpp::Duration::from_seconds(lifetime_sec);
+
+  // For SPHERE_LIST, scale is the diameter of each sphere.
+  dots.scale.x = dot_diameter;
+  dots.scale.y = dot_diameter;
+  dots.scale.z = dot_diameter;
+
+  dots.color = color;
+  dots.pose.orientation.w = 1.0;
+
+  dots.points.reserve(traj.size());
+  for (const auto &it : traj)
+  {
+    dots.points.push_back(eigen2point(it));
+  }
+  m_array->markers.push_back(dots);
+}
+
 void vectorOfVectors2MarkerArray(vec_Vecf<3> traj, visualization_msgs::msg::MarkerArray *m_array, std_msgs::msg::ColorRGBA color,
                                  int type, std::vector<double> radii)
 {

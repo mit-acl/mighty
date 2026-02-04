@@ -131,7 +131,8 @@ public:
   void updateMap(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr &pclptr_map, const pcl::PointCloud<pcl::PointXYZ>::ConstPtr &pclptr_unk);
   void updateOccupancyMap(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr &pclptr_map);
   void getPiecewiseQuinticPol(PieceWiseQuinticPol &pwp);
-  
+  std::shared_ptr<mighty::VoxelMapUtil> getMapUtil() const { return dgp_manager_.map_util_; }
+
 private:
   // Parameters
   parameters par_;                                                       // Parameters of the planner
