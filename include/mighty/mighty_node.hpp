@@ -14,8 +14,10 @@
 #include <dynus_interfaces/msg/dyn_traj_array.hpp>
 #include "dynus_interfaces/msg/state.hpp"
 #include "dynus_interfaces/msg/goal.hpp"
+#include "dynus_interfaces/msg/trajectory.hpp"
 #include "dynus_interfaces/msg/yaw_output.hpp"
 #include "dynus_interfaces/msg/pn_adaptation.hpp"
+#include <geometry_msgs/msg/point_stamped.hpp>
 #include <mighty/utils.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -50,6 +52,7 @@
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "std_msgs/msg/color_rgba.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 #include "std_srvs/srv/empty.hpp"
 #include "pcl_conversions/pcl_conversions.h"
 #include "pcl_ros/transforms.hpp"
@@ -93,6 +96,7 @@ namespace mighty
         void trajCallback(const dynus_interfaces::msg::DynTraj::SharedPtr msg);
         void stateCallback(const dynus_interfaces::msg::State::SharedPtr msg);
         void terminalGoalCallback(const geometry_msgs::msg::PoseStamped &msg);
+        void lookaheadPointCallback(const geometry_msgs::msg::PointStamped::SharedPtr msg);
         void mapCallback(const sensor_msgs::msg::PointCloud2::ConstPtr &pcl2ptr_map_ros, const sensor_msgs::msg::PointCloud2::ConstPtr &pcl2ptr_unk_ros);
         void occupancyMapCallback(const sensor_msgs::msg::PointCloud2::ConstPtr &map_msg);
         void goalReachedCheckCallback();
@@ -124,6 +128,7 @@ namespace mighty
         void publishOwnTraj();
         void publishActualTraj();
         void publishGoal();         // Publish the goal (trajectory points)
+        void publishTrajectory();   // Publish the full trajectory with replan support
         void publishPointG() const; // Publish the point G (projected terminal goal)
         void publishPointE() const; // Publish the point E (Local trajectory's goal)
         void publishPointA() const; // Publish the point A (starting point)
@@ -131,6 +136,8 @@ namespace mighty
         void publishState(const state &data, const rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr &publisher) const;
         void publishFOV();
         void publisCps();
+        void publishHeatMap();
+        void publishDynamicHeatCloud();
         void publishStaticPushPoints();
         void publishLocalGlobalPath();
         void publishVelocityInText(const Eigen::Vector3d &position, double velocity);
@@ -181,12 +188,15 @@ namespace mighty
         rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_dynamic_map_marker_;
         rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_free_map_marker_;
         rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_unknown_map_marker_;
+        rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_heat_map_marker_;
+        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_dynamic_heat_cloud_;
         rclcpp::Publisher<decomp_ros_msgs::msg::PolyhedronArray>::SharedPtr pub_poly_whole_;
         rclcpp::Publisher<decomp_ros_msgs::msg::PolyhedronArray>::SharedPtr pub_poly_safe_;
         rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_traj_committed_colored_;
         rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_traj_subopt_colored_;
         rclcpp::Publisher<dynus_interfaces::msg::DynTraj>::SharedPtr pub_own_traj_;
         rclcpp::Publisher<dynus_interfaces::msg::Goal>::SharedPtr pub_goal_;
+        rclcpp::Publisher<dynus_interfaces::msg::Trajectory>::SharedPtr pub_trajectory_;
         rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_point_G_;
         rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_point_E_;
         rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_point_G_term_;
@@ -208,6 +218,7 @@ namespace mighty
         rclcpp::Subscription<dynus_interfaces::msg::State>::SharedPtr sub_state_;
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_terminal_goal_;
         rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_fake_sim_occupancy_map_;
+        rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr sub_lookahead_point_;
 
         // Time synchronizer
         message_filters::Subscriber<sensor_msgs::msg::PointCloud2> occup_grid_sub_;
@@ -232,6 +243,7 @@ namespace mighty
         std::string ns_;
         std::string id_str_;
         parameters par_;
+        uint32_t trajectory_id_ = 0;  // Trajectory ID for replan detection
         double final_g_ = 0.0;                  // only for debugging
         bool verbose_computation_time_ = false; // only for debugging
         int marker_fov_id_ = 0;

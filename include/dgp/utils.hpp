@@ -50,6 +50,16 @@ void printStateDeque(std::deque<state> &data);
 
 void printStateVector(std::vector<state> &data);
 
+void pathLineDotsToMarkerArray(
+    const vec_Vecf<3> &traj,
+    visualization_msgs::msg::MarkerArray *m_array,
+    const std_msgs::msg::ColorRGBA &color,
+    double line_width,
+    double dot_diameter,
+    int base_id,
+    const std::string &frame_id,
+    double lifetime_sec);
+
 void vectorOfVectors2MarkerArray(vec_Vecf<3> traj, visualization_msgs::msg::MarkerArray *m_array, std_msgs::msg::ColorRGBA color,
                                  int type = visualization_msgs::msg::Marker::ARROW,
                                  std::vector<double> radii = std::vector<double>());

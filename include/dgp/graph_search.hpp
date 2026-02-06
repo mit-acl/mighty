@@ -179,7 +179,7 @@ namespace mighty
      * @param global_planner initial guess planner, optional, default as ""
      * @param res map resolution, optional, default as 0.5
      */
-    GraphSearch(const int *cMap, const std::shared_ptr<mighty::VoxelMapUtil> &map_util, int xDim, int yDim, int zDim, double eps, bool verbose, std::string global_planner, double w_unknown, double w_align = 60.0, double decay_len_cells = 20.0, double w_side = 0.2);
+    GraphSearch(const int8_t *cMap, const std::shared_ptr<mighty::VoxelMapUtil> &map_util, int xDim, int yDim, int zDim, double eps, bool verbose, std::string global_planner, double w_unknown, double w_align = 60.0, double decay_len_cells = 20.0, double w_side = 0.2);
 
     /**
      * @brief start 3D planning thread
@@ -218,6 +218,8 @@ namespace mighty
     bool select_planner(StatePtr &currNode_ptr, int max_expand, int start_id, int goal_id, std::chrono::milliseconds timeout_duration);
     /// Main planning loop for Static JPS
     bool static_jps_plan(StatePtr &currNode_ptr, int max_expand, int start_id, int goal_id, std::chrono::milliseconds timeout_duration);
+    /// Main planning loop for A* with heat map
+    bool astar_heat_plan(StatePtr &currNode_ptr, int max_expand, int start_id, int goal_id, std::chrono::milliseconds timeout_duration);
     /// Main planning loop for Dynamic A*
     bool dynamic_astar_plan(StatePtr &currNode_ptr, int max_expand, int start_id, int goal_id, std::chrono::milliseconds timeout_duration);
     /// Main planning loop for Dynamic JPS++
@@ -268,8 +270,8 @@ namespace mighty
       return hm_[id];
     }
 
-    /// cMap pointer
-    const int *cMap_;
+    /// cMap pointer (int8_t to match Tmap type)
+    const int8_t *cMap_;
 
     int xDim_, yDim_, zDim_;
     double eps_;
@@ -287,6 +289,7 @@ namespace mighty
 
     int xGoal_, yGoal_, zGoal_;
     bool use_jps_ = false;
+    bool use_heat_ = false;  // only true when global_planner=="astar_heat"
 
     priorityQueue pq_;
     std::vector<StatePtr> hm_;

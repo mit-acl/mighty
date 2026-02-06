@@ -22,6 +22,7 @@
 #include "dynus_interfaces/msg/goal.hpp"
 #include "dynus_interfaces/msg/state.hpp"
 #include "visualization_msgs/msg/marker.hpp"
+#include "geometry_msgs/msg/twist.hpp"
 
 #include "tf2/LinearMath/Quaternion.h"
 
@@ -60,6 +61,12 @@ public:
         this->declare_parameter<std::string>("odom_frame_id", "map");
         // If empty, we will set base_frame_id_ = target_frame_ (ns_/base_link)
         this->declare_parameter<std::string>("base_frame_id", "");
+        // Parameter to control TF publishing (disable for ground robots to avoid conflict with Gazebo)
+        this->declare_parameter<bool>("publish_tf", true);
+        // Parameter to control state publishing (disable for ground robots - use convert_odom_to_state instead)
+        this->declare_parameter<bool>("publish_state", true);
+        // Ground robot mode: integrate cmd_vel with unicycle kinematics
+        this->declare_parameter<bool>("use_ground_robot", false);
 
         // Get parameters
         auto start_pos = this->get_parameter("start_pos").as_double_array();
@@ -72,6 +79,9 @@ public:
         odom_topic_ = this->get_parameter("odom_topic").as_string();
         odom_frame_id_ = this->get_parameter("odom_frame_id").as_string();
         base_frame_id_param_ = this->get_parameter("base_frame_id").as_string();
+        publish_tf_ = this->get_parameter("publish_tf").as_bool();
+        publish_state_ = this->get_parameter("publish_state").as_bool();
+        use_ground_robot_ = this->get_parameter("use_ground_robot").as_bool();
 
         // Print parameters
         RCLCPP_INFO(this->get_logger(), "Start position: %f, %f, %f", start_pos[0], start_pos[1], start_pos[2]);
@@ -83,6 +93,13 @@ public:
         RCLCPP_INFO(this->get_logger(), "Odom topic: %s", odom_topic_.c_str());
         RCLCPP_INFO(this->get_logger(), "Odom frame: %s", odom_frame_id_.c_str());
         RCLCPP_INFO(this->get_logger(), "Base frame param: %s", base_frame_id_param_.c_str());
+        RCLCPP_INFO(this->get_logger(), "Publish TF: %d", publish_tf_);
+        RCLCPP_INFO(this->get_logger(), "Publish State: %d", publish_state_);
+        RCLCPP_INFO(this->get_logger(), "Use ground robot: %d", use_ground_robot_);
+
+        // Initialize ground robot state
+        yaw_ = yaw;
+        ground_z_ = start_pos[2];
 
         // Initialize state
         state_ = dynus_interfaces::msg::State();
@@ -138,6 +155,13 @@ public:
         sub_goal_ = this->create_subscription<dynus_interfaces::msg::Goal>(
             "goal", 10, std::bind(&FakeSim::goalCallback, this, std::placeholders::_1));
 
+        // cmd_vel subscriber for ground robot unicycle integration
+        if (use_ground_robot_)
+        {
+            sub_cmd_vel_ = this->create_subscription<geometry_msgs::msg::Twist>(
+                "cmd_vel", 10, std::bind(&FakeSim::cmdVelCallback, this, std::placeholders::_1));
+        }
+
         // Timer to simulate TF broadcast
         timer_ = this->create_wall_timer(10ms, std::bind(&FakeSim::pubCallback, this), cb_group_me_1_);
 
@@ -188,6 +212,7 @@ private:
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom_;
 
     rclcpp::Subscription<dynus_interfaces::msg::Goal>::SharedPtr sub_goal_;
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_cmd_vel_;
     rclcpp::Client<gazebo_msgs::srv::SetEntityState>::SharedPtr gazebo_client_;
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -207,10 +232,19 @@ private:
 
     // Odometry options
     bool publish_odom_{false};
+    bool publish_tf_{true};     // Disable for ground robots to avoid TF conflict with Gazebo
+    bool publish_state_{true};  // Disable for ground robots - use convert_odom_to_state instead
     std::string odom_topic_{"odom"};
     std::string odom_frame_id_{"map"};
     std::string base_frame_id_param_{""};
     std::string base_frame_id_{""};
+
+    // Ground robot unicycle integration
+    bool use_ground_robot_{false};
+    double cmd_v_{0.0};
+    double cmd_w_{0.0};
+    double yaw_{0.0};
+    double ground_z_{0.0};
 
     // This is for ground robot
     void updateStateFromTF()
@@ -238,8 +272,18 @@ private:
         }
     }
 
+    void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg)
+    {
+        cmd_v_ = msg->linear.x;
+        cmd_w_ = msg->angular.z;
+    }
+
     void goalCallback(const dynus_interfaces::msg::Goal::SharedPtr data)
     {
+        // Ground robot state comes from unicycle integration, not goal messages
+        if (use_ground_robot_)
+            return;
+
         // Hopf fibration approach
         Eigen::Vector3d thrust;
         thrust << data->a.x, data->a.y, data->a.z + 9.81;
@@ -353,9 +397,38 @@ private:
 
     void pubCallback()
     {
-        // Publish the transform
-        getTransformStamped();
-        br_.sendTransform(t_);
+        // Ground robot: integrate cmd_vel with unicycle kinematics
+        if (use_ground_robot_)
+        {
+            double dt = 0.01; // 100Hz timer
+            yaw_ += cmd_w_ * dt;
+            while (yaw_ > M_PI) yaw_ -= 2.0 * M_PI;
+            while (yaw_ < -M_PI) yaw_ += 2.0 * M_PI;
+
+            state_.pos.x += cmd_v_ * std::cos(yaw_) * dt;
+            state_.pos.y += cmd_v_ * std::sin(yaw_) * dt;
+            state_.pos.z = ground_z_;
+
+            state_.vel.x = cmd_v_ * std::cos(yaw_);
+            state_.vel.y = cmd_v_ * std::sin(yaw_);
+            state_.vel.z = 0.0;
+
+            tf2::Quaternion q;
+            q.setRPY(0.0, 0.0, yaw_);
+            state_.quat.x = q.x();
+            state_.quat.y = q.y();
+            state_.quat.z = q.z();
+            state_.quat.w = q.w();
+
+            state_.header.stamp = this->get_clock()->now();
+        }
+
+        // Publish the transform (disabled for ground robots to avoid conflict with Gazebo)
+        if (publish_tf_)
+        {
+            getTransformStamped();
+            br_.sendTransform(t_);
+        }
 
         // Publish odometry (optional)
         if (publish_odom_)
@@ -375,9 +448,12 @@ private:
             std::thread(&FakeSim::sendGazeboState, this).detach();
         }
 
-        // Publish the state
-        state_.header.stamp = this->get_clock()->now();
-        pub_state_->publish(state_);
+        // Publish the state (disabled for ground robots - convert_odom_to_state publishes actual state)
+        if (publish_state_)
+        {
+            state_.header.stamp = this->get_clock()->now();
+            pub_state_->publish(state_);
+        }
     }
 
     visualization_msgs::msg::Marker getDroneMarker()

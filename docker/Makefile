@@ -1,3 +1,12 @@
+# GPU support: set GPU=false to run without NVIDIA GPU
+# Usage: make run GPU=false
+GPU ?= true
+ifeq ($(GPU),true)
+GPU_FLAGS = --gpus all --env="NVIDIA_DRIVER_CAPABILITIES=all"
+else
+GPU_FLAGS =
+endif
+
 .PHONY: build
 build:
 	docker build \
@@ -11,8 +20,7 @@ build-no-cache:
 # Default run (multiagent with 10 agents)
 run:
 	xhost + && docker run -it \
-				--gpus all \
-				--env="NVIDIA_DRIVER_CAPABILITIES=all" \
+				$(GPU_FLAGS) \
 				--privileged \
 				-e DISPLAY=${DISPLAY} \
 				--network=host \
@@ -26,8 +34,7 @@ run:
 # Usage: make run-multiagent NUM_AGENTS=5
 run-multiagent:
 	xhost + && docker run -it \
-				--gpus all \
-				--env="NVIDIA_DRIVER_CAPABILITIES=all" \
+				$(GPU_FLAGS) \
 				--privileged \
 				-e DISPLAY=${DISPLAY} \
 				--network=host \
@@ -41,8 +48,7 @@ run-multiagent:
 # Usage: make run-gazebo GOAL_X=100 GOAL_Y=50 GOAL_Z=3
 run-gazebo:
 	xhost + && docker run -it \
-				--gpus all \
-				--env="NVIDIA_DRIVER_CAPABILITIES=all" \
+				$(GPU_FLAGS) \
 				--privileged \
 				-e DISPLAY=${DISPLAY} \
 				--network=host \
@@ -58,8 +64,7 @@ run-gazebo:
 # Interactive shell (for debugging)
 shell:
 	xhost + && docker run -it \
-				--gpus all \
-				--env="NVIDIA_DRIVER_CAPABILITIES=all" \
+				$(GPU_FLAGS) \
 				--privileged \
 				-e DISPLAY=${DISPLAY} \
 				--network=host \

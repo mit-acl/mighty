@@ -661,18 +661,86 @@ namespace mighty_utils
 
     for (int j = 0; j < path.size() - 1; j++)
     {
-      double dist = (path[j + 1] - path[j]).norm();
-      int vertexes_to_add = floor(dist / d);
-      Eigen::Vector3d v = (path[j + 1] - path[j]).normalized();
+      Eigen::Vector3d start = path[j];
+      Eigen::Vector3d end = path[j + 1];
+      double dist = (end - start).norm();
+
       if (dist > d)
       {
-        for (int i = 0; i < vertexes_to_add; i++)
+        // Calculate number of segments needed to keep all segments <= d
+        int num_segments = static_cast<int>(std::ceil(dist / d));
+
+        // Calculate even spacing for all segments
+        double segment_length = dist / num_segments;
+
+        // Number of intermediate points to insert
+        int points_to_insert = num_segments - 1;
+
+        // Direction vector
+        Eigen::Vector3d direction = (end - start).normalized();
+
+        // Insert evenly spaced points
+        for (int i = 0; i < points_to_insert; i++)
         {
-          path.insert(path.begin() + j + 1, path[j] + v * d);
-          j = j + 1;
+          Eigen::Vector3d new_point = start + direction * segment_length * (i + 1);
+          path.insert(path.begin() + j + 1 + i, new_point);
         }
+
+        // Skip ahead past the inserted points
+        j += points_to_insert;
       }
     }
+  }
+
+  void enforceMinimumSpacing(vec_Vecf<3> &path, double min_spacing)
+  {
+    // Enforce minimum spacing between consecutive path points
+    // Remove points that are too close to the previous kept point
+    // Always keep start and goal points
+
+    if (path.size() < 2 || min_spacing <= 0.0)
+    {
+      return;
+    }
+
+    vec_Vecf<3> filtered_path;
+    filtered_path.reserve(path.size());
+
+    // Always keep the start point
+    filtered_path.push_back(path[0]);
+
+    // Process intermediate points
+    for (size_t i = 1; i < path.size() - 1; i++)
+    {
+      double dist_to_last_kept = (path[i] - filtered_path.back()).norm();
+
+      // Keep point if it's far enough from the last kept point
+      if (dist_to_last_kept >= min_spacing)
+      {
+        filtered_path.push_back(path[i]);
+      }
+    }
+
+    // Always keep the goal point (but check if it's too close to the last kept point)
+    if (path.size() > 1)
+    {
+      double dist_goal_to_last = (path.back() - filtered_path.back()).norm();
+
+      // If goal is very close to the last kept point, replace the last point with the goal
+      // This ensures we reach the exact goal while maintaining good spacing
+      if (dist_goal_to_last < min_spacing * 0.5)
+      {
+        // Goal is very close, replace last point with goal
+        filtered_path.back() = path.back();
+      }
+      else
+      {
+        // Goal is far enough, just add it
+        filtered_path.push_back(path.back());
+      }
+    }
+
+    path = std::move(filtered_path);
   }
 
   double euclideanDistance(const Eigen::Vector3d &p1, const Eigen::Vector3d &p2)

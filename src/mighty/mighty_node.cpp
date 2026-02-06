@@ -68,6 +68,8 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   pub_dynamic_map_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("dynamic_map_marker", 10);                                   // visual level 2
   pub_free_map_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("free_map_marker", 10);                                         // visual level 2
   pub_unknown_map_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("unknown_map_marker", 10);                                   // visual level 2
+  pub_heat_map_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("heat_map_marker", 1);                                          // visual level 2
+  pub_dynamic_heat_cloud_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("dynamic_heat_cloud", 10);                                          // visual level 2
   pub_free_map_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("free_grid", 10);                                                             // visual level 2 (no longer used)
   pub_unknown_map_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("unknown_grid", 10);                                                       // visual level 2 (no longer used)
   pub_dgp_path_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("dgp_path_marker", 10);                                         // visual level 1
@@ -98,6 +100,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   // Essential publishers
   pub_own_traj_ = this->create_publisher<dynus_interfaces::msg::DynTraj>("/trajs", critical_qos);
   pub_goal_ = this->create_publisher<dynus_interfaces::msg::Goal>("goal", critical_qos);
+  pub_trajectory_ = this->create_publisher<dynus_interfaces::msg::Trajectory>("trajectory", critical_qos);
   pub_goal_reached_ = this->create_publisher<std_msgs::msg::Empty>("goal_reached", critical_qos);
   pub_command_to_exec_time_ = this->create_publisher<std_msgs::msg::Float64>("command_to_exec_time", 10);
 
@@ -106,6 +109,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   sub_predicted_traj_ = this->create_subscription<dynus_interfaces::msg::DynTraj>("predicted_trajs", critical_qos, std::bind(&MIGHTY_NODE::trajCallback, this, std::placeholders::_1), options_re_1);
   sub_state_ = this->create_subscription<dynus_interfaces::msg::State>("state", critical_qos, std::bind(&MIGHTY_NODE::stateCallback, this, std::placeholders::_1), options_re_1);
   sub_terminal_goal_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("term_goal", critical_qos, std::bind(&MIGHTY_NODE::terminalGoalCallback, this, std::placeholders::_1));
+  sub_lookahead_point_ = this->create_subscription<geometry_msgs::msg::PointStamped>("lookahead_point", 10, std::bind(&MIGHTY_NODE::lookaheadPointCallback, this, std::placeholders::_1));
 
   // Timer for callback
   timer_replanning_ = this->create_wall_timer(10ms, std::bind(&MIGHTY_NODE::replanCallback, this), this->cb_group_replan_);
@@ -247,6 +251,31 @@ void MIGHTY_NODE::declareParameters()
   this->declare_parameter("min_wdz", 2.0);
   this->declare_parameter("mighty_map_res", 0.1);
 
+  // Heat map parameters
+  this->declare_parameter("use_heat_map", false);
+  this->declare_parameter("heat_weight", 1.0);
+  this->declare_parameter("dynamic_heat_enabled", false);
+  this->declare_parameter("dynamic_as_occupied_current", true);
+  this->declare_parameter("dynamic_as_occupied_future", false);
+  this->declare_parameter("heat_alpha0", 1.0);
+  this->declare_parameter("heat_alpha1", 2.0);
+  this->declare_parameter("heat_p", 2);
+  this->declare_parameter("heat_q", 2);
+  this->declare_parameter("heat_tau_ratio", 0.5);
+  this->declare_parameter("heat_gamma", 0.0);
+  this->declare_parameter("heat_Hmax", 10.0);
+  this->declare_parameter("dyn_base_inflation_m", 0.5);
+  this->declare_parameter("heat_num_samples", 15);
+  this->declare_parameter("static_heat_enabled", false);
+  this->declare_parameter("static_heat_alpha", 2.0);
+  this->declare_parameter("static_heat_p", 2);
+  this->declare_parameter("static_heat_Hmax", 50.0);
+  this->declare_parameter("static_heat_rmax_m", 1.0);
+  this->declare_parameter("static_heat_default_radius_m", 0.5);
+  this->declare_parameter("static_heat_boundary_only", true);
+  this->declare_parameter("static_heat_apply_on_unknown", false);
+  this->declare_parameter("static_heat_exclude_dynamic", true);
+
   // Communication delay parameters
   this->declare_parameter("use_comm_delay_inflation", true);
   this->declare_parameter("comm_delay_inflation_alpha", 0.2);
@@ -265,6 +294,7 @@ void MIGHTY_NODE::declareParameters()
   this->declare_parameter("r_max_for_ig", 1.0);
 
   // Optimization parameters
+  this->declare_parameter("num_N", 5);
   this->declare_parameter("horizon", 20.0);
   this->declare_parameter("dc", 0.01);
   this->declare_parameter("v_max", 1.0);
@@ -328,8 +358,19 @@ void MIGHTY_NODE::declareParameters()
   this->declare_parameter("force_goal_z", true);
   this->declare_parameter("default_goal_z", 2.5);
 
-  // Debug flag
+  // Debug flags
   this->declare_parameter("debug_verbose", false);
+
+  // Ground robot control parameters
+  this->declare_parameter("ground_robot_kx", 0.1);
+  this->declare_parameter("ground_robot_ky", 0.1);
+  this->declare_parameter("ground_robot_kyaw", 1.0);
+  this->declare_parameter("ground_robot_eps", 0.1);
+  this->declare_parameter("ground_robot_v_max", 1.0);
+  this->declare_parameter("ground_robot_w_max", 1.5);
+  this->declare_parameter("ground_robot_L_min", 1.0);
+
+  this->declare_parameter("trajectory_downsample_points", 500);
 }
 
 // ----------------------------------------------------------------------------
@@ -409,6 +450,31 @@ void MIGHTY_NODE::setParameters()
   par_.min_wdz = this->get_parameter("min_wdz").as_double();
   par_.res = this->get_parameter("mighty_map_res").as_double();
 
+  // Heat map parameters
+  par_.use_heat_map = this->get_parameter("use_heat_map").as_bool();
+  par_.heat_weight = this->get_parameter("heat_weight").as_double();
+  par_.dynamic_heat_enabled = this->get_parameter("dynamic_heat_enabled").as_bool();
+  par_.dynamic_as_occupied_current = this->get_parameter("dynamic_as_occupied_current").as_bool();
+  par_.dynamic_as_occupied_future = this->get_parameter("dynamic_as_occupied_future").as_bool();
+  par_.heat_alpha0 = this->get_parameter("heat_alpha0").as_double();
+  par_.heat_alpha1 = this->get_parameter("heat_alpha1").as_double();
+  par_.heat_p = this->get_parameter("heat_p").as_int();
+  par_.heat_q = this->get_parameter("heat_q").as_int();
+  par_.heat_tau_ratio = this->get_parameter("heat_tau_ratio").as_double();
+  par_.heat_gamma = this->get_parameter("heat_gamma").as_double();
+  par_.heat_Hmax = this->get_parameter("heat_Hmax").as_double();
+  par_.dyn_base_inflation_m = this->get_parameter("dyn_base_inflation_m").as_double();
+  par_.heat_num_samples = this->get_parameter("heat_num_samples").as_int();
+  par_.static_heat_enabled = this->get_parameter("static_heat_enabled").as_bool();
+  par_.static_heat_alpha = this->get_parameter("static_heat_alpha").as_double();
+  par_.static_heat_p = this->get_parameter("static_heat_p").as_int();
+  par_.static_heat_Hmax = this->get_parameter("static_heat_Hmax").as_double();
+  par_.static_heat_rmax_m = this->get_parameter("static_heat_rmax_m").as_double();
+  par_.static_heat_default_radius_m = this->get_parameter("static_heat_default_radius_m").as_double();
+  par_.static_heat_boundary_only = this->get_parameter("static_heat_boundary_only").as_bool();
+  par_.static_heat_apply_on_unknown = this->get_parameter("static_heat_apply_on_unknown").as_bool();
+  par_.static_heat_exclude_dynamic = this->get_parameter("static_heat_exclude_dynamic").as_bool();
+
   // Communication delay parameters
   par_.use_comm_delay_inflation = this->get_parameter("use_comm_delay_inflation").as_bool();
   par_.comm_delay_inflation_alpha = this->get_parameter("comm_delay_inflation_alpha").as_double();
@@ -427,6 +493,7 @@ void MIGHTY_NODE::setParameters()
   par_.r_max_for_ig = this->get_parameter("r_max_for_ig").as_double();
 
   // Optimization parameters
+  par_.num_N = this->get_parameter("num_N").as_int();
   par_.horizon = this->get_parameter("horizon").as_double();
   par_.dc = this->get_parameter("dc").as_double();
   par_.v_max = this->get_parameter("v_max").as_double();
@@ -501,8 +568,19 @@ void MIGHTY_NODE::setParameters()
     RCLCPP_ERROR(this->get_logger(), "Default goal z is higher than the max level");
   }
 
-  // Debug flag
+  // Debug flags
   par_.debug_verbose = this->get_parameter("debug_verbose").as_bool();
+
+  // Ground robot control parameters
+  par_.ground_robot_kx = this->get_parameter("ground_robot_kx").as_double();
+  par_.ground_robot_ky = this->get_parameter("ground_robot_ky").as_double();
+  par_.ground_robot_kyaw = this->get_parameter("ground_robot_kyaw").as_double();
+  par_.ground_robot_eps = this->get_parameter("ground_robot_eps").as_double();
+  par_.ground_robot_v_max = this->get_parameter("ground_robot_v_max").as_double();
+  par_.ground_robot_w_max = this->get_parameter("ground_robot_w_max").as_double();
+  par_.ground_robot_L_min = this->get_parameter("ground_robot_L_min").as_double();
+
+  par_.trajectory_downsample_points = this->get_parameter("trajectory_downsample_points").as_int();
 }
 
 // ----------------------------------------------------------------------------
@@ -760,11 +838,21 @@ void MIGHTY_NODE::stateCallback(const dynus_interfaces::msg::State::SharedPtr ms
 // ----------------------------------------------------------------------------
 
 /**
+ * @brief Callback function for lookahead point from pure pursuit controller
+ */
+void MIGHTY_NODE::lookaheadPointCallback(const geometry_msgs::msg::PointStamped::SharedPtr msg)
+{
+  Eigen::Vector3d lookahead_point(msg->point.x, msg->point.y, msg->point.z);
+  mighty_ptr_->setLookaheadPoint(lookahead_point);
+}
+
+// ----------------------------------------------------------------------------
+
+/**
  * @brief Callback function for replanning
  */
 void MIGHTY_NODE::replanCallback()
 {
-
   // Get the current time as double
   double current_time = this->now().seconds();
 
@@ -786,6 +874,12 @@ void MIGHTY_NODE::replanCallback()
   // To share trajectory with other agents
   if (replanning_result)
     publishOwnTraj();
+
+  // Publish full trajectory for ground robot tracking (increments trajectory_id on replan)
+  if (replanning_result)
+  {
+    publishTrajectory();
+  }
 
   // Publish command-to-execution time (time from goal received to first trajectory)
   if (replanning_result && waiting_for_first_traj_)
@@ -1600,6 +1694,71 @@ void MIGHTY_NODE::publishGoal()
 // ----------------------------------------------------------------------------
 
 /**
+ * @brief Publish the full trajectory for robust tracking with replan support
+ */
+void MIGHTY_NODE::publishTrajectory()
+{
+  // Retrieve the goal setpoints (full trajectory)
+  mighty_ptr_->retrieveGoalSetpoints(goal_setpoints_);
+
+  if (goal_setpoints_.empty())
+  {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                         "Cannot publish trajectory: goal_setpoints_ is empty");
+    return;
+  }
+
+  // Increment trajectory_id for new trajectory (replan detected by change in ID)
+  trajectory_id_++;
+
+  // Downsample trajectory: publish ~50 points instead of all points
+  const size_t target_points = par_.trajectory_downsample_points;
+  size_t total_points = goal_setpoints_.size();
+  size_t step = std::max(size_t(1), total_points / target_points);
+
+  // Create trajectory message
+  dynus_interfaces::msg::Trajectory traj_msg;
+  traj_msg.header.stamp = this->now();
+  traj_msg.header.frame_id = "map";
+  traj_msg.trajectory_id = trajectory_id_;
+  traj_msg.dt = par_.dc * step;  // Adjusted time step for downsampled trajectory
+
+  // Downsample: take every 'step' points
+  traj_msg.goals.reserve(target_points);
+  for (size_t i = 0; i < goal_setpoints_.size(); i += step)
+  {
+    const auto& state_point = goal_setpoints_[i];
+    dynus_interfaces::msg::Goal goal;
+    goal.p = eigen2rosvector(state_point.pos);
+    goal.v = eigen2rosvector(state_point.vel);
+    goal.a = eigen2rosvector(state_point.accel);
+    goal.j = eigen2rosvector(state_point.jerk);
+    goal.yaw = state_point.yaw;
+    goal.dyaw = state_point.dyaw;
+    traj_msg.goals.push_back(goal);
+  }
+
+  // Always include the last point
+  if (!goal_setpoints_.empty() && (goal_setpoints_.size() - 1) % step != 0)
+  {
+    const auto& last_point = goal_setpoints_.back();
+    dynus_interfaces::msg::Goal goal;
+    goal.p = eigen2rosvector(last_point.pos);
+    goal.v = eigen2rosvector(last_point.vel);
+    goal.a = eigen2rosvector(last_point.accel);
+    goal.j = eigen2rosvector(last_point.jerk);
+    goal.yaw = last_point.yaw;
+    goal.dyaw = last_point.dyaw;
+    traj_msg.goals.push_back(goal);
+  }
+
+  // Publish trajectory
+  pub_trajectory_->publish(traj_msg);
+}
+
+// ----------------------------------------------------------------------------
+
+/**
  * @brief Publish Sefe Corridor Polyhedra
  */
 void MIGHTY_NODE::publishPoly()
@@ -1706,9 +1865,19 @@ void MIGHTY_NODE::publishGlobalPath()
 
   if (!global_path.empty())
   {
-    // Publish global_path
+    // Publish global_path (thin line + dots)
     clearMarkerArray(dgp_path_marker_, pub_dgp_path_marker_);
-    vectorOfVectors2MarkerArray(global_path, &dgp_path_marker_, color(global_path_color));
+
+    pathLineDotsToMarkerArray(
+        global_path,
+        &dgp_path_marker_,
+        color(global_path_color),
+        /*line_width=*/0.03,   // meters
+        /*dot_diameter=*/0.06, // meters
+        /*base_id=*/50000,
+        /*frame_id=*/"map",
+        /*lifetime_sec=*/1.0);
+
     pub_dgp_path_marker_->publish(dgp_path_marker_);
   }
 
@@ -1718,9 +1887,19 @@ void MIGHTY_NODE::publishGlobalPath()
 
   if (!original_global_path.empty())
   {
-    // Publish original_global_path
+    // Publish original_global_path (thin line + dots)
     clearMarkerArray(original_dgp_path_marker_, pub_original_dgp_path_marker_);
-    vectorOfVectors2MarkerArray(original_global_path, &original_dgp_path_marker_, color(original_global_path_color));
+
+    pathLineDotsToMarkerArray(
+        original_global_path,
+        &original_dgp_path_marker_,
+        color(original_global_path_color),
+        /*line_width=*/0.03,   // meters
+        /*dot_diameter=*/0.06, // meters
+        /*base_id=*/60000,
+        /*frame_id=*/"map",
+        /*lifetime_sec=*/1.0);
+
     pub_original_dgp_path_marker_->publish(original_dgp_path_marker_);
   }
 }
@@ -1924,7 +2103,7 @@ void MIGHTY_NODE::mapCallback(
     const sensor_msgs::msg::PointCloud2::ConstPtr &map_msg,
     const sensor_msgs::msg::PointCloud2::ConstPtr &unk_msg)
 {
-  // use PCL’s own Ptr (boost::shared_ptr)
+  // use PCL's own Ptr (boost::shared_ptr)
   pcl::PointCloud<pcl::PointXYZ>::Ptr map_pc(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::fromROSMsg(*map_msg, *map_pc);
 
@@ -1932,6 +2111,13 @@ void MIGHTY_NODE::mapCallback(
   pcl::fromROSMsg(*unk_msg, *unk_pc);
 
   mighty_ptr_->updateMap(map_pc, unk_pc);
+
+  // Publish heat map visualizations if enabled
+  if (par_.use_heat_map)
+  {
+    publishHeatMap();
+    publishDynamicHeatCloud();
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -1939,11 +2125,148 @@ void MIGHTY_NODE::mapCallback(
 void MIGHTY_NODE::occupancyMapCallback(
     const sensor_msgs::msg::PointCloud2::ConstPtr &map_msg)
 {
-  // use PCL’s own Ptr (boost::shared_ptr)
+  // use PCL's own Ptr (boost::shared_ptr)
   pcl::PointCloud<pcl::PointXYZ>::Ptr map_pc(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::fromROSMsg(*map_msg, *map_pc);
 
   mighty_ptr_->updateOccupancyMap(map_pc);
+}
+
+// ----------------------------------------------------------------------------
+
+void MIGHTY_NODE::publishHeatMap()
+{
+  auto map_util = mighty_ptr_->getMapUtil();
+  if (!map_util || par_.visual_level < 2)
+    return;
+
+  auto heat_cloud = map_util->getHeatCloud(0.01f);
+  if (heat_cloud.empty())
+    return;
+
+  auto heat_values = map_util->getHeatValues();
+  float max_heat = map_util->getMaxHeat();
+
+  if (max_heat < 1e-6f)
+    return;
+
+  visualization_msgs::msg::MarkerArray ma;
+  visualization_msgs::msg::Marker marker;
+
+  marker.header.frame_id = "map";
+  marker.header.stamp = this->now();
+  marker.ns = "heat_map";
+  marker.id = 0;
+  marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
+  marker.action = visualization_msgs::msg::Marker::ADD;
+  marker.scale.x = marker.scale.y = marker.scale.z = par_.res;
+  marker.pose.orientation.w = 1.0;
+
+  // Map from cell indices to heat values
+  size_t valid_count = 0;
+  for (size_t i = 0; i < heat_cloud.size(); ++i)
+  {
+    if (valid_count < heat_values.size())
+    {
+      geometry_msgs::msg::Point p;
+      p.x = heat_cloud[i](0);
+      p.y = heat_cloud[i](1);
+      p.z = heat_cloud[i](2);
+      marker.points.push_back(p);
+
+      auto color = getColorJet(heat_values[valid_count], 0.0, max_heat);
+      color.a = 0.6;  // Semi-transparent
+      marker.colors.push_back(color);
+
+      valid_count++;
+    }
+  }
+
+  ma.markers.push_back(marker);
+  pub_heat_map_marker_->publish(ma);
+}
+
+// ----------------------------------------------------------------------------
+
+void MIGHTY_NODE::publishDynamicHeatCloud()
+{
+  if (!pub_dynamic_heat_cloud_)
+    return;
+
+  auto map_util = mighty_ptr_->getMapUtil();
+  if (!map_util)
+    return;
+
+  // Check if any heat is enabled
+  if (!par_.use_heat_map || (!par_.dynamic_heat_enabled && !par_.static_heat_enabled))
+    return;
+
+  // -------- Tunables --------
+  const int stride = 2;             // 1 = every voxel, 2 = every 2 voxels, etc.
+  const float heat_min = 0.05f;     // only publish voxels with heat >= this
+  const size_t max_points = 200000; // hard cap for safety
+  // --------------------------
+
+  const auto dim = map_util->getDim(); // Veci<3>
+  const int nx = dim(0);
+  const int ny = dim(1);
+  const int nz = dim(2);
+
+  // Use Eigen-aligned vector type
+  vec_Vec3f pts;
+  std::vector<float> intens;
+  pts.reserve(50000);
+  intens.reserve(50000);
+
+  for (int x = 0; x < nx; x += stride)
+  {
+    for (int y = 0; y < ny; y += stride)
+    {
+      for (int z = 0; z < nz; z += stride)
+      {
+        const float h = map_util->getHeat(x, y, z);
+        if (h < heat_min)
+          continue;
+
+        const Vec3f p = map_util->intToFloat(Veci<3>(x, y, z));
+        pts.push_back(p);
+        intens.push_back(h);
+
+        if (pts.size() >= max_points)
+          goto BUILD_MSG;
+      }
+    }
+  }
+
+BUILD_MSG:
+  sensor_msgs::msg::PointCloud2 msg;
+  msg.header.frame_id = "map";
+  msg.header.stamp = this->now();
+
+  sensor_msgs::PointCloud2Modifier modifier(msg);
+  modifier.setPointCloud2Fields(
+      4,
+      "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+      "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+      "z", 1, sensor_msgs::msg::PointField::FLOAT32,
+      "intensity", 1, sensor_msgs::msg::PointField::FLOAT32);
+  modifier.resize(pts.size());
+
+  sensor_msgs::PointCloud2Iterator<float> iter_x(msg, "x");
+  sensor_msgs::PointCloud2Iterator<float> iter_y(msg, "y");
+  sensor_msgs::PointCloud2Iterator<float> iter_z(msg, "z");
+  sensor_msgs::PointCloud2Iterator<float> iter_i(msg, "intensity");
+
+  for (size_t k = 0; k < pts.size(); ++k, ++iter_x, ++iter_y, ++iter_z, ++iter_i)
+  {
+    const auto &p = pts[k];
+    *iter_x = static_cast<float>(p(0));
+    *iter_y = static_cast<float>(p(1));
+    *iter_z = static_cast<float>(p(2));
+    *iter_i = intens[k];
+  }
+
+  pub_dynamic_heat_cloud_->publish(msg);
 }
 
 // ----------------------------------------------------------------------------

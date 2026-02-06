@@ -4,10 +4,30 @@ set -e
 # MIGHTY Complete Setup Script
 # Run this once to install all dependencies, clone repos, and build everything
 # Combines system setup, dependency installation, and workspace building
+#
+# Usage: ./setup.sh [-j N]
+#   -j N  Number of parallel jobs for building (default: all CPUs)
+
+# Parse arguments
+NUM_JOBS=$(nproc)
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -j|--jobs)
+            NUM_JOBS="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: ./setup.sh [-j N]"
+            exit 1
+            ;;
+    esac
+done
 
 echo "============================================="
 echo "MIGHTY Complete Setup Script"
 echo "============================================="
+echo "Using $NUM_JOBS parallel jobs for building"
 echo ""
 
 # Prompt for sudo password once at the beginning and keep it cached
@@ -160,7 +180,7 @@ if [ ! -d "$MIGHTY_WS/src/mighty" ]; then
     cd "$MIGHTY_WS/src"
     git clone https://github.com/mit-acl/mighty.git
     cd mighty
-    git switch 4f5bb367dbab0683f1666ebe3838a7c4807c88b7
+    git switch 6237c6524df309e50e34b5501cbef70b2e1c6d80
 else
     echo "MIGHTY already exists, updating..."
     cd "$MIGHTY_WS/src/mighty"
@@ -214,11 +234,11 @@ cd "$DECOMP_WS"
 source /opt/ros/humble/setup.bash
 
 echo "Building decomp_util first (required)..."
-colcon build --packages-select decomp_util --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon build --packages-select decomp_util --parallel-workers "$NUM_JOBS" --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 echo "Building remaining decomp packages..."
 source "$DECOMP_WS/install/setup.bash"
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon build --parallel-workers "$NUM_JOBS" --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # ============================================
 # STEP 6: Build Livox-SDK2
@@ -230,7 +250,7 @@ echo "============================================="
 cd "$LIVOX_SDK_DIR"
 mkdir -p build
 cd build
-cmake .. && make -j$(nproc)
+cmake .. && make -j"$NUM_JOBS"
 echo "Installing Livox-SDK2..."
 sudo make install
 
@@ -258,7 +278,7 @@ source "$DECOMP_WS/install/setup.bash"
 export CMAKE_PREFIX_PATH="$LIVOX_WS/install/livox_ros_driver2:$DECOMP_WS/install/decomp_util:$CMAKE_PREFIX_PATH"
 export LD_LIBRARY_PATH="$LIVOX_WS/install/livox_ros_driver2/lib:$LD_LIBRARY_PATH"
 
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon build --parallel-workers "$NUM_JOBS" --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # ============================================
 # STEP 9: Setup Bash Configuration

@@ -173,9 +173,11 @@ bool MIGHTY::needReplan(const state &local_state, const state &local_G_term, con
 bool MIGHTY::findAandAtime(state &A, double &A_time, double current_time, double last_replaning_computation_time)
 {
 
-  mtx_plan_.lock();
-  int plan_size = plan_.size();
-  mtx_plan_.unlock();
+  int plan_size;
+  {
+    std::lock_guard<std::mutex> lock(mtx_plan_);
+    plan_size = plan_.size();
+  }
 
   if (plan_size == 0)
   {
@@ -213,9 +215,10 @@ bool MIGHTY::findAandAtime(state &A, double &A_time, double current_time, double
     }
 
     // Get A
-    mtx_plan_.lock();
-    A = plan_[plan_size - 1 - k_value_];
-    mtx_plan_.unlock();
+    {
+      std::lock_guard<std::mutex> lock(mtx_plan_);
+      A = plan_[plan_size - 1 - k_value_];
+    }
 
     // Get A_time
     A_time = current_time + (plan_size - 1 - k_value_) * par_.dc; // time to A from current_pos is (plan_size - 1 - k_value_) * par_.dc;
@@ -338,18 +341,16 @@ void MIGHTY::getLocalGlobalPath(vec_Vecf<3> &local_global_path, vec_Vecf<3> &loc
 
 void MIGHTY::getGlobalPath(vec_Vecf<3> &global_path)
 {
-  mtx_global_path_.lock();
+  std::lock_guard<std::mutex> lock(mtx_global_path_);
   global_path = global_path_;
-  mtx_global_path_.unlock();
 }
 
 // ----------------------------------------------------------------------------
 
 void MIGHTY::getOriginalGlobalPath(vec_Vecf<3> &original_global_path)
 {
-  mtx_original_global_path_.lock();
+  std::lock_guard<std::mutex> lock(mtx_original_global_path_);
   original_global_path = original_global_path_;
-  mtx_original_global_path_.unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -512,15 +513,24 @@ std::tuple<bool, bool> MIGHTY::replan(double last_replaning_computation_time, do
 
   /* -------------------- Append to Plan -------------------- */
 
-  MyTimer timer_append(true);
-  if (!appendToPlan())
+  // For ground robots, we don't need to maintain plan_ since we use pure pursuit lookahead directly
+  if (par_.vehicle_type != "uav")
   {
     if (par_.debug_verbose)
-      std::cout << "Append to Plan: " << timer_append.getElapsedMicros() / 1000.0 << " ms" << std::endl;
-    return std::make_tuple(false, true);
+      std::cout << "Append to Plan: 0 ms (skipped for ground robot)" << std::endl;
   }
-  if (par_.debug_verbose)
-    std::cout << "Append to Plan: " << timer_append.getElapsedMicros() / 1000.0 << " ms" << std::endl;
+  else
+  {
+    MyTimer timer_append(true);
+    if (!appendToPlan())
+    {
+      if (par_.debug_verbose)
+        std::cout << "Append to Plan: " << timer_append.getElapsedMicros() / 1000.0 << " ms" << std::endl;
+      return std::make_tuple(false, true);
+    }
+    if (par_.debug_verbose)
+      std::cout << "Append to Plan: " << timer_append.getElapsedMicros() / 1000.0 << " ms" << std::endl;
+  }
 
   /* -------------------- Final Housekeeping -------------------- */
 
@@ -551,11 +561,27 @@ bool MIGHTY::generateGlobalPath(vec_Vecf<3> &global_path, double current_time, d
   state local_A;
   double A_time;
 
-  // Find A and A_time
-  if (!findAandAtime(local_A, A_time, current_time, last_replaning_computation_time))
+  // For ground robots, use pure pursuit lookahead point for velocity direction
+  // For UAVs, compute point A from trajectory to account for momentum
+  if (par_.vehicle_type != "uav")
   {
-    replanning_failure_count_++;
-    return false;
+    // Ground robot: use current position but zero velocity
+    // This lets the optimizer plan freely without velocity direction constraint
+    state current_state;
+    getState(current_state);
+
+    local_A = current_state;
+    local_A.vel = Eigen::Vector3d(0.0, 0.0, 0.0);  // Zero initial velocity
+    A_time = current_time;
+  }
+  else
+  {
+    // UAV: find A and A_time from trajectory
+    if (!findAandAtime(local_A, A_time, current_time, last_replaning_computation_time))
+    {
+      replanning_failure_count_++;
+      return false;
+    }
   }
 
   // Set A and A_time
@@ -626,14 +652,16 @@ bool MIGHTY::generateGlobalPath(vec_Vecf<3> &global_path, double current_time, d
   }
 
   // use this for map resizing
-  mtx_global_path_.lock();
-  global_path_ = global_path;
-  mtx_global_path_.unlock();
+  {
+    std::lock_guard<std::mutex> lock(mtx_global_path_);
+    global_path_ = global_path;
+  }
 
   // For visualization
-  mtx_original_global_path_.lock();
-  original_global_path_ = global_path;
-  mtx_original_global_path_.unlock();
+  {
+    std::lock_guard<std::mutex> lock(mtx_original_global_path_);
+    original_global_path_ = global_path;
+  }
 
   // Debug
   if (par_.debug_verbose)
@@ -663,6 +691,15 @@ bool MIGHTY::planLocalTrajectory(vec_Vecf<3> &global_path)
     // std::cout << bold << red << "Global path's size is < 2 after trimming" << reset << std::endl;
     replanning_failure_count_++;
     return false;
+  }
+
+  // Truncate global path to num_N + 1 segments (num_N pieces need num_N+1 waypoints)
+  // This limits the local optimization horizon similar to dynus
+  if (par_.num_N > 0 && global_path.size() > static_cast<size_t>(par_.num_N + 1))
+  {
+    global_path.resize(par_.num_N + 1);
+    if (par_.debug_verbose)
+      std::cout << "[Local Traj] Truncated global path to " << global_path.size() << " points (num_N=" << par_.num_N << ")" << std::endl;
   }
 
   // If the global path has exactly 2 points, add a midpoint to make it 3 points
@@ -757,8 +794,7 @@ bool MIGHTY::generateLocalTrajectory(const state &local_A, double A_time,
   if (par_.debug_verbose)
     std::cout << "Preparing solver for replan" << std::endl;
 
-  std::vector<std::shared_ptr<dynTraj>> local_trajs;
-  getTrajs(local_trajs);
+  auto local_trajs = getTrajs(); // RVO/NRVO elides copy
 
   // Get local_G
   state local_G;
@@ -787,15 +823,17 @@ bool MIGHTY::generateLocalTrajectory(const state &local_A, double A_time,
   // It's pushed in prepareSolverForReplan() so we get the pushed global path
   whole_traj_solver_ptr->getGlobalPath(global_path);
 
-  mtx_global_path_.lock();
-  global_path_ = global_path; // Update the global path
-  mtx_global_path_.unlock();
+  {
+    std::lock_guard<std::mutex> lock(mtx_global_path_);
+    global_path_ = global_path; // Update the global path
+  }
 
   // update local_E
   local_E.pos = global_path.back();
-  mtx_E_.lock();
-  E_ = local_E; // Update the local_E
-  mtx_E_.unlock();
+  {
+    std::lock_guard<std::mutex> lock(mtx_E_);
+    E_ = local_E; // Update the local_E
+  }
 
   if (par_.debug_verbose)
     std::cout << "Solver prepared" << std::endl;
@@ -952,27 +990,25 @@ bool MIGHTY::appendToPlan()
   if (par_.debug_verbose)
     std::cout << "goal_setpoints_.size(): " << goal_setpoints_.size() << std::endl;
 
-  // mutex lock
-  mtx_plan_.lock();
-
-  // get the size of the plan and plan_safe_paths
-  int plan_size = plan_.size();
-
-  // If the plan size is less than k_value_, which means we already passed point A, we cannot use this plan
-  if (plan_size < k_value_)
   {
-    if (par_.debug_verbose)
-      std::cout << bold << red << "(plan_size - k_value_) = " << (plan_size - k_value_) << " < 0" << reset << std::endl;
-    k_value_ = std::max(1, plan_size - 1); // Decrease k_value_ to plan_size - 1 but at least 1
-  }
-  else // If the plan size is greater than k_value_, which means we haven't passed point A yet, we can use this plan
-  {
-    plan_.erase(plan_.end() - k_value_, plan_.end());
-    plan_.insert(plan_.end(), goal_setpoints_.begin(), goal_setpoints_.end());
-  }
+    std::lock_guard<std::mutex> lock(mtx_plan_);
 
-  // mutex unlock
-  mtx_plan_.unlock();
+    // get the size of the plan and plan_safe_paths
+    int plan_size = plan_.size();
+
+    // If the plan size is less than k_value_, which means we already passed point A, we cannot use this plan
+    if (plan_size < k_value_)
+    {
+      if (par_.debug_verbose)
+        std::cout << bold << red << "(plan_size - k_value_) = " << (plan_size - k_value_) << " < 0" << reset << std::endl;
+      k_value_ = std::max(1, plan_size - 1); // Decrease k_value_ to plan_size - 1 but at least 1
+    }
+    else // If the plan size is greater than k_value_, which means we haven't passed point A yet, we can use this plan
+    {
+      plan_.erase(plan_.end() - k_value_, plan_.end());
+      plan_.insert(plan_.end(), goal_setpoints_.begin(), goal_setpoints_.end());
+    }
+  }
 
   // k_value adaptation initialization
   if (!got_enough_replanning_)
@@ -999,9 +1035,8 @@ bool MIGHTY::appendToPlan()
  */
 void MIGHTY::getGterm(state &G_term)
 {
-  mtx_G_term_.lock();
+  std::lock_guard<std::mutex> lock(mtx_G_term_);
   G_term = G_term_;
-  mtx_G_term_.unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -1012,9 +1047,8 @@ void MIGHTY::getGterm(state &G_term)
  */
 void MIGHTY::setGterm(const state &G_term)
 {
-  mtx_G_term_.lock();
+  std::lock_guard<std::mutex> lock(mtx_G_term_);
   G_term_ = G_term;
-  mtx_G_term_.unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -1025,9 +1059,8 @@ void MIGHTY::setGterm(const state &G_term)
  */
 void MIGHTY::getG(state &G)
 {
-  mtx_G_.lock();
+  std::lock_guard<std::mutex> lock(mtx_G_);
   G = G_;
-  mtx_G_.unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -1038,9 +1071,8 @@ void MIGHTY::getG(state &G)
  */
 void MIGHTY::getE(state &E)
 {
-  mtx_E_.lock();
+  std::lock_guard<std::mutex> lock(mtx_E_);
   E = E_;
-  mtx_E_.unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -1051,9 +1083,8 @@ void MIGHTY::getE(state &E)
  */
 void MIGHTY::setG(const state &G)
 {
-  mtx_G_.lock();
+  std::lock_guard<std::mutex> lock(mtx_G_);
   G_ = G;
-  mtx_G_.unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -1064,9 +1095,8 @@ void MIGHTY::setG(const state &G)
  */
 void MIGHTY::getA(state &A)
 {
-  mtx_A_.lock();
+  std::lock_guard<std::mutex> lock(mtx_A_);
   A = A_;
-  mtx_A_.unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -1077,18 +1107,16 @@ void MIGHTY::getA(state &A)
  */
 void MIGHTY::setA(const state &A)
 {
-  mtx_A_.lock();
+  std::lock_guard<std::mutex> lock(mtx_A_);
   A_ = A;
-  mtx_A_.unlock();
 }
 
 // ----------------------------------------------------------------------------
 
 void MIGHTY::getA_time(double &A_time)
 {
-  mtx_A_time_.lock();
+  std::lock_guard<std::mutex> lock(mtx_A_time_);
   A_time = A_time_;
-  mtx_A_time_.unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -1099,9 +1127,8 @@ void MIGHTY::getA_time(double &A_time)
  */
 void MIGHTY::setA_time(double A_time)
 {
-  mtx_A_time_.lock();
+  std::lock_guard<std::mutex> lock(mtx_A_time_);
   A_time_ = A_time;
-  mtx_A_time_.unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -1112,9 +1139,8 @@ void MIGHTY::setA_time(double A_time)
  */
 void MIGHTY::getState(state &state)
 {
-  mtx_state_.lock();
+  std::lock_guard<std::mutex> lock(mtx_state_);
   state = state_;
-  mtx_state_.unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -1125,21 +1151,55 @@ void MIGHTY::getState(state &state)
  */
 void MIGHTY::getLastPlanState(state &state)
 {
-  mtx_plan_.lock();
-  state = plan_.back();
-  mtx_plan_.unlock();
+  // For ground robots, we don't maintain plan_, so just return the terminal goal
+  if (par_.vehicle_type != "uav")
+  {
+    getGterm(state);
+  }
+  else
+  {
+    std::lock_guard<std::mutex> lock(mtx_plan_);
+    state = plan_.back();
+  }
 }
 
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Gets trajs_
- * @param std::vector<std::shared_ptr<dynTraj>> &trajs: Output trajs_
+ * @brief Sets the lookahead point from pure pursuit controller
+ * @param const Eigen::Vector3d &point: Lookahead point
  */
-void MIGHTY::getTrajs(std::vector<std::shared_ptr<dynTraj>> &out)
+void MIGHTY::setLookaheadPoint(const Eigen::Vector3d &point)
+{
+  std::lock_guard<std::mutex> lock(mtx_lookahead_point_);
+  pure_pursuit_lookahead_point_ = point;
+  lookahead_point_received_ = true;
+}
+
+// ----------------------------------------------------------------------------
+
+/**
+ * @brief Gets the lookahead point from pure pursuit controller
+ * @param Eigen::Vector3d &point: Output lookahead point
+ * @param bool &received: Output flag indicating if lookahead has been received
+ */
+void MIGHTY::getLookaheadPoint(Eigen::Vector3d &point, bool &received)
+{
+  std::lock_guard<std::mutex> lock(mtx_lookahead_point_);
+  point = pure_pursuit_lookahead_point_;
+  received = lookahead_point_received_;
+}
+
+// ----------------------------------------------------------------------------
+
+/**
+ * @brief Gets trajs_ (returns copy of shared_ptrs, not deep copy of trajectory data)
+ * @return std::vector<std::shared_ptr<dynTraj>>: Copy of trajs_ vector
+ */
+std::vector<std::shared_ptr<dynTraj>> MIGHTY::getTrajs()
 {
   std::lock_guard<std::mutex> lock(mtx_trajs_);
-  out = trajs_; // copies shared_ptr only, not expressions
+  return trajs_; // RVO/NRVO will elide the copy in most cases
 }
 
 // ----------------------------------------------------------------------------
@@ -1231,9 +1291,10 @@ void MIGHTY::updateState(state data)
     data.yaw += yaw_init_offset_;
   }
 
-  mtx_state_.lock();
-  state_ = data;
-  mtx_state_.unlock();
+  {
+    std::lock_guard<std::mutex> lock(mtx_state_);
+    state_ = data;
+  }
 
   if ((state_initialized_ == false || drone_status_ == DroneStatus::YAWING) && (!par_.use_hardware || terminal_goal_initialized_))
   {
@@ -1245,10 +1306,11 @@ void MIGHTY::updateState(state data)
     previous_yaw_ = data.yaw;
 
     // Push the state to the plan
-    mtx_plan_.lock();
-    plan_.clear();
-    plan_.push_back(tmp);
-    mtx_plan_.unlock();
+    {
+      std::lock_guard<std::mutex> lock(mtx_plan_);
+      plan_.clear();
+      plan_.push_back(tmp);
+    }
 
     // Update Point A
     setA(tmp);
@@ -1280,21 +1342,21 @@ bool MIGHTY::getNextGoal(state &next_goal)
   // Pop the front of the plan
   next_goal.setZero();
 
-  // If the plan is empty, return false
-  mtx_plan_.lock(); // Lock the mutex
-  auto local_plan = plan_;
-  mtx_plan_.unlock(); // Unlock the mutex
+  // Get local copy and potentially pop the plan
+  std::deque<state> local_plan;
+  {
+    std::lock_guard<std::mutex> lock(mtx_plan_);
+    local_plan = plan_;
+
+    // If there's more than one goal setpoint, pop the front
+    if (plan_.size() > 1)
+    {
+      plan_.pop_front();
+    }
+  }
 
   // Get the next goal
   next_goal = local_plan.front();
-
-  // If there's more than one goal setpoint, pop the front
-  if (local_plan.size() > 1)
-  {
-    mtx_plan_.lock();
-    plan_.pop_front();
-    mtx_plan_.unlock();
-  }
 
   if (par_.use_hardware && par_.provide_goal_in_global_frame)
   {
@@ -1374,9 +1436,11 @@ void MIGHTY::getDesiredYaw(state &next_goal)
   getState(local_state);
 
   // Get G_term
-  mtx_G_term_.lock();
-  state G_term = G_term_;
-  mtx_G_term_.unlock();
+  state G_term;
+  {
+    std::lock_guard<std::mutex> lock(mtx_G_term_);
+    G_term = G_term_;
+  }
 
   switch (drone_status_)
   {
@@ -1434,9 +1498,10 @@ void MIGHTY::setTerminalGoal(const state &term_goal)
   setGterm(term_goal);
 
   // Project the terminal goal to the sphere
-  mtx_G_.lock();
-  G_.pos = mighty_utils::projectPointToSphere(local_state.pos, term_goal.pos, par_.horizon);
-  mtx_G_.unlock();
+  {
+    std::lock_guard<std::mutex> lock(mtx_G_);
+    G_.pos = mighty_utils::projectPointToSphere(local_state.pos, term_goal.pos, par_.horizon);
+  }
 
   changeDroneStatus(DroneStatus::TRAVELING);
 
@@ -1540,7 +1605,10 @@ void MIGHTY::updateMap(
   computeMapSize(local_state.pos, local_G.pos);
 
   // 2) map update (unlocked)
-  dgp_manager_.updateMap(wdx_, wdy_, wdz_, map_center_, pclptr_map_);
+  // Get trajectories for dynamic heat map
+  auto trajs = getTrajs();
+  double current_time = local_state.t;
+  dgp_manager_.updateMap(wdx_, wdy_, wdz_, map_center_, pclptr_map_, trajs, current_time);
 
   // 3) Known‐space KD‐tree
   if (pclptr_map_ && !pclptr_map_->points.empty())
@@ -1593,7 +1661,10 @@ void MIGHTY::updateOccupancyMap(
   computeMapSize(local_state.pos, local_G.pos);
 
   // 2) map update (unlocked)
-  dgp_manager_.updateMap(wdx_, wdy_, wdz_, map_center_, pclptr_map_);
+  // Get trajectories for dynamic heat map
+  auto trajs = getTrajs();
+  double current_time = local_state.t;
+  dgp_manager_.updateMap(wdx_, wdy_, wdz_, map_center_, pclptr_map_, trajs, current_time);
 
   // 3) Known‐space KD‐tree
   if (pclptr_map_ && !pclptr_map_->points.empty())

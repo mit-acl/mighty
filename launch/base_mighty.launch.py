@@ -29,6 +29,9 @@ def generate_launch_description():
     use_dyn_obs_arg = DeclareLaunchArgument(
         'use_dyn_obs', default_value='true', description='Flag to enable or disable dynamic obstacles'
     )
+    use_ground_robot_arg = DeclareLaunchArgument(
+        'use_ground_robot', default_value='false', description='Use ground robot (affects RViz config)'
+    )
 
     # benchmark name
     benchmark_name_arg = DeclareLaunchArgument('benchmark_name', default_value='benchmark_name', description='Benchmark name')
@@ -74,13 +77,22 @@ def generate_launch_description():
         use_rviz = convert_str_to_bool(LaunchConfiguration('use_rviz').perform(context))
         use_dyn_obs = convert_str_to_bool(LaunchConfiguration('use_dyn_obs').perform(context))
         use_gazebo_gui = LaunchConfiguration('use_gazebo_gui').perform(context)
+        use_ground_robot = convert_str_to_bool(LaunchConfiguration('use_ground_robot').perform(context))
 
-        # Create a rviz node
+        # Create a rviz node - use ground robot config if available, otherwise use default
+        rviz_config_filename = 'mighty_sim_ground_robot.rviz' if use_ground_robot else 'mighty.rviz'
         rviz_config_file = os.path.join(
             get_package_share_directory('mighty'),
             'rviz',
-            'mighty.rviz'
+            rviz_config_filename
         )
+        # Fallback to default if ground robot config doesn't exist
+        if use_ground_robot and not os.path.exists(rviz_config_file):
+            rviz_config_file = os.path.join(
+                get_package_share_directory('mighty'),
+                'rviz',
+                'mighty.rviz'
+            )
 
         rviz_node = Node(
                     package='rviz2',
@@ -129,6 +141,7 @@ def generate_launch_description():
         use_rviz_arg,
         use_gazebo_gui_arg,
         use_dyn_obs_arg,
+        use_ground_robot_arg,
         benchmark_name_arg,
         OpaqueFunction(function=launch_setup)
     ])

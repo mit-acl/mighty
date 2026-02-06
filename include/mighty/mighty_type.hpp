@@ -94,6 +94,31 @@ struct parameters
   double min_wdz;
   double res;
 
+  // Heat map parameters (soft cost layer)
+  bool use_heat_map{false};
+  float heat_weight{1.0f};
+  bool dynamic_heat_enabled{false};
+  bool dynamic_as_occupied_current{true};
+  bool dynamic_as_occupied_future{false};
+  float heat_alpha0{1.0f};
+  float heat_alpha1{2.0f};
+  int heat_p{2};
+  int heat_q{2};
+  float heat_tau_ratio{0.5f};
+  float heat_gamma{0.0f};
+  float heat_Hmax{10.0f};
+  float dyn_base_inflation_m{0.5f};
+  int heat_num_samples{15};
+  bool static_heat_enabled{false};
+  float static_heat_alpha{2.0f};
+  int static_heat_p{2};
+  float static_heat_Hmax{50.0f};
+  float static_heat_rmax_m{1.0f};
+  float static_heat_default_radius_m{0.5f};
+  bool static_heat_boundary_only{true};
+  bool static_heat_apply_on_unknown{false};
+  bool static_heat_exclude_dynamic{true};
+
   // Communication delay parameters
   bool use_comm_delay_inflation;
   double comm_delay_inflation_alpha;
@@ -119,6 +144,7 @@ struct parameters
   double r_max_for_ig = 1.0;         // [m] radius for the initial guess perturbation
 
   // Optimiztion parameters
+  int num_N;
   double horizon;
   double dc;
   double v_max;
@@ -181,8 +207,20 @@ struct parameters
   bool force_goal_z;
   double default_goal_z;
 
-  // Debug flag
+  // Debug flags
   bool debug_verbose;
+
+  // Ground robot control parameters
+  double ground_robot_kx{0.1};          // Forward/backward position gain
+  double ground_robot_ky{0.1};          // Lateral position gain
+  double ground_robot_kyaw{1.0};        // Yaw heading gain
+  double ground_robot_eps{0.1};         // Distance threshold for goal achievement
+  double ground_robot_v_max{1.0};       // Max linear velocity (m/s)
+  double ground_robot_w_max{1.5};       // Max angular velocity (rad/s)
+  double ground_robot_L_min{1.0};       // [m] Minimum lookahead distance for pure pursuit and point A
+
+  // Trajectory publishing parameters
+  int trajectory_downsample_points{500}; // Number of points to downsample trajectory to
 };
 
 struct BasisConverter
