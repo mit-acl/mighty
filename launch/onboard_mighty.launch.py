@@ -9,6 +9,11 @@ from launch_ros.parameter_descriptions import ParameterValue
 import yaml
 from math import radians
 
+# Robot type constants
+QUADROTOR = 'quadrotor'
+RED_ROVER = 'red_rover'
+STAR_ROBOT = 'star_robot'
+
 def convert_str_to_bool(str):
     return True if (str == 'true' or str == 'True' or str == 1 or str == '1') else False
 
@@ -32,6 +37,9 @@ def generate_launch_description():
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='map')
     sim_env_arg = DeclareLaunchArgument('sim_env', default_value='', description='Simulation environment: gazebo or fake_sim (empty = use mighty.yaml default)')
     use_ground_robot_arg = DeclareLaunchArgument('use_ground_robot', default_value='false', description='Enable ground robot mode (spawns p3at, uses cmd_vel control)')
+    use_onboard_localization_arg = DeclareLaunchArgument('use_onboard_localization', default_value='false', description='Use onboard localization (DLIO) vs Vicon')
+    depth_camera_name_arg = DeclareLaunchArgument('depth_camera_name', default_value='d435', description='Depth camera name for topic remapping')
+    robot_type_arg = DeclareLaunchArgument('robot_type', default_value='quadrotor', description='Robot type: quadrotor, red_rover, star_robot')
 
     # Need to be the same as simulartor.launch.py
     map_size_x_arg = DeclareLaunchArgument('map_size_x', default_value='20.0')
@@ -62,6 +70,9 @@ def generate_launch_description():
         odometry_topic = LaunchConfiguration('odometry_topic').perform(context)
         sim_env = LaunchConfiguration('sim_env').perform(context)
         use_ground_robot = convert_str_to_bool(LaunchConfiguration('use_ground_robot').perform(context))
+        use_onboard_localization = convert_str_to_bool(LaunchConfiguration('use_onboard_localization').perform(context))
+        depth_camera_name = LaunchConfiguration('depth_camera_name').perform(context)
+        robot_type = LaunchConfiguration('robot_type').perform(context)
 
         # The path to the urdf file - select based on robot type
         urdf_filename = 'p3at.urdf.xacro' if use_ground_robot else 'quadrotor.urdf.xacro'
@@ -84,12 +95,26 @@ def generate_launch_description():
         if use_ground_robot:
             parameters['vehicle_type'] = 'ground_robot'
 
+        # Override with HW config if using hardware
+        if use_hardware:
+            if robot_type in [RED_ROVER, STAR_ROBOT]:
+                hw_config_filename = 'hw_mighty_rover.yaml'
+            else:  # quadrotor
+                hw_config_filename = 'hw_mighty.yaml'
+            hw_parameters_path = os.path.join(get_package_share_directory('mighty'), 'config', hw_config_filename)
+            with open(hw_parameters_path, 'r') as f:
+                hw_params = yaml.safe_load(f)['mighty_node']['ros__parameters']
+            parameters.update(hw_params)
+
         # Update parameters for benchmarking
         parameters['file_path'] = data_file
         parameters['use_benchmark'] = bool(use_benchmark)
         if use_benchmark:
             parameters['global_planner'] = global_planner
    
+        # Lidar topic remapping for hardware vs simulation
+        lidar_point_cloud_topic = 'livox/lidar' if use_hardware else 'mid360_PointCloud2'
+
         # Create a Dynus node
         mighty_node = Node(
                     package='mighty',
@@ -99,6 +124,8 @@ def generate_launch_description():
                     output='screen',
                     emulate_tty=True,
                     parameters=[parameters],
+                    remappings=[('lidar_cloud_in', lidar_point_cloud_topic),
+                                ('depth_camera_cloud_in', f'{depth_camera_name}/depth/color/points')],
                     arguments=['--ros-args', '--log-level', 'error']
                     # prefix='xterm -e gdb -q -ex run --args', # gdb debugging
         )
@@ -237,16 +264,41 @@ def generate_launch_description():
             # prefix='xterm -e gdb -q -ex run --args', # gdb debugging
         )
 
-        # Return launch description
-        nodes_to_start = [mighty_node]
-        nodes_to_start.append(pose_twist_to_state_node) if use_hardware else None
-        nodes_to_start.append(fake_sim_node) if not use_hardware else None
-        nodes_to_start.append(robot_state_publisher_node) if parameters['sim_env'] == 'gazebo' else None
-        nodes_to_start.append(spawn_entity_node) if parameters['sim_env'] == 'gazebo' else None
-        nodes_to_start.append(pure_pursuit_node) if use_ground_robot else None
-        nodes_to_start.append(pcl_render_node) if parameters['sim_env'] == 'fake_sim' else None
-        nodes_to_start.append(obstacle_tracker_node) if use_obstacle_tracker else None
+        # HW: Odom to state (DLIO remapping)
+        hw_odom_to_state_node = Node(
+            package='mighty', executable='convert_odom_to_state',
+            name='convert_odom_to_state', namespace=namespace,
+            remappings=[('odom', 'dlio/odom_node/odom'), ('state', 'state')],
+            output='screen', emulate_tty=True)
 
+        # HW: Static TF (map->odom identity, for robots using external localization)
+        static_tf_node = Node(
+            package='tf2_ros', executable='static_transform_publisher',
+            name='static_tf_map_to_odom', output='screen',
+            arguments=['0','0','0','0','0','0','1', f'{namespace}/map', f'{namespace}/odom'])
+
+        # Return launch description
+        if use_hardware:
+            nodes_to_start = [mighty_node]
+            if use_onboard_localization:
+                if robot_type == QUADROTOR:
+                    nodes_to_start.append(hw_odom_to_state_node)
+                elif robot_type in [STAR_ROBOT, RED_ROVER]:
+                    nodes_to_start.extend([hw_odom_to_state_node,
+                                           pure_pursuit_node, static_tf_node])
+            else:
+                nodes_to_start.append(pose_twist_to_state_node)  # Vicon
+        else:
+            # === EXISTING SIM CODE — COMPLETELY UNCHANGED ===
+            nodes_to_start = [mighty_node]
+            nodes_to_start.append(pose_twist_to_state_node) if use_hardware else None
+            nodes_to_start.append(fake_sim_node) if not use_hardware else None
+            nodes_to_start.append(robot_state_publisher_node) if parameters['sim_env'] == 'gazebo' else None
+            nodes_to_start.append(spawn_entity_node) if parameters['sim_env'] == 'gazebo' else None
+            nodes_to_start.append(pure_pursuit_node) if use_ground_robot else None
+            nodes_to_start.append(pcl_render_node) if parameters['sim_env'] == 'fake_sim' else None
+
+        nodes_to_start.append(obstacle_tracker_node) if use_obstacle_tracker else None
         return nodes_to_start
 
     # Create launch description
@@ -270,5 +322,8 @@ def generate_launch_description():
         odometry_topic_arg,
         sim_env_arg,
         use_ground_robot_arg,
+        use_onboard_localization_arg,
+        depth_camera_name_arg,
+        robot_type_arg,
         OpaqueFunction(function=launch_setup)
     ])

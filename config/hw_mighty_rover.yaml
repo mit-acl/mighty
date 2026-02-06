@@ -12,10 +12,10 @@ mighty_node:
     ros__parameters:
 
         # Vehicle type
-        vehicle_type: "uav"                                     # ["uav", "ground_robot", "qudruped_robot"]
+        vehicle_type: "ground_robot"                                     # ["uav", "ground_robot", "qudruped_robot"]
 
         # Hardware-related parameters
-        provide_goal_in_global_frame: true                     # [-] Provide goal in the global frame
+        provide_goal_in_global_frame: false # Should be true when not using rviz interface                     # [-] Provide goal in the global frame
         use_hardware: true                                     # [-] Use hardware
 
         # Flight mode should be terminal_goal
@@ -27,16 +27,16 @@ mighty_node:
         # Gloabl planner parameters
         global_planner: "sjps"                                  # ["sjps"]
         factor_dgp: 1.0                                         # do not change - [m] actual_resolution = factor_dgp * (resolution of the map)
-        inflation_dgp: 0.9                                    # [m] The obstacles are inflated (to run DGP) by this amount
+        inflation_dgp: 0.15                                    # [m] The obstacles are inflated (to run DGP) by this amount
         x_min: -1000.0                                          # [m] x_min of the map
         x_max: 1000.0                                           # [m] x_max of the map
         y_min: -1000.0                                          # [m] y_min of the map
         y_max: 1000.0                                           # [m] y_max of the map
-        z_min: 0.8                                              # [m] points below this are considered ground
-        z_max: 2.0 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
+        z_min: -0.4                                              # [m] points below this are considered ground
+        z_max: 1.5 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
         dgp_timeout_duration_ms: 10000                          # [ms] Timeout duration for the DGP
         use_free_start: true                                    # [-] Use free start for the DGP
-        free_start_factor: 1.0 #1.0                                  # [-] Factor for the free start
+        free_start_factor: 6.0 #1.0                                  # [-] Factor for the free start
         use_free_goal: true                                    # [-] Use free goal for the DGP
         free_goal_factor: 3.0                                   # [-] Factor for the free goal
         global_planner_huristic_weight: 2.0         # [-] Weight for the heuristic in the global planner
@@ -53,7 +53,7 @@ mighty_node:
         min_turn: 0.0                           # [deg] minimum turn angle for the post global path smoothing
 
         # Decomposition module parameters
-        local_box_size: [3.0, 3.0, 3.0]         # [m] Size of the local box (smaller, faster)
+        local_box_size: [1.0, 1.0, 1.0]         # [m] Size of the local box (smaller, faster)
         min_dist_from_agent_to_traj: 10.0        # [m] Minimum distance from the agent to the trajectory
         use_shrinked_box: false                 # [-] Use shrinked box for the convex decomposition
         shrinked_box_size: 0.0                  # [m] Size of the shrinked box
@@ -78,9 +78,9 @@ mighty_node:
         num_dyn_obst_samples: 10                    # [-] Number of samples for the dynamic obstacles in the optimization
         planner_Co: 0.3 #0.2                        # [-] Collision clearance thresh for static obstacles in the optimization
         planner_Cw: 3.0                             # [-] Collision clearance thresh for dynamic obstacles in the optimization
-        drone_bbox: [1.2, 1.2, 1.2]                 # [m] Size of the bounding box for the obstacles
-        goal_radius: 0.5                           # [m] Radius of the goal
-        goal_seen_radius: 2.0                       # [m] Radius of the goal that the drone can see and stop replanning. Note that if this number is too small, the trajectory planning becomes extremely difficult.
+        drone_bbox: [0.49, 0.58, 0.46]                 # [m] Size of the bounding box for the obstacles
+        goal_radius: 0.2                           # [m] Radius of the goal
+        goal_seen_radius: 1.0                       # [m] Radius of the goal that the drone can see and stop replanning. Note that if this number is too small, the trajectory planning becomes extremely difficult.
         integral_resolution: 8
         hinge_mu: 1e-2
         omega_max: 0.10472 # [rad/s] Maximum angular velocity (6 deg/s)
@@ -92,12 +92,12 @@ mighty_node:
         fopt_threshold: 10000.0               # [-] Threshold for the fopt to consider the optimization successful
 
         # L-BFGS parameters
-        init_turn_bf: 80.0                          # [deg] Initial turn buffer in degrees
+        init_turn_bf: 60.0                          # [deg] Initial turn buffer in degrees
         f_dec_coeff: 1e-3
         cautious_factor: 1.0e-6
         past: 3
         max_linesearch: 64
-        max_iterations: 500
+        max_iterations: 1000
         g_epsilon: 1.0e-5
         delta: 1.0e-5
 
@@ -121,10 +121,10 @@ mighty_node:
 
         # Simulation env parameters
         force_goal_z: false                     # [-] Force the goal to be at the certain height since Rviz GUI's goal's z is 0
-        default_goal_z: 1.0                     # [m] Default goal height
+        default_goal_z: 0.0                    # [m] Default goal height
 
         # Debug flags
-        global_planner_verbose: false           # debug output
+        global_planner_verbose: true           # debug output
         debug_verbose: false                    # [-] Verbose the debug information
         closed_form_traj_verbose: false         # Verbosity of closed-form traj.
         verbose_computation_time: false         # [-] Verbose the computation time
@@ -138,7 +138,7 @@ mighty_node:
         min_wdx: 16.0 #10.0                           # [m] Minimum width of the map
         min_wdy: 16.0 #10.0                           # [m] Minimum depth of the map
         min_wdz: 4.0 #2.0                           # [m] Minimum height of the map
-        mighty_map_res: 0.3 #0.15              # [m] Resolution of the map
+        mighty_map_res: 0.15 #0.15              # [m] Resolution of the map
 
         # Communication delay parameters
         use_comm_delay_inflation: true  # [-] Use communication delay inflation
@@ -167,6 +167,14 @@ mighty_node:
         box_visualization_duration: 1.0             # [s] Duration to visualize the bounding box
         velocity_threshold: 0.8                     # [m/s] Velocity threshold to characterize as dynamic obstacles
         acceleration_threshold: 2.0                 # [m/s2] Acceleration threshold to characterize as dynamic obstacles
+
+        # Ground robot control gains
+        ground_robot_kx: 0.05              # [-] Ground robot proportional gain for x
+        ground_robot_ky: 0.8               # [-] Ground robot proportional gain for y
+        ground_robot_ki: 0.0               # [-] Ground robot integral gain
+        ground_robot_kyaw: 0.15            # [-] Ground robot proportional gain for yaw
+        ground_robot_kdyaw: 0.001          # [-] Ground robot derivative gain for yaw
+        ground_robot_eps: 0.12             # [-] Ground robot epsilon
 
         # Path push visualization parameters (if we wanna visualize the path push - just flip all the flags)
         use_state_update: true                  # [-] Use ego-agent's state update - if false, we fix the ego-agent's state (this is useful for path push visualization)

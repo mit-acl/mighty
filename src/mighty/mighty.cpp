@@ -1416,6 +1416,13 @@ bool MIGHTY::getNextGoal(state &next_goal)
     next_goal.dyaw = 0.0;
   }
 
+  // Hardware: zero out yaw tracking (ground robots can't track yaw commands)
+  if (par_.use_hardware)
+  {
+    next_goal.yaw = 0.0;
+    next_goal.dyaw = 0.0;
+  }
+
   return true;
 }
 

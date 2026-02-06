@@ -117,6 +117,7 @@ install(DIRECTORY
 launch
 config
 rviz
+tmux
 worlds
 urdf
 meshes
@@ -155,6 +156,7 @@ install(PROGRAMS
   scripts/generate_random_forest.py
   benchmarking/dynamic_obstacle_benchmark_node.py
   benchmarking/unc_benchmark_node.py
+  scripts/repub_rviz_2Dgoal.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

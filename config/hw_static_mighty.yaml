@@ -27,58 +27,58 @@ mighty_node:
         # Gloabl planner parameters
         global_planner: "sjps"                                  # ["sjps"]
         factor_dgp: 1.0                                         # do not change - [m] actual_resolution = factor_dgp * (resolution of the map)
-        inflation_dgp: 0.9                                    # [m] The obstacles are inflated (to run DGP) by this amount
+        inflation_dgp: 0.6                                    # [m] The obstacles are inflated (to run DGP) by this amount
         x_min: -1000.0                                          # [m] x_min of the map
         x_max: 1000.0                                           # [m] x_max of the map
         y_min: -1000.0                                          # [m] y_min of the map
         y_max: 1000.0                                           # [m] y_max of the map
-        z_min: 0.8                                              # [m] points below this are considered ground
-        z_max: 2.0 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
+        z_min: 1.25                                              # [m] points below this are considered ground
+        z_max: 3.0 #4.25 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
         dgp_timeout_duration_ms: 10000                          # [ms] Timeout duration for the DGP
         use_free_start: true                                    # [-] Use free start for the DGP
-        free_start_factor: 1.0 #1.0                                  # [-] Factor for the free start
-        use_free_goal: true                                    # [-] Use free goal for the DGP
-        free_goal_factor: 3.0                                   # [-] Factor for the free goal
+        free_start_factor: 3.0 #1.0                                  # [-] Factor for the free start
+        use_free_goal: false                                    # [-] Use free goal for the DGP
+        free_goal_factor: 2.0                                   # [-] Factor for the free goal
         global_planner_huristic_weight: 2.0         # [-] Weight for the heuristic in the global planner
         num_N: 5                                    # [-] Number of segments
-        max_dist_vertexes: 2.0                      # [m] Maximum distance between two consecutive vertexes
+        max_dist_vertexes: 3.0                      # [m] Maximum distance between two consecutive vertexes
         w_unknown: 0.0                              # [-] Weight for the unknown cells in the global planner
         w_align: 0.0                              # [-] Weight for the alignment with the initial velocity in the global planner
         decay_len_cells: 100.0                     # [-] Decay length for the alignment with the initial velocity in the global planner
         w_side: 0.0                                # [-] Weight for the side tie-break in the global planner
 
         # Post global path smoothing parameters
-        los_cells: 4                                 # [cells] number of cells for the line-of-sight inflation for the post global path smoothing
-        min_len: 0.1                               # [m] minimum length for the post global path smoothing
+        los_cells: 3                                 # [cells] number of cells for the line-of-sight inflation for the post global path smoothing
+        min_len: 1.0                               # [m] minimum length for the post global path smoothing
         min_turn: 0.0                           # [deg] minimum turn angle for the post global path smoothing
 
         # Decomposition module parameters
-        local_box_size: [3.0, 3.0, 3.0]         # [m] Size of the local box (smaller, faster)
+        local_box_size: [1.5, 1.5, 1.5]         # [m] Size of the local box (smaller, faster)
         min_dist_from_agent_to_traj: 10.0        # [m] Minimum distance from the agent to the trajectory
         use_shrinked_box: false                 # [-] Use shrinked box for the convex decomposition
         shrinked_box_size: 0.0                  # [m] Size of the shrinked box
 
         # Optimization parameters
-        horizon: 15.0                               # [m] Horizon
+        horizon: 11.0                               # [m] Horizon
         dc: 0.01                                    # [s] Duration for the interpolation=Value of the timer pubGoal
-        v_max: 1.0 #1.0                                  # [m/s]  max velocity
-        a_max: 3.0 #3.0                                 # [m/s2] max acceleration
-        j_max: 5.0 #5.0                              # [m/s3] max jerk
+        v_max: 0.5 #1.0                                  # [m/s]  max velocity
+        a_max: 1.0 #3.0                                 # [m/s2] max acceleration
+        j_max: 2.0 #5.0                              # [m/s3] max jerk
         dynamic_weight: 1e+1                        # [-] Weight of the obstacles and agents distance in the optimization
-        time_weight: 5e+2                            # [-] Weight of the time cost in the optimization
+        time_weight: 5e+1 #5e+2                           # [-] Weight of the time cost in the optimization
         pos_anchor_weight: 0.0                      # [-] Weight of the position anchors in the optimization
-        stat_weight: 1e+3                           # [-] Weight of the static obstacles in the optimization
-        jerk_weight: 1e-1 #1e-1                           # [-] Weight of the jerk in the optimization
-        dyn_constr_vel_weight: 1e+3                 # [-] Weight of the velocity constraints violation in the optimization
+        stat_weight: 1e+4 #1e+3                           # [-] Weight of the static obstacles in the optimization
+        jerk_weight: 2e-1 #1e-1                           # [-] Weight of the jerk in the optimization
+        dyn_constr_vel_weight: 1e4 # 1e+3                 # [-] Weight of the velocity constraints violation in the optimization
         dyn_constr_acc_weight: 1e+3                 # [-] Weight of the acceleration constraints violation in the optimization
         dyn_constr_jerk_weight: 1e+3                # [-] Weight of the jerk constraints violation in the optimization
         dyn_constr_bodyrate_weight: 0.0             # [-] Weight of the body rate constraints violation in the optimization
         dyn_constr_tilt_weight: 0.0                 # [-] Weight of the tilt constraints violation in the optimization
         dyn_constr_thrust_weight: 0.0               # [-] Weight of the thrust constraints violation in the optimization
         num_dyn_obst_samples: 10                    # [-] Number of samples for the dynamic obstacles in the optimization
-        planner_Co: 0.3 #0.2                        # [-] Collision clearance thresh for static obstacles in the optimization
+        planner_Co: 0.6                            # [-] Collision clearance thresh for static obstacles in the optimization
         planner_Cw: 3.0                             # [-] Collision clearance thresh for dynamic obstacles in the optimization
-        drone_bbox: [1.2, 1.2, 1.2]                 # [m] Size of the bounding box for the obstacles
+        drone_bbox: [0.2, 0.2, 0.2]                 # [m] Size of the bounding box for the obstacles
         goal_radius: 0.5                           # [m] Radius of the goal
         goal_seen_radius: 2.0                       # [m] Radius of the goal that the drone can see and stop replanning. Note that if this number is too small, the trajectory planning becomes extremely difficult.
         integral_resolution: 8
@@ -89,15 +89,15 @@ mighty_node:
         f_max: 12.0                        # Maximum thrust
         mass: 1.0                         # [kg] Mass of the drone
         g: 9.81                        # [m/s^2] Gravitational acceleration
-        fopt_threshold: 10000.0               # [-] Threshold for the fopt to consider the optimization successful
+        fopt_threshold: 100000.0               # [-] Threshold for the fopt to consider the optimization successful
 
         # L-BFGS parameters
         init_turn_bf: 80.0                          # [deg] Initial turn buffer in degrees
         f_dec_coeff: 1e-3
         cautious_factor: 1.0e-6
         past: 3
-        max_linesearch: 64
-        max_iterations: 500
+        max_linesearch: 32
+        max_iterations: 1000
         g_epsilon: 1.0e-5
         delta: 1.0e-5
 
@@ -121,7 +121,7 @@ mighty_node:
 
         # Simulation env parameters
         force_goal_z: false                     # [-] Force the goal to be at the certain height since Rviz GUI's goal's z is 0
-        default_goal_z: 1.0                     # [m] Default goal height
+        default_goal_z: 3.0                     # [m] Default goal height
 
         # Debug flags
         global_planner_verbose: false           # debug output
@@ -132,12 +132,12 @@ mighty_node:
         # Map parameters
         map_buffer: 1.0                         # [m] buffer for goal & A point
         center_shift_factor: 0.5                # [-] Factor for the center shift
-        initial_wdx: 16.0 #20.0                       # [m] Width of the map (should be the same as wdy assumed in trajCallback)
-        initial_wdy: 16.0 #20.0                       # [m] Depth of the map (should be the same as wdx assumed in trajCallback)
-        initial_wdz: 4.0 #3.0                       # [m] Height of the map
-        min_wdx: 16.0 #10.0                           # [m] Minimum width of the map
-        min_wdy: 16.0 #10.0                           # [m] Minimum depth of the map
-        min_wdz: 4.0 #2.0                           # [m] Minimum height of the map
+        initial_wdx: 30.0 #20.0                       # [m] Width of the map (should be the same as wdy assumed in trajCallback)
+        initial_wdy: 30.0 #20.0                       # [m] Depth of the map (should be the same as wdx assumed in trajCallback)
+        initial_wdz: 6.0 #3.0                       # [m] Height of the map
+        min_wdx: 3.0 #10.0                           # [m] Minimum width of the map
+        min_wdy: 3.0 #10.0                           # [m] Minimum depth of the map
+        min_wdz: 6.0 #2.0                           # [m] Minimum height of the map
         mighty_map_res: 0.3 #0.15              # [m] Resolution of the map
 
         # Communication delay parameters
