@@ -31,6 +31,7 @@ def generate_launch_description():
     odom_topic_arg    = DeclareLaunchArgument('odom_topic', default_value='visual_slam/odom')
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='map')
     sim_env_arg = DeclareLaunchArgument('sim_env', default_value='', description='Simulation environment: gazebo or fake_sim (empty = use mighty.yaml default)')
+    use_ground_robot_arg = DeclareLaunchArgument('use_ground_robot', default_value='false', description='Enable ground robot mode (spawns p3at, uses cmd_vel control)')
 
     # Need to be the same as simulartor.launch.py
     map_size_x_arg = DeclareLaunchArgument('map_size_x', default_value='20.0')
@@ -60,10 +61,13 @@ def generate_launch_description():
         map_size_z = float(LaunchConfiguration('map_size_z').perform(context))
         odometry_topic = LaunchConfiguration('odometry_topic').perform(context)
         sim_env = LaunchConfiguration('sim_env').perform(context)
+        use_ground_robot = convert_str_to_bool(LaunchConfiguration('use_ground_robot').perform(context))
 
-        # The path to the urdf file
-        urdf_path=PathJoinSubstitution([FindPackageShare('mighty'), 'urdf', 'quadrotor.urdf.xacro'])
-        parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', 'mighty.yaml')
+        # The path to the urdf file - select based on robot type
+        urdf_filename = 'p3at.urdf.xacro' if use_ground_robot else 'quadrotor.urdf.xacro'
+        urdf_path=PathJoinSubstitution([FindPackageShare('mighty'), 'urdf', urdf_filename])
+        config_filename = 'mighty_ground_robot.yaml' if use_ground_robot else 'mighty.yaml'
+        parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', config_filename)
 
         # Get the dict of parameters from the yaml file
         with open(parameters_path, 'r') as file:
@@ -75,6 +79,10 @@ def generate_launch_description():
         # Override sim_env if provided via launch argument
         if sim_env:
             parameters['sim_env'] = sim_env
+
+        # Override vehicle_type if using ground robot
+        if use_ground_robot:
+            parameters['vehicle_type'] = 'ground_robot'
 
         # Update parameters for benchmarking
         parameters['file_path'] = data_file
@@ -154,6 +162,28 @@ def generate_launch_description():
             # arguments=['--ros-args', '--log-level', 'error']
         )
 
+        # Pure pursuit controller for ground robot
+        pure_pursuit_node = Node(
+            package='mighty',
+            executable='pure_pursuit',
+            name='pure_pursuit',
+            namespace=namespace,
+            parameters=[{
+                'L_min': parameters.get('pure_pursuit_L_min', 0.5),
+                'k_v': parameters.get('pure_pursuit_k_v', 0.5),
+                'max_velocity': parameters.get('ground_robot_v_max', 1.0),
+                'max_angular_velocity': parameters.get('ground_robot_w_max', 3.0),
+                'stopping_radius': parameters.get('pure_pursuit_stopping_radius', 0.1),
+                'adaptive_lookahead_distance': parameters.get('pure_pursuit_adaptive_lookahead_distance', 2.0),
+                'turn_in_place_threshold_deg': parameters.get('pure_pursuit_turn_in_place_threshold_deg', 60.0),
+                'slow_down_threshold_deg': parameters.get('pure_pursuit_slow_down_threshold_deg', 30.0),
+                'w_smoothing_alpha': parameters.get('pure_pursuit_w_smoothing_alpha', 0.3),
+                'control_rate': 50.0,
+            }],
+            output='screen',
+            emulate_tty=True,
+        )
+
         # When using ground robot, we don't need to send the exact state to gazebo - the state will be taken care of by wheel controllers
         # send_state_to_gazebo = False if use_ground_robot else True
         # Create a fake sim node
@@ -163,9 +193,12 @@ def generate_launch_description():
                     name='fake_sim',
                     namespace=namespace,
                     emulate_tty=True,
-                    parameters=[{"start_pos": [float(x), float(y), float(z)], 
+                    parameters=[{"start_pos": [float(x), float(y), float(z)],
                                  "start_yaw": float(yaw),
-                                 "send_state_to_gazebo": parameters['sim_env'] == 'gazebo',
+                                 "send_state_to_gazebo": parameters['sim_env'] == 'gazebo' and not use_ground_robot,
+                                 "publish_tf": not use_ground_robot,     # Disable TF for ground robots (Gazebo publishes it)
+                                 "publish_state": not use_ground_robot,  # Disable state for ground robots (convert_odom_to_state publishes it)
+                                 "use_ground_robot": use_ground_robot,
                                 #  "visual_level": parameters['visual_level'],
                                  "publish_odom": publish_odom,
                                  "odom_topic": odom_topic,
@@ -210,6 +243,7 @@ def generate_launch_description():
         nodes_to_start.append(fake_sim_node) if not use_hardware else None
         nodes_to_start.append(robot_state_publisher_node) if parameters['sim_env'] == 'gazebo' else None
         nodes_to_start.append(spawn_entity_node) if parameters['sim_env'] == 'gazebo' else None
+        nodes_to_start.append(pure_pursuit_node) if use_ground_robot else None
         nodes_to_start.append(pcl_render_node) if parameters['sim_env'] == 'fake_sim' else None
         nodes_to_start.append(obstacle_tracker_node) if use_obstacle_tracker else None
 
@@ -235,5 +269,6 @@ def generate_launch_description():
         map_size_z_arg,
         odometry_topic_arg,
         sim_env_arg,
+        use_ground_robot_arg,
         OpaqueFunction(function=launch_setup)
     ])

@@ -95,7 +95,9 @@ public:
   void setA_time(double A_time);
   void getState(state &state);
   std::vector<std::shared_ptr<dynTraj>> getTrajs();
-  void getLastPlanState(state &state);                                 
+  void getLastPlanState(state &state);
+  void setLookaheadPoint(const Eigen::Vector3d &point);
+  void getLookaheadPoint(Eigen::Vector3d &point, bool &received);                                 
   void cleanUpOldTrajs(double current_time);
   void addTraj(std::shared_ptr<dynTraj> new_traj, double current_time);
   void updateState(state data); 
@@ -197,6 +199,8 @@ private:
   double prev_dyaw_ = 0.0;                         // Previous dyaw
   double dyaw_filtered_ = 0.0;                     // Filtered dyaw
   PieceWiseQuinticPol pwp_to_share_;                // Piecewise polynomial to share
+  Eigen::Vector3d pure_pursuit_lookahead_point_;   // Lookahead point from pure pursuit controller
+  bool lookahead_point_received_ = false;          // Flag to check if lookahead point has been received
 
   // Drone status
   int drone_status_ = DroneStatus::GOAL_REACHED; // status_ can be TRAVELING, GOAL_SEEN, GOAL_REACHED
@@ -213,6 +217,7 @@ private:
   std::mutex mtx_solve_dgp_;            // Mutex for the solveDGP
   std::mutex mtx_global_path_;          // Mutex for the global_path_
   std::mutex mtx_original_global_path_; // Mutex for the original_global_path_
+  std::mutex mtx_lookahead_point_;      // Mutex for the pure_pursuit_lookahead_point_
   std::mutex mtx_kdtree_map_;           // Mutex for the map_
   std::mutex mtx_kdtree_unk_;           // Mutex for the unknown map_
   pcl::PointCloud<pcl::PointXYZ>::ConstPtr pclptr_map_;

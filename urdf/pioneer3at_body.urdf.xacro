@@ -18,11 +18,11 @@
                        * http://en.wikipedia.org/wiki/List_of_moment_of_inertia_tensors  
                 -->
 		<inertial>
-			<mass value="21.5"/> <!-- P3AT 18.6kg plus three batteries @ 2.4kg each  minus four wheels @ 1.4 kg ea and top plate @ 0.1 kg-->
-			<origin xyz="-0.1 0 0.177"/>
-			<inertia ixx="0.3338" ixy="0.0"     ixz="0.0"
-				              iyy="0.4783"  iyz="0.0"
-				                            izz="0.3338"/>
+			<mass value="20.0"/> <!-- Heavier for stability -->
+			<origin xyz="0.0 0 0.05"/> <!-- Very low CoM to prevent flipping -->
+			<inertia ixx="0.3" ixy="0.0"     ixz="0.0"
+				              iyy="0.4"  iyz="0.0"
+				                            izz="0.06"/> <!-- Lower izz for crisper yaw -->
 		</inertial>
 		<visual>
 			<origin xyz="0 0 0.177" rpy="0 0 0"/>
@@ -77,7 +77,7 @@
 <!-- Front + Back Sonar -->
 	<link name="front_sonar">
 		<inertial>
-			<mass value="0.1"/>	
+			<mass value="0.2"/> <!-- Ultra light for agility -->
 			<origin xyz="0 0 0"/>
 			<inertia ixx="1.0" ixy="0.0" ixz="0.0"
 				 iyy="1.0" iyz="0.0" izz="1.0"/>
@@ -188,10 +188,10 @@
 
 	<link name="p3at_front_${side}_wheel">
 		<inertial>
-			<mass value="1.2"/> <!-- 1.4 kg - axle 0.1 kg - hub 0.1 kg -->
+			<mass value="1.0"/> <!-- Heavier wheels for stability -->
 			<origin xyz="0 0 0"/>
-			<inertia ixx="0.012411765597" ixy="0" ixz="0"
-         iyy="0.015218160428" iyz="0" izz="0.011763977943"/>
+			<inertia ixx="0.001985881806" ixy="0" ixz="0"
+         iyy="0.002434972335" iyz="0" izz="0.001882236470"/>
       </inertial>
 	<visual>
 		<origin xyz="0 0 0" rpy="0 0 0"/>
@@ -217,8 +217,8 @@
 	<joint name="p3at_front_${side}_wheel_joint" type="continuous">
   	<axis xyz="0 1 0"/>
     <anchor xyz="0 0 0"/>
-    <limit effort="100" velocity="100" />
-    <joint_properties damping="0.7"/>
+    <limit effort="10000" velocity="10000" />
+    <joint_properties damping="0.001"/>
 		<origin xyz="0 0 0" rpy="0 0 0"/>
 		<parent link="p3at_front_${side}_hub"/>
 		<child link="p3at_front_${side}_wheel"/>
@@ -292,11 +292,11 @@
 
 	<link name="p3at_back_${side}_wheel">
 		<inertial>
-			<mass value="1.2"/>	
+			<mass value="1.0"/>  <!-- Heavier for stability -->
 			<origin xyz="0 0 0"/>
-			<inertia ixx="0.012411765597" ixy="0" ixz="0"
-                                                      iyy="0.015218160428" iyz="0" 
-                                                                           izz="0.011763977943"/>
+			<inertia ixx="0.006205882799" ixy="0" ixz="0"
+                                                      iyy="0.007609080214" iyz="0"
+                                                                           izz="0.005881988972"/>
       </inertial>
 	<visual>
 		<origin xyz="0 0 0" rpy="0 0 0"/>
@@ -320,8 +320,8 @@
 	<joint name="p3at_back_${side}_wheel_joint" type="continuous">
 	  <axis xyz="0 1 0"/>
     <anchor xyz="0 0 0"/>
-    <limit effort="100" velocity="100" />
-    <joint_properties damping="0.7"/>
+    <limit effort="10000" velocity="10000" />
+    <joint_properties damping="0.001"/>
 		<origin xyz="0 0 0" rpy="0 0 0"/>
 		<parent link="p3at_back_${side}_hub"/>
 		<child link="p3at_back_${side}_wheel"/>
@@ -332,30 +332,30 @@
 
   <gazebo reference="p3at_back_${side}_wheel">
     <kp>1000000.0</kp> <!-- kp and kd for rubber -->
-    <kd>100.0</kd>
-    <mu1>1.0</mu1> <!-- was 10 -->
-    <mu2>1.0</mu2>
+    <kd>80.0</kd> <!-- Moderate damping for crisp yaw -->
+    <mu1>3.0</mu1> <!-- Lower friction for easier turning -->
+    <mu2>3.0</mu2>
       <!-- how to get these into <surface><friction><ode>... ?
         slip1 0.5 /slip1 
          slip2 0 /slip2 
       -->
     <!-- fdir1 0 1 0 /fdir1 --> <!-- see http://github.com/MobileRobots/amr-ros-config/issues/6 -->
-    <maxVel>1.0</maxVel>
+    <maxVel>100.0</maxVel>
     <minDepth>0.00</minDepth>
     <material value="Gazebo/Black" />
   </gazebo>
   
   <gazebo reference="p3at_front_${side}_wheel">
     <kp>1000000.0</kp> <!-- kp and kd for rubber -->
-    <kd>100.0</kd>
-    <mu1>1.0</mu1> <!-- was 10 -->
+    <kd>80.0</kd> <!-- Moderate damping for crisp yaw -->
+    <mu1>6.0</mu1> <!-- Lower friction for easier turning -->
     <mu2>1.0</mu2>
       <!-- how to get these into <surface><friction><ode>... ?
         slip1 0.5 /slip1 
          slip2 0 /slip2 
       -->
     <!-- fdir1 0 1 0 /fdir1 --> <!-- see http://github.com/MobileRobots/amr-ros-config/issues/6 -->
-    <maxVel>1.0</maxVel>
+    <maxVel>100.0</maxVel>
     <minDepth>0.00</minDepth>
     <material value="Gazebo/Black" />
   </gazebo>
@@ -371,23 +371,24 @@
 		<plugin name="gazebo_ros_diff_drive" filename="libgazebo_ros_diff_drive.so">
 			<ros>
 				<namespace>${namespace}</namespace>
-				<remapping>cmd_vel:=cmd_vel</remapping> <!-- Map cmd_vel to the topic -->
-				<remapping>odom:=odom</remapping> <!-- Map odometry topic -->
+				<remapping>cmd_vel:=cmd_vel</remapping>
+				<remapping>odom:=odom</remapping>
 			</ros>
 
-			<update_rate>100.0</update_rate>
+			<update_rate>200.0</update_rate>
 
 			<!-- wheels -->
 			<left_joint>p3at_back_left_wheel_joint</left_joint>
 			<right_joint>p3at_back_right_wheel_joint</right_joint>
-			
-			<!-- kinmatics -->
+
+			<!-- kinematics -->
 			<wheel_separation>0.4</wheel_separation>
-			<wheel_diameter>0.215</wheel_diameter> <!-- Half of wheel diameter -->
-			
+			<wheel_diameter>0.07</wheel_diameter>
+
 			<!-- limits -->
-			<max_wheel_torque>20</max_wheel_torque>
-			<max_wheel_acceleration>1.0</max_wheel_acceleration>
+			<max_wheel_torque>3000</max_wheel_torque>
+			<max_wheel_acceleration>800.0</max_wheel_acceleration>
+			<max_wheel_velocity>100.0</max_wheel_velocity>
 
 			<!-- input -->
 			<command_topic>cmd_vel</command_topic>
@@ -405,6 +406,7 @@
     </gazebo>
 
 </xacro:macro>
+
 
 <!-- <xacro:p3at_gazebo_ext/> -->
 

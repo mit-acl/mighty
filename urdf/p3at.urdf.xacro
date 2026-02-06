@@ -25,7 +25,7 @@
 
   <xacro:include filename="$(find ros2_livox_simulation)/urdf/mid360.xacro" />
   <xacro:mid360 name="$(arg namespace)_livox" namespace="$(arg namespace)" parent="base_link" topic="mid360" >
-    <origin xyz="0 0 1.0" rpy="0 0 0"/>
+    <origin xyz="0 0 1.0" rpy="0 0.3 0"/>
   </xacro:mid360>
 
   <xacro:include filename="$(find mighty)/urdf/_d435.urdf.xacro" />

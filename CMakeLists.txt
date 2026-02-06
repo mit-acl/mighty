@@ -66,10 +66,10 @@ add_executable(obstacle_tracker_node src/mighty/obstacle_tracker_node.cpp src/dg
 target_link_libraries(obstacle_tracker_node ${PCL_LIBRARIES})
 ament_target_dependencies(obstacle_tracker_node rclcpp rclcpp_components visualization_msgs Eigen3 dynus_interfaces std_msgs gazebo_msgs sensor_msgs tf2 tf2_ros pcl_conversions tf2_geometry_msgs tf2_eigen)
 
-# Add goal to cmd_vel converter
-add_executable(convert_goal_to_cmd_vel src/mighty/convert_goal_to_cmd_vel.cpp)
-target_link_libraries(convert_goal_to_cmd_vel)
-ament_target_dependencies(convert_goal_to_cmd_vel rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 sensor_msgs std_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs tf2 tf2_ros tf2_eigen)
+# Add pure pursuit controller for ground robot
+add_executable(pure_pursuit src/mighty/pure_pursuit.cpp)
+target_link_libraries(pure_pursuit)
+ament_target_dependencies(pure_pursuit rclcpp dynus_interfaces geometry_msgs visualization_msgs)
 
 # Add odom to state converter
 add_executable(convert_odom_to_state src/mighty/convert_odom_to_state.cpp)
@@ -128,7 +128,7 @@ install(TARGETS
   mighty
   fake_sim
   obstacle_tracker_node
-  convert_goal_to_cmd_vel
+  pure_pursuit
   convert_odom_to_state
   convert_vicon_to_state
   convert_velodyne_to_ros_time

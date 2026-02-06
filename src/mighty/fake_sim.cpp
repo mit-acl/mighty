@@ -60,6 +60,10 @@ public:
         this->declare_parameter<std::string>("odom_frame_id", "map");
         // If empty, we will set base_frame_id_ = target_frame_ (ns_/base_link)
         this->declare_parameter<std::string>("base_frame_id", "");
+        // Parameter to control TF publishing (disable for ground robots to avoid conflict with Gazebo)
+        this->declare_parameter<bool>("publish_tf", true);
+        // Parameter to control state publishing (disable for ground robots - use convert_odom_to_state instead)
+        this->declare_parameter<bool>("publish_state", true);
 
         // Get parameters
         auto start_pos = this->get_parameter("start_pos").as_double_array();
@@ -72,6 +76,8 @@ public:
         odom_topic_ = this->get_parameter("odom_topic").as_string();
         odom_frame_id_ = this->get_parameter("odom_frame_id").as_string();
         base_frame_id_param_ = this->get_parameter("base_frame_id").as_string();
+        publish_tf_ = this->get_parameter("publish_tf").as_bool();
+        publish_state_ = this->get_parameter("publish_state").as_bool();
 
         // Print parameters
         RCLCPP_INFO(this->get_logger(), "Start position: %f, %f, %f", start_pos[0], start_pos[1], start_pos[2]);
@@ -83,6 +89,8 @@ public:
         RCLCPP_INFO(this->get_logger(), "Odom topic: %s", odom_topic_.c_str());
         RCLCPP_INFO(this->get_logger(), "Odom frame: %s", odom_frame_id_.c_str());
         RCLCPP_INFO(this->get_logger(), "Base frame param: %s", base_frame_id_param_.c_str());
+        RCLCPP_INFO(this->get_logger(), "Publish TF: %d", publish_tf_);
+        RCLCPP_INFO(this->get_logger(), "Publish State: %d", publish_state_);
 
         // Initialize state
         state_ = dynus_interfaces::msg::State();
@@ -207,6 +215,8 @@ private:
 
     // Odometry options
     bool publish_odom_{false};
+    bool publish_tf_{true};     // Disable for ground robots to avoid TF conflict with Gazebo
+    bool publish_state_{true};  // Disable for ground robots - use convert_odom_to_state instead
     std::string odom_topic_{"odom"};
     std::string odom_frame_id_{"map"};
     std::string base_frame_id_param_{""};
@@ -353,9 +363,12 @@ private:
 
     void pubCallback()
     {
-        // Publish the transform
-        getTransformStamped();
-        br_.sendTransform(t_);
+        // Publish the transform (disabled for ground robots to avoid conflict with Gazebo)
+        if (publish_tf_)
+        {
+            getTransformStamped();
+            br_.sendTransform(t_);
+        }
 
         // Publish odometry (optional)
         if (publish_odom_)
@@ -375,9 +388,12 @@ private:
             std::thread(&FakeSim::sendGazeboState, this).detach();
         }
 
-        // Publish the state
-        state_.header.stamp = this->get_clock()->now();
-        pub_state_->publish(state_);
+        // Publish the state (disabled for ground robots - convert_odom_to_state publishes actual state)
+        if (publish_state_)
+        {
+            state_.header.stamp = this->get_clock()->now();
+            pub_state_->publish(state_);
+        }
     }
 
     visualization_msgs::msg::Marker getDroneMarker()

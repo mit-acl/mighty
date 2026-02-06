@@ -7,20 +7,29 @@ This script provides a unified interface to launch MIGHTY simulations in two mod
 2. Single-agent simulation with Gazebo and ACL mapper (gazebo)
 
 Usage:
-    # Multi-agent fake simulation (10 agents in a circle)
-    python3 scripts/run_sim.py --mode multiagent --setup-bash /path/to/install/setup.bash
+    # Multi-agent fake simulation (10 agents in a circle) - auto-detects workspace
+    python3 scripts/run_sim.py --mode multiagent
 
-    # Single-agent Gazebo simulation with default goal
-    python3 scripts/run_sim.py --mode gazebo --setup-bash /path/to/install/setup.bash
+    # Single-agent UAV Gazebo simulation with default goal
+    python3 scripts/run_sim.py --mode gazebo
 
-    # Single-agent Gazebo with custom goal
-    python3 scripts/run_sim.py --mode gazebo --setup-bash /path/to/install/setup.bash --goal 100 50 3
+    # Single-agent ground robot simulation (Pioneer 3-AT)
+    python3 scripts/run_sim.py --mode gazebo --ground-robot
+
+    # Ground robot with custom goal and environment
+    python3 scripts/run_sim.py --mode gazebo --ground-robot --env easy_forest --goal 50 30 1
+
+    # UAV with custom goal
+    python3 scripts/run_sim.py --mode gazebo --goal 100 50 3
 
     # Custom number of agents for multiagent mode
-    python3 scripts/run_sim.py --mode multiagent --setup-bash /path/to/install/setup.bash --num-agents 5
+    python3 scripts/run_sim.py --mode multiagent --num-agents 5
 
     # Custom environment for Gazebo mode
-    python3 scripts/run_sim.py --mode gazebo --setup-bash /path/to/install/setup.bash --env easy_forest
+    python3 scripts/run_sim.py --mode gazebo --env easy_forest
+
+    # Explicitly specify setup.bash if auto-detection fails
+    python3 scripts/run_sim.py --mode gazebo --setup-bash /path/to/install/setup.bash
 """
 
 import argparse
@@ -34,17 +43,28 @@ from pathlib import Path
 
 
 def find_setup_bash(args_setup_bash: str = None) -> Path:
-    """Find setup.bash path. Requires explicit --setup-bash argument."""
-    if not args_setup_bash:
-        print("[ERROR] --setup-bash is required. Please specify the path to setup.bash", file=sys.stderr)
-        print("  Example: python3 run_sim.py --mode gazebo --setup-bash /path/to/install/setup.bash", file=sys.stderr)
+    """Find setup.bash path. Auto-detects workspace if not specified."""
+    if args_setup_bash:
+        # User provided explicit path
+        path = Path(args_setup_bash)
+        if path.exists():
+            return path
+        print(f"[ERROR] Specified setup.bash not found: {args_setup_bash}", file=sys.stderr)
         sys.exit(1)
 
-    path = Path(args_setup_bash)
-    if path.exists():
-        return path
+    # Auto-detect: try to find workspace root
+    script_path = Path(__file__).resolve()
+    # Assume script is in: <workspace>/src/mighty/scripts/run_sim.py
+    workspace_root = script_path.parent.parent.parent.parent
+    setup_bash = workspace_root / "install" / "setup.bash"
 
-    print(f"[ERROR] Specified setup.bash not found: {args_setup_bash}", file=sys.stderr)
+    if setup_bash.exists():
+        print(f"[INFO] Auto-detected setup.bash at: {setup_bash}")
+        return setup_bash
+
+    print("[ERROR] Could not auto-detect setup.bash. Please specify with --setup-bash", file=sys.stderr)
+    print(f"  Searched at: {setup_bash}", file=sys.stderr)
+    print("  Example: python3 run_sim.py --mode gazebo --setup-bash /path/to/install/setup.bash", file=sys.stderr)
     sys.exit(1)
 
 
@@ -125,7 +145,7 @@ def generate_gazebo_yaml(setup_bash: Path, goal: tuple, sim_env: str,
                          env: str = 'hard_forest',
                          start_pos: tuple = (0, 0, 3.0), start_yaw: float = 1.57,
                          ros_domain_id: int = 7, use_rviz: bool = True,
-                         use_gazebo_gui: bool = False) -> str:
+                         use_gazebo_gui: bool = False, use_ground_robot: bool = False) -> str:
     """Generate YAML for single-agent Gazebo simulation."""
     goal_x, goal_y, goal_z = goal
     start_x, start_y, start_z = start_pos
@@ -136,21 +156,32 @@ def generate_gazebo_yaml(setup_bash: Path, goal: tuple, sim_env: str,
             'shell_command': [
                 'source /usr/share/gazebo/setup.bash',
                 f'ros2 launch mighty base_mighty.launch.py use_dyn_obs:=false '
-                f'use_gazebo_gui:={str(use_gazebo_gui).lower()} use_rviz:={str(use_rviz).lower()} env:={env}'
+                f'use_gazebo_gui:={str(use_gazebo_gui).lower()} use_rviz:={str(use_rviz).lower()} '
+                f'env:={env} use_ground_robot:={str(use_ground_robot).lower()}'
             ]
+        },
+        # Ground robot odom-to-state converter (only for ground robot)
+        # Converts /NX01/odom (from Gazebo diff_drive) to /NX01/state (for mapper and planner)
+        {
+            'shell_command': [
+                'sleep 10',
+                'ros2 run mighty convert_odom_to_state --ros-args -r __ns:=/NX01 -r odom:=odom -r state:=state'
+            ] if use_ground_robot else ['echo "Skipping convert_odom_to_state (UAV mode)"']
         },
         # ACL mapper
         {
             'shell_command': [
                 'sleep 10',
-                'ros2 launch global_mapper_ros global_mapper_node.launch.py use_gazebo:=true'
+                f'ros2 launch global_mapper_ros global_mapper_node.launch.py use_gazebo:=true '
+                f'param_file:={"global_mapper_ground_robot.yaml" if use_ground_robot else "global_mapper.yaml"}'
             ]
         },
         # Onboard agent NX01
         {
             'shell_command': [
                 'sleep 10',
-                f'ros2 launch mighty onboard_mighty.launch.py x:={start_x} y:={start_y} z:={start_z} yaw:={start_yaw} sim_env:={sim_env}'
+                f'ros2 launch mighty onboard_mighty.launch.py x:={start_x} y:={start_y} z:={start_z} yaw:={start_yaw} '
+                f'sim_env:={sim_env} use_ground_robot:={str(use_ground_robot).lower()}'
             ]
         },
         # Goal sender
@@ -199,7 +230,8 @@ def main():
     parser.add_argument(
         '--setup-bash', '-s',
         type=str,
-        required=True,
+        required=False,
+        default=None,
         help='Path to setup.bash (required)'
     )
 
@@ -276,6 +308,12 @@ def main():
     )
 
     parser.add_argument(
+        '--ground-robot',
+        action='store_true',
+        help='Use ground robot (Pioneer 3-AT) instead of UAV'
+    )
+
+    parser.add_argument(
         '--dry-run',
         action='store_true',
         help='Print the generated YAML without launching'
@@ -296,20 +334,41 @@ def main():
     else:  # gazebo
         sim_env = 'gazebo'
         use_rviz = args.rviz and not args.no_rviz
+
+        # Determine if using ground robot
+        use_ground_robot = args.ground_robot
+
+        # Map environment names to world files
+        env_to_world_mapping = {
+            'ACL_office': 'ACL_office',
+            'easy_forest': 'easy_forest',
+            'hard_forest': 'hard_forest',
+        }
+        world_name = env_to_world_mapping.get(args.env, args.env)
+
+        # Adjust start position z for ground robot (ground level vs flying)
+        start_pos = list(args.start)
+        if use_ground_robot and start_pos[2] == 3.0:  # Only adjust if using default z
+            start_pos[2] = 0.0  # Ground robot base_link at z=0 (wheels at ground)
+        start_pos = tuple(start_pos)
+
         yaml_content = generate_gazebo_yaml(
             setup_bash,
             goal=tuple(args.goal),
             sim_env=sim_env,
-            env=args.env,
-            start_pos=tuple(args.start),
+            env=world_name,
+            start_pos=start_pos,
             start_yaw=args.start_yaw,
             ros_domain_id=args.ros_domain_id,
             use_rviz=use_rviz,
-            use_gazebo_gui=args.gazebo_gui
+            use_gazebo_gui=args.gazebo_gui,
+            use_ground_robot=use_ground_robot
         )
         print(f"[INFO] Mode: Single-agent Gazebo simulation (sim_env={sim_env})")
-        print(f"[INFO] Environment: {args.env}")
-        print(f"[INFO] Start: ({args.start[0]}, {args.start[1]}, {args.start[2]})")
+        print(f"[INFO] Environment: {args.env} (world: {world_name})")
+        if use_ground_robot:
+            print(f"[INFO] Vehicle: Ground robot (Pioneer 3-AT)")
+        print(f"[INFO] Start: ({start_pos[0]}, {start_pos[1]}, {start_pos[2]})")
         print(f"[INFO] Goal: ({args.goal[0]}, {args.goal[1]}, {args.goal[2]})")
 
     if args.dry_run:

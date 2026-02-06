@@ -4,9 +4,6 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Common1/TF1/Frames1
-        - /NX011
-        - /NX011/Planning1
         - /NX011/Planning1/NX01 DGP Free Path1/Topic1
         - /NX011/Planning1/NX01 Traj1/Topic1
         - /NX011/Planning1/NX01 Subopt Trajs1/Topic1
@@ -65,29 +62,51 @@ Visualization Manager:
           Frames:
             All Enabled: false
             NX01/NX01_d435_bottom_screw_frame:
-              Value: true
+              Value: false
             NX01/NX01_d435_color_frame:
-              Value: true
+              Value: false
             NX01/NX01_d435_color_optical_frame:
-              Value: true
+              Value: false
             NX01/NX01_d435_depth_frame:
-              Value: true
+              Value: false
             NX01/NX01_d435_depth_optical_frame:
-              Value: true
+              Value: false
             NX01/NX01_d435_left_ir_frame:
-              Value: true
+              Value: false
             NX01/NX01_d435_left_ir_optical_frame:
-              Value: true
+              Value: false
             NX01/NX01_d435_link:
-              Value: true
+              Value: false
             NX01/NX01_d435_right_ir_frame:
-              Value: true
+              Value: false
             NX01/NX01_d435_right_ir_optical_frame:
-              Value: true
+              Value: false
             NX01/NX01_livox:
-              Value: true
+              Value: false
+            NX01/back_sonar:
+              Value: false
             NX01/base_link:
               Value: true
+            NX01/front_sonar:
+              Value: false
+            NX01/p3at_back_left_axle:
+              Value: false
+            NX01/p3at_back_left_hub:
+              Value: false
+            NX01/p3at_back_right_axle:
+              Value: false
+            NX01/p3at_back_right_hub:
+              Value: false
+            NX01/p3at_front_left_axle:
+              Value: false
+            NX01/p3at_front_left_hub:
+              Value: false
+            NX01/p3at_front_right_axle:
+              Value: false
+            NX01/p3at_front_right_hub:
+              Value: false
+            NX01/top_plate:
+              Value: false
             map:
               Value: true
           Marker Scale: 5
@@ -113,6 +132,24 @@ Visualization Manager:
                         NX01/NX01_d435_right_ir_optical_frame:
                           {}
                 NX01/NX01_livox:
+                  {}
+                NX01/back_sonar:
+                  {}
+                NX01/front_sonar:
+                  {}
+                NX01/p3at_back_left_axle:
+                  NX01/p3at_back_left_hub:
+                    {}
+                NX01/p3at_back_right_axle:
+                  NX01/p3at_back_right_hub:
+                    {}
+                NX01/p3at_front_left_axle:
+                  NX01/p3at_front_left_hub:
+                    {}
+                NX01/p3at_front_right_axle:
+                  NX01/p3at_front_right_hub:
+                    {}
+                NX01/top_plate:
                   {}
           Update Interval: 0
           Value: true
@@ -395,6 +432,19 @@ Visualization Manager:
                 Reliability Policy: Reliable
                 Value: /NX01/point_A
               Value: false
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: NX01 Lookahead Point
+              Namespaces:
+                lookahead: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX01/lookahead_marker
+              Value: true
           Enabled: true
           Name: Planning
         - Class: rviz_common/Group
@@ -6909,25 +6959,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 116.48082733154297
+      Distance: 35.3825569152832
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 55.6154899597168
-        Y: 1.5210497379302979
-        Z: 2.016340732574463
+        X: 11.28589153289795
+        Y: 1.012176275253296
+        Z: -5.949870586395264
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.544796347618103
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz_default_plugins)
-      Yaw: 4.699769973754883
+      Yaw: 4.709780216217041
     Saved: ~
 Window Geometry:
   Displays:

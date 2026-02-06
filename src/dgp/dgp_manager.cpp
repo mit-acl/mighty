@@ -243,6 +243,12 @@ bool DGPManager::solveDGP(const Vec3f &start_sent, const Vec3f &start_vel, const
     // Clean up path
     planner_ptr_->cleanUpPath(path);
 
+    // Enforce minimum spacing between consecutive points
+    // This removes points that are too close together (closer than max_dist_vertexes/3)
+    // preventing issues with trajectory optimization on tightly-spaced waypoints
+    const double min_spacing = max_dist_vertexes_ / 3.0;
+    mighty_utils::enforceMinimumSpacing(path, min_spacing);
+
     // // Add more vertices if necessary
     mighty_utils::createMoreVertexes(path, max_dist_vertexes_);
 

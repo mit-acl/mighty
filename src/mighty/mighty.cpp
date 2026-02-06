@@ -513,15 +513,24 @@ std::tuple<bool, bool> MIGHTY::replan(double last_replaning_computation_time, do
 
   /* -------------------- Append to Plan -------------------- */
 
-  MyTimer timer_append(true);
-  if (!appendToPlan())
+  // For ground robots, we don't need to maintain plan_ since we use pure pursuit lookahead directly
+  if (par_.vehicle_type != "uav")
   {
     if (par_.debug_verbose)
-      std::cout << "Append to Plan: " << timer_append.getElapsedMicros() / 1000.0 << " ms" << std::endl;
-    return std::make_tuple(false, true);
+      std::cout << "Append to Plan: 0 ms (skipped for ground robot)" << std::endl;
   }
-  if (par_.debug_verbose)
-    std::cout << "Append to Plan: " << timer_append.getElapsedMicros() / 1000.0 << " ms" << std::endl;
+  else
+  {
+    MyTimer timer_append(true);
+    if (!appendToPlan())
+    {
+      if (par_.debug_verbose)
+        std::cout << "Append to Plan: " << timer_append.getElapsedMicros() / 1000.0 << " ms" << std::endl;
+      return std::make_tuple(false, true);
+    }
+    if (par_.debug_verbose)
+      std::cout << "Append to Plan: " << timer_append.getElapsedMicros() / 1000.0 << " ms" << std::endl;
+  }
 
   /* -------------------- Final Housekeeping -------------------- */
 
@@ -552,11 +561,27 @@ bool MIGHTY::generateGlobalPath(vec_Vecf<3> &global_path, double current_time, d
   state local_A;
   double A_time;
 
-  // Find A and A_time
-  if (!findAandAtime(local_A, A_time, current_time, last_replaning_computation_time))
+  // For ground robots, use pure pursuit lookahead point for velocity direction
+  // For UAVs, compute point A from trajectory to account for momentum
+  if (par_.vehicle_type != "uav")
   {
-    replanning_failure_count_++;
-    return false;
+    // Ground robot: use current position but zero velocity
+    // This lets the optimizer plan freely without velocity direction constraint
+    state current_state;
+    getState(current_state);
+
+    local_A = current_state;
+    local_A.vel = Eigen::Vector3d(0.0, 0.0, 0.0);  // Zero initial velocity
+    A_time = current_time;
+  }
+  else
+  {
+    // UAV: find A and A_time from trajectory
+    if (!findAandAtime(local_A, A_time, current_time, last_replaning_computation_time))
+    {
+      replanning_failure_count_++;
+      return false;
+    }
   }
 
   // Set A and A_time
@@ -666,6 +691,15 @@ bool MIGHTY::planLocalTrajectory(vec_Vecf<3> &global_path)
     // std::cout << bold << red << "Global path's size is < 2 after trimming" << reset << std::endl;
     replanning_failure_count_++;
     return false;
+  }
+
+  // Truncate global path to num_N + 1 segments (num_N pieces need num_N+1 waypoints)
+  // This limits the local optimization horizon similar to dynus
+  if (par_.num_N > 0 && global_path.size() > static_cast<size_t>(par_.num_N + 1))
+  {
+    global_path.resize(par_.num_N + 1);
+    if (par_.debug_verbose)
+      std::cout << "[Local Traj] Truncated global path to " << global_path.size() << " points (num_N=" << par_.num_N << ")" << std::endl;
   }
 
   // If the global path has exactly 2 points, add a midpoint to make it 3 points
@@ -1117,8 +1151,43 @@ void MIGHTY::getState(state &state)
  */
 void MIGHTY::getLastPlanState(state &state)
 {
-  std::lock_guard<std::mutex> lock(mtx_plan_);
-  state = plan_.back();
+  // For ground robots, we don't maintain plan_, so just return the terminal goal
+  if (par_.vehicle_type != "uav")
+  {
+    getGterm(state);
+  }
+  else
+  {
+    std::lock_guard<std::mutex> lock(mtx_plan_);
+    state = plan_.back();
+  }
+}
+
+// ----------------------------------------------------------------------------
+
+/**
+ * @brief Sets the lookahead point from pure pursuit controller
+ * @param const Eigen::Vector3d &point: Lookahead point
+ */
+void MIGHTY::setLookaheadPoint(const Eigen::Vector3d &point)
+{
+  std::lock_guard<std::mutex> lock(mtx_lookahead_point_);
+  pure_pursuit_lookahead_point_ = point;
+  lookahead_point_received_ = true;
+}
+
+// ----------------------------------------------------------------------------
+
+/**
+ * @brief Gets the lookahead point from pure pursuit controller
+ * @param Eigen::Vector3d &point: Output lookahead point
+ * @param bool &received: Output flag indicating if lookahead has been received
+ */
+void MIGHTY::getLookaheadPoint(Eigen::Vector3d &point, bool &received)
+{
+  std::lock_guard<std::mutex> lock(mtx_lookahead_point_);
+  point = pure_pursuit_lookahead_point_;
+  received = lookahead_point_received_;
 }
 
 // ----------------------------------------------------------------------------

@@ -106,6 +106,9 @@ namespace mighty_utils
     // create more vertexes in path
     void createMoreVertexes(vec_Vecf<3>& path, double d);
 
+    // enforce minimum spacing between consecutive path points
+    void enforceMinimumSpacing(vec_Vecf<3>& path, double min_spacing);
+
     // euclidean distance
     double euclideanDistance(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2);
 

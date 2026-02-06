@@ -15,7 +15,7 @@ mighty_node:
         sim_env: "fake_sim"                            # ["gazebo", "fake_sim"]
 
         # Vehicle type
-        vehicle_type: "uav"                                     # ["uav", "ground_robot", "qudruped_robot"]
+        vehicle_type: "ground_robot"                                     # ["uav", "ground_robot", "qudruped_robot"]
         
         # Hardware-related parameters
         provide_goal_in_global_frame: false                     # [-] Provide goal in the global frame
@@ -30,7 +30,7 @@ mighty_node:
         # Gloabl planner parameters
         global_planner: "astar_heat"                            # ["sjps", "astar_heat"]
         factor_dgp: 1.0                                         # do not change - [m] actual_resolution = factor_dgp * (resolution of the map)
-        inflation_dgp: 0.45                                     # [m] The obstacles are inflated (to run DGP) by this amount
+        inflation_dgp: 0.3                                     # [m] The obstacles are inflated (to run DGP) by this amount
         x_min: -1000.0                                          # [m] x_min of the map
         x_max: 1000.0                                           # [m] x_max of the map
         y_min: -1000.0                                          # [m] y_min of the map
@@ -51,7 +51,7 @@ mighty_node:
 
         # Post global path smoothing parameters
         los_cells: 3                                 # [cells] number of cells for the line-of-sight inflation for the post global path smoothing
-        min_len: 1.0                               # [m] minimum length for the post global path smoothing
+        min_len: 0.0                               # [m] minimum length for the post global path smoothing
         min_turn: 0.0                           # [deg] minimum turn angle for the post global path smoothing
 
         # Decomposition module parameters
@@ -65,13 +65,13 @@ mighty_node:
         horizon: 15.0                               # [m] Horizon
         dc: 0.01                                    # [s] Duration for the interpolation=Value of the timer pubGoal
         v_max: 1.0                                  # [m/s]  max velocity
-        a_max: 50.0                                 # [m/s2] max acceleration
-        j_max: 100.0                                 # [m/s3] max jerk
+        a_max: 5.0                                 # [m/s2] max acceleration
+        j_max: 10.0                                 # [m/s3] max jerk
         dynamic_weight: 1e+3                        # [-] Weight of the obstacles and agents distance in the optimization
-        time_weight: 5e+2                           # [-] Weight of the time cost in the optimization
+        time_weight: 1e+3                           # [-] Weight of the time cost in the optimization
         pos_anchor_weight: 0.0                      # [-] Weight of the position anchors in the optimization
         stat_weight: 1e+3                           # [-] Weight of the static obstacles in the optimization
-        jerk_weight: 1e-1                           # [-] Weight of the jerk in the optimization
+        jerk_weight: 1e-3                           # [-] Weight of the jerk in the optimization
         dyn_constr_vel_weight: 1e+3                 # [-] Weight of the velocity constraints violation in the optimization
         dyn_constr_acc_weight: 1e+3                 # [-] Weight of the acceleration constraints violation in the optimization
         dyn_constr_jerk_weight: 1e+3                # [-] Weight of the jerk constraints violation in the optimization
@@ -79,7 +79,7 @@ mighty_node:
         dyn_constr_tilt_weight: 0.0                 # [-] Weight of the tilt constraints violation in the optimization
         dyn_constr_thrust_weight: 0.0               # [-] Weight of the thrust constraints violation in the optimization
         num_dyn_obst_samples: 10                    # [-] Number of samples for the dynamic obstacles in the optimization
-        planner_Co: 0.1                             # [-] Collision clearance thresh for static obstacles in the optimization
+        planner_Co: 0.3                             # [-] Collision clearance thresh for static obstacles in the optimization
         planner_Cw: 1.3                             # [-] Collision clearance thresh for dynamic obstacles in the optimization
         drone_bbox: [0.5, 0.5, 0.5]                 # [m] Size of the bounding box for the obstacles
         goal_radius: 0.5                           # [m] Radius of the goal
@@ -100,7 +100,7 @@ mighty_node:
         cautious_factor: 1.0e-6
         past: 3
         max_linesearch: 64  
-        max_iterations: 1000 
+        max_iterations: 0 
         g_epsilon: 1.0e-5
         delta: 1.0e-6
 
@@ -210,7 +210,24 @@ mighty_node:
         static_heat_p: 2
         static_heat_Hmax: 50.0
         static_heat_rmax_m: 2.0
-        static_heat_default_radius_m: 0.5
+        static_heat_default_radius_m: 2.0
         static_heat_boundary_only: true
         static_heat_apply_on_unknown: false
         static_heat_exclude_dynamic: true
+
+        # Trajectory publishing parameters
+        trajectory_downsample_points: 500  # [-] Number of points to downsample trajectory to (~10x denser than 50)
+
+        # Ground robot planning parameters
+        ground_robot_L_min: 1.0       # [m] Lookahead distance for point A (planning start point)
+        ground_robot_v_max: 1.0       # [m/s] Maximum linear velocity for ground robot
+        ground_robot_w_max: 3.0       # [rad/s] Maximum angular velocity for smooth tracking
+
+        # Pure pursuit controller parameters (for vehicle_type: "ground_robot")
+        pure_pursuit_L_min: 0.8       # [m] Minimum lookahead distance (higher = smoother)
+        pure_pursuit_k_v: 0.5         # [s] Velocity-dependent lookahead factor (L = L_min + k_v * v)
+        pure_pursuit_stopping_radius: 0.1  # [m] Stop when within this distance of goal
+        pure_pursuit_adaptive_lookahead_distance: 2.0  # [m] Start reducing lookahead when within this distance of goal
+        pure_pursuit_turn_in_place_threshold_deg: 20.0  # [deg] Heading error threshold for turn-in-place behavior
+        pure_pursuit_slow_down_threshold_deg: 5.0      # [deg] Heading error threshold for speed reduction
+        pure_pursuit_w_smoothing_alpha: 0.2             # [-] Angular velocity smoothing (0 = no smoothing, 1 = full smoothing)

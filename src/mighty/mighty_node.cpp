@@ -100,6 +100,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   // Essential publishers
   pub_own_traj_ = this->create_publisher<dynus_interfaces::msg::DynTraj>("/trajs", critical_qos);
   pub_goal_ = this->create_publisher<dynus_interfaces::msg::Goal>("goal", critical_qos);
+  pub_trajectory_ = this->create_publisher<dynus_interfaces::msg::Trajectory>("trajectory", critical_qos);
   pub_goal_reached_ = this->create_publisher<std_msgs::msg::Empty>("goal_reached", critical_qos);
   pub_command_to_exec_time_ = this->create_publisher<std_msgs::msg::Float64>("command_to_exec_time", 10);
 
@@ -108,6 +109,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   sub_predicted_traj_ = this->create_subscription<dynus_interfaces::msg::DynTraj>("predicted_trajs", critical_qos, std::bind(&MIGHTY_NODE::trajCallback, this, std::placeholders::_1), options_re_1);
   sub_state_ = this->create_subscription<dynus_interfaces::msg::State>("state", critical_qos, std::bind(&MIGHTY_NODE::stateCallback, this, std::placeholders::_1), options_re_1);
   sub_terminal_goal_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("term_goal", critical_qos, std::bind(&MIGHTY_NODE::terminalGoalCallback, this, std::placeholders::_1));
+  sub_lookahead_point_ = this->create_subscription<geometry_msgs::msg::PointStamped>("lookahead_point", 10, std::bind(&MIGHTY_NODE::lookaheadPointCallback, this, std::placeholders::_1));
 
   // Timer for callback
   timer_replanning_ = this->create_wall_timer(10ms, std::bind(&MIGHTY_NODE::replanCallback, this), this->cb_group_replan_);
@@ -292,6 +294,7 @@ void MIGHTY_NODE::declareParameters()
   this->declare_parameter("r_max_for_ig", 1.0);
 
   // Optimization parameters
+  this->declare_parameter("num_N", 5);
   this->declare_parameter("horizon", 20.0);
   this->declare_parameter("dc", 0.01);
   this->declare_parameter("v_max", 1.0);
@@ -355,8 +358,19 @@ void MIGHTY_NODE::declareParameters()
   this->declare_parameter("force_goal_z", true);
   this->declare_parameter("default_goal_z", 2.5);
 
-  // Debug flag
+  // Debug flags
   this->declare_parameter("debug_verbose", false);
+
+  // Ground robot control parameters
+  this->declare_parameter("ground_robot_kx", 0.1);
+  this->declare_parameter("ground_robot_ky", 0.1);
+  this->declare_parameter("ground_robot_kyaw", 1.0);
+  this->declare_parameter("ground_robot_eps", 0.1);
+  this->declare_parameter("ground_robot_v_max", 1.0);
+  this->declare_parameter("ground_robot_w_max", 1.5);
+  this->declare_parameter("ground_robot_L_min", 1.0);
+
+  this->declare_parameter("trajectory_downsample_points", 500);
 }
 
 // ----------------------------------------------------------------------------
@@ -479,6 +493,7 @@ void MIGHTY_NODE::setParameters()
   par_.r_max_for_ig = this->get_parameter("r_max_for_ig").as_double();
 
   // Optimization parameters
+  par_.num_N = this->get_parameter("num_N").as_int();
   par_.horizon = this->get_parameter("horizon").as_double();
   par_.dc = this->get_parameter("dc").as_double();
   par_.v_max = this->get_parameter("v_max").as_double();
@@ -553,8 +568,19 @@ void MIGHTY_NODE::setParameters()
     RCLCPP_ERROR(this->get_logger(), "Default goal z is higher than the max level");
   }
 
-  // Debug flag
+  // Debug flags
   par_.debug_verbose = this->get_parameter("debug_verbose").as_bool();
+
+  // Ground robot control parameters
+  par_.ground_robot_kx = this->get_parameter("ground_robot_kx").as_double();
+  par_.ground_robot_ky = this->get_parameter("ground_robot_ky").as_double();
+  par_.ground_robot_kyaw = this->get_parameter("ground_robot_kyaw").as_double();
+  par_.ground_robot_eps = this->get_parameter("ground_robot_eps").as_double();
+  par_.ground_robot_v_max = this->get_parameter("ground_robot_v_max").as_double();
+  par_.ground_robot_w_max = this->get_parameter("ground_robot_w_max").as_double();
+  par_.ground_robot_L_min = this->get_parameter("ground_robot_L_min").as_double();
+
+  par_.trajectory_downsample_points = this->get_parameter("trajectory_downsample_points").as_int();
 }
 
 // ----------------------------------------------------------------------------
@@ -812,11 +838,21 @@ void MIGHTY_NODE::stateCallback(const dynus_interfaces::msg::State::SharedPtr ms
 // ----------------------------------------------------------------------------
 
 /**
+ * @brief Callback function for lookahead point from pure pursuit controller
+ */
+void MIGHTY_NODE::lookaheadPointCallback(const geometry_msgs::msg::PointStamped::SharedPtr msg)
+{
+  Eigen::Vector3d lookahead_point(msg->point.x, msg->point.y, msg->point.z);
+  mighty_ptr_->setLookaheadPoint(lookahead_point);
+}
+
+// ----------------------------------------------------------------------------
+
+/**
  * @brief Callback function for replanning
  */
 void MIGHTY_NODE::replanCallback()
 {
-
   // Get the current time as double
   double current_time = this->now().seconds();
 
@@ -838,6 +874,12 @@ void MIGHTY_NODE::replanCallback()
   // To share trajectory with other agents
   if (replanning_result)
     publishOwnTraj();
+
+  // Publish full trajectory for ground robot tracking (increments trajectory_id on replan)
+  if (replanning_result)
+  {
+    publishTrajectory();
+  }
 
   // Publish command-to-execution time (time from goal received to first trajectory)
   if (replanning_result && waiting_for_first_traj_)
@@ -1647,6 +1689,71 @@ void MIGHTY_NODE::publishGoal()
   // Publish FOV
   if (par_.visual_level >= 1)
     publishFOV();
+}
+
+// ----------------------------------------------------------------------------
+
+/**
+ * @brief Publish the full trajectory for robust tracking with replan support
+ */
+void MIGHTY_NODE::publishTrajectory()
+{
+  // Retrieve the goal setpoints (full trajectory)
+  mighty_ptr_->retrieveGoalSetpoints(goal_setpoints_);
+
+  if (goal_setpoints_.empty())
+  {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                         "Cannot publish trajectory: goal_setpoints_ is empty");
+    return;
+  }
+
+  // Increment trajectory_id for new trajectory (replan detected by change in ID)
+  trajectory_id_++;
+
+  // Downsample trajectory: publish ~50 points instead of all points
+  const size_t target_points = par_.trajectory_downsample_points;
+  size_t total_points = goal_setpoints_.size();
+  size_t step = std::max(size_t(1), total_points / target_points);
+
+  // Create trajectory message
+  dynus_interfaces::msg::Trajectory traj_msg;
+  traj_msg.header.stamp = this->now();
+  traj_msg.header.frame_id = "map";
+  traj_msg.trajectory_id = trajectory_id_;
+  traj_msg.dt = par_.dc * step;  // Adjusted time step for downsampled trajectory
+
+  // Downsample: take every 'step' points
+  traj_msg.goals.reserve(target_points);
+  for (size_t i = 0; i < goal_setpoints_.size(); i += step)
+  {
+    const auto& state_point = goal_setpoints_[i];
+    dynus_interfaces::msg::Goal goal;
+    goal.p = eigen2rosvector(state_point.pos);
+    goal.v = eigen2rosvector(state_point.vel);
+    goal.a = eigen2rosvector(state_point.accel);
+    goal.j = eigen2rosvector(state_point.jerk);
+    goal.yaw = state_point.yaw;
+    goal.dyaw = state_point.dyaw;
+    traj_msg.goals.push_back(goal);
+  }
+
+  // Always include the last point
+  if (!goal_setpoints_.empty() && (goal_setpoints_.size() - 1) % step != 0)
+  {
+    const auto& last_point = goal_setpoints_.back();
+    dynus_interfaces::msg::Goal goal;
+    goal.p = eigen2rosvector(last_point.pos);
+    goal.v = eigen2rosvector(last_point.vel);
+    goal.a = eigen2rosvector(last_point.accel);
+    goal.j = eigen2rosvector(last_point.jerk);
+    goal.yaw = last_point.yaw;
+    goal.dyaw = last_point.dyaw;
+    traj_msg.goals.push_back(goal);
+  }
+
+  // Publish trajectory
+  pub_trajectory_->publish(traj_msg);
 }
 
 // ----------------------------------------------------------------------------
