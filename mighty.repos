@@ -3,7 +3,7 @@ repositories:
   mighty:
     type: git
     url: git@github.com:mit-acl/mighty.git
-    version: 4f5bb367dbab0683f1666ebe3838a7c4807c88b7
+    version: 6237c6524df309e50e34b5501cbef70b2e1c6d80
 
   # ROS 2 dependencies (build with colcon)
   acl-mapping:
@@ -13,7 +13,7 @@ repositories:
   dynus_interfaces:
     type: git
     url: https://github.com/kotakondo/dynus_interfaces.git
-    version: 8b7237d293299a73a5986d044f5460ce432c4a8f
+    version: ec381d5efeaaa5d25c73a3453d4dc78d59a6594c
   gazebo_ros_pkgs:
     type: git
     url: https://github.com/kotakondo/gazebo_ros_pkgs.git
