@@ -124,7 +124,7 @@ mighty_node:
 
         # Simulation env parameters
         force_goal_z: true                     # [-] Force the goal to be at the certain height since Rviz GUI's goal's z is 0
-        default_goal_z: 1.0                     # [m] Default goal height
+        default_goal_z: 0.0                     # [m] Default goal height (ground level)
         
         # Debug flags
         global_planner_verbose: false           # debug output

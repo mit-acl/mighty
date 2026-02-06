@@ -21,7 +21,8 @@
   <xacro:arg name="d435_range_max_depth" default="5.0" />
 
   <xacro:include filename="$(find mighty)/urdf/pioneer3at_body.urdf.xacro" />
-  <xacro:p3at_gazebo_ext name="$(arg namespace)_red_rover" namespace="$(arg namespace)" />
+  <!-- Disabled: fake_sim handles teleport and TF for ground robot -->
+  <!-- <xacro:p3at_gazebo_ext name="$(arg namespace)_red_rover" namespace="$(arg namespace)" /> -->
 
   <xacro:include filename="$(find ros2_livox_simulation)/urdf/mid360.xacro" />
   <xacro:mid360 name="$(arg namespace)_livox" namespace="$(arg namespace)" parent="base_link" topic="mid360" >

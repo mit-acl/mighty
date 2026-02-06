@@ -195,9 +195,9 @@ def generate_launch_description():
                     emulate_tty=True,
                     parameters=[{"start_pos": [float(x), float(y), float(z)],
                                  "start_yaw": float(yaw),
-                                 "send_state_to_gazebo": parameters['sim_env'] == 'gazebo' and not use_ground_robot,
-                                 "publish_tf": not use_ground_robot,     # Disable TF for ground robots (Gazebo publishes it)
-                                 "publish_state": not use_ground_robot,  # Disable state for ground robots (convert_odom_to_state publishes it)
+                                 "send_state_to_gazebo": parameters['sim_env'] == 'gazebo',
+                                 "publish_tf": True,
+                                 "publish_state": True,
                                  "use_ground_robot": use_ground_robot,
                                 #  "visual_level": parameters['visual_level'],
                                  "publish_odom": publish_odom,
