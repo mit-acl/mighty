@@ -43,6 +43,7 @@ private:
     double kdist_;
     double kw_;
     double kyaw_;
+    double kdyaw_;
     double kalpha_;
     double kx_;
     double ky_;
@@ -51,6 +52,12 @@ private:
     // Flags
     bool state_initialized_;
     bool goal_initialized_;
+
+    // yaw damping
+    double prev_yaw_;
+    double eyawd_filtered_;
+    double prev_time_;
+    double total_err_;
 };
 
 #endif // GOAL_TO_CMD_VEL_HPP

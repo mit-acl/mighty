@@ -18,6 +18,7 @@ GoalToCmdVel::GoalToCmdVel() : Node("goal_to_cmd_vel"),
     this->declare_parameter("ground_robot_kx", 1.0);
     this->declare_parameter("ground_robot_ky", 1.0);
     this->declare_parameter("ground_robot_kyaw", 1.0);
+    this->declare_parameter("ground_robot_kdyaw", 1.0);
     this->declare_parameter("ground_robot_eps", 1e-2);
 
     state_.pos.x = this->get_parameter("x").as_double();
@@ -42,11 +43,14 @@ GoalToCmdVel::GoalToCmdVel() : Node("goal_to_cmd_vel"),
     kx_ = this->get_parameter("ground_robot_kx").as_double();
     ky_ = this->get_parameter("ground_robot_ky").as_double();
     kyaw_ = this->get_parameter("ground_robot_kyaw").as_double();
+    kdyaw_ = this->get_parameter("ground_robot_kdyaw").as_double();
     eps_ = this->get_parameter("ground_robot_eps").as_double();
 
     std::cout << "kx_: " << kx_ << std::endl;
     std::cout << "ky_: " << ky_ << std::endl;
+    std::cout << "ki_: " << ky_ << std::endl;
     std::cout << "kyaw_: " << kyaw_ << std::endl;
+    std::cout << "kdyaw_: " << kdyaw_ << std::endl;
     std::cout << "eps_: " << eps_ << std::endl;
 
     // Initialize goal
@@ -71,6 +75,12 @@ GoalToCmdVel::GoalToCmdVel() : Node("goal_to_cmd_vel"),
     timer_ = this->create_wall_timer(
         std::chrono::milliseconds(10),
         std::bind(&GoalToCmdVel::cmdVelCallback, this));
+
+    // initialze yaw damping vars
+    prev_yaw_ = 0.0;
+    eyawd_filtered_ = 0.0;
+    total_err_ = 0.0;
+    prev_time_ = this->now().seconds();
 }
 
 void GoalToCmdVel::stateCallback(const dynus_interfaces::msg::State::SharedPtr msg)

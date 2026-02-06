@@ -1606,7 +1606,7 @@ void MIGHTY_NODE::publishTraj()
   {
     visualization_msgs::msg::MarkerArray clear_msg;
     visualization_msgs::msg::Marker clear_m;
-    clear_m.header.frame_id = "map";
+    clear_m.header.frame_id = "RR06/map";
     clear_m.header.stamp = now;
     clear_m.action = visualization_msgs::msg::Marker::DELETEALL;
     clear_msg.markers.push_back(clear_m);

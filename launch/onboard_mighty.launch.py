@@ -54,10 +54,6 @@ def generate_launch_description():
         depth_camera_name = LaunchConfiguration('depth_camera_name').perform(context)
         robot_type = LaunchConfiguration('robot_type').perform(context) 
         
-        print(f"DEFAULT Z: {z}")
-        print(f"ROBOT TYPE: {robot_type}")
-        print(f"USE HARDWARE: {use_hardware}")
-        print(f"ROBOT TYPE == RED_ROVER: {robot_type == RED_ROVER}")
         # Robot specific parameters 
         cmd_vel_topic_name = 'cmd_vel_auto' 
         if not use_hardware: 
@@ -70,6 +66,7 @@ def generate_launch_description():
             param_file_name = 'hw_mighty_star.yaml'
         elif robot_type == QUADROTOR: 
             param_file_name = 'hw_mighty.yaml' 
+    
 
         # Get param file for appropriate robot 
         parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', param_file_name)  
@@ -102,8 +99,9 @@ def generate_launch_description():
                     parameters=[parameters],
                     remappings=[('lidar_cloud_in', lidar_point_cloud_topic),
                                 ('depth_camera_cloud_in', f'{depth_camera_name}/depth/color/points')],
-                    arguments=['--ros-args', '--log-level', 'error']
-                    # prefix='xterm -e gdb -q -ex run --args', # gdb debugging
+                    arguments=['--ros-args', '--log-level', 'error'],
+                    # prefix=['xterm', '-e', 'gdb', '-q', '-ex', 'run', '--args'], # gdb debugging,
+                    # arguments=['--ros-args', '--log-level', 'error']
         )
 
         # Robot state publisher node

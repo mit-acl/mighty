@@ -15,8 +15,8 @@ mighty_node:
         vehicle_type: "ground_robot"                                     # ["uav", "ground_robot", "qudruped_robot"]
         
         # Hardware-related parameters
-        provide_goal_in_global_frame:  # Should be true when not using rviz interface                     # [-] Provide goal in the global frame
-        use_hardware: false                                     # [-] Use hardware
+        provide_goal_in_global_frame: false # Should be true when not using rviz interface                     # [-] Provide goal in the global frame
+        use_hardware: true                                     # [-] Use hardware
         
         # Flight mode should be terminal_goal 
         flight_mode: "terminal_goal"                            # ["terminal_goal"]
@@ -167,6 +167,14 @@ mighty_node:
         box_visualization_duration: 1.0             # [s] Duration to visualize the bounding box
         velocity_threshold: 0.8                     # [m/s] Velocity threshold to characterize as dynamic obstacles
         acceleration_threshold: 2.0                 # [m/s2] Acceleration threshold to characterize as dynamic obstacles
+
+        # Ground robot control gains
+        ground_robot_kx: 0.05              # [-] Ground robot proportional gain for x
+        ground_robot_ky: 0.8               # [-] Ground robot proportional gain for y
+        ground_robot_ki: 0.0               # [-] Ground robot integral gain
+        ground_robot_kyaw: 0.15            # [-] Ground robot proportional gain for yaw
+        ground_robot_kdyaw: 0.001          # [-] Ground robot derivative gain for yaw
+        ground_robot_eps: 0.12             # [-] Ground robot epsilon
 
         # Path push visualization parameters (if we wanna visualize the path push - just flip all the flags)
         use_state_update: true                  # [-] Use ego-agent's state update - if false, we fix the ego-agent's state (this is useful for path push visualization)
