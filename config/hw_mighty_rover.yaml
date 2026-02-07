@@ -37,15 +37,15 @@ mighty_node:
         x_max: 1000.0                                           # [m] x_max of the map
         y_min: -1000.0                                          # [m] y_min of the map
         y_max: 1000.0                                           # [m] y_max of the map
-        z_min: -0.4                                              # [m] points below this are considered ground
-        z_max: 1.5 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
+        z_min: 0.0                                              # [m] points below this are considered ground
+        z_max: 1.0 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
         dgp_timeout_duration_ms: 10000                          # [ms] Timeout duration for the DGP
         use_free_start: true                                    # [-] Use free start for the DGP
         free_start_factor: 6.0 #1.0                                  # [-] Factor for the free start
         use_free_goal: true                                    # [-] Use free goal for the DGP
         free_goal_factor: 3.0                                   # [-] Factor for the free goal
         global_planner_huristic_weight: 2.0         # [-] Weight for the heuristic in the global planner
-        num_N: 5                                    # [-] Number of segments
+        num_N: 3                                    # [-] Number of segments
         max_dist_vertexes: 2.0                      # [m] Maximum distance between two consecutive vertexes
         w_unknown: 0.0                              # [-] Weight for the unknown cells in the global planner
         w_align: 0.0                              # [-] Weight for the alignment with the initial velocity in the global planner
@@ -58,7 +58,7 @@ mighty_node:
         min_turn: 0.0                           # [deg] minimum turn angle for the post global path smoothing
 
         # Decomposition module parameters
-        local_box_size: [1.0, 1.0, 1.0]         # [m] Size of the local box (smaller, faster)
+        local_box_size: [3.0, 3.0, 1.0]         # [m] Size of the local box (smaller, faster)
         min_dist_from_agent_to_traj: 10.0        # [m] Minimum distance from the agent to the trajectory
         use_shrinked_box: false                 # [-] Use shrinked box for the convex decomposition
         shrinked_box_size: 0.0                  # [m] Size of the shrinked box
@@ -70,7 +70,7 @@ mighty_node:
         v_max: 0.5 #1.0                                  # [m/s]  max velocity
         a_max: 3.0 #3.0                                 # [m/s2] max acceleration
         j_max: 5.0 #5.0                              # [m/s3] max jerk
-        dynamic_weight: 1e+1                        # [-] Weight of the obstacles and agents distance in the optimization
+        dynamic_weight: 1e+0                        # [-] Weight of the obstacles and agents distance in the optimization
         time_weight: 5e+2                            # [-] Weight of the time cost in the optimization
         pos_anchor_weight: 0.0                      # [-] Weight of the position anchors in the optimization
         stat_weight: 1e+3                           # [-] Weight of the static obstacles in the optimization
@@ -127,7 +127,7 @@ mighty_node:
 
         # Simulation env parameters
         force_goal_z: false                     # [-] Force the goal to be at the certain height since Rviz GUI's goal's z is 0
-        default_goal_z: 0.0                    # [m] Default goal height
+        default_goal_z: 0.5                    # [m] Default goal height
 
         # Debug flags
         global_planner_verbose: false           # debug output
@@ -202,7 +202,7 @@ mighty_node:
         heat_weight: 1.0
 
         # Dynamic obstacle heat (time-varying soft costs)
-        dynamic_heat_enabled: false
+        dynamic_heat_enabled: true
         dynamic_as_occupied_current: true
         dynamic_as_occupied_future: false
         heat_alpha0: 1.0
@@ -211,7 +211,7 @@ mighty_node:
         heat_q: 2
         heat_tau_ratio: 0.5
         heat_gamma: 0.0
-        heat_Hmax: 10.0
+        heat_Hmax: 50.0
         dyn_base_inflation_m: 0.5
         heat_num_samples: 15
 
@@ -220,8 +220,8 @@ mighty_node:
         static_heat_alpha: 2.0
         static_heat_p: 2
         static_heat_Hmax: 100.0
-        static_heat_rmax_m: 5.0
-        static_heat_default_radius_m: 5.0
+        static_heat_rmax_m: 1.0
+        static_heat_default_radius_m: 1.0
         static_heat_boundary_only: true
         static_heat_apply_on_unknown: false
         static_heat_exclude_dynamic: true

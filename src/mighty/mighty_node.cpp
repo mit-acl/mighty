@@ -2047,7 +2047,7 @@ void MIGHTY_NODE::publishGlobalPath()
         /*line_width=*/0.03,   // meters
         /*dot_diameter=*/0.06, // meters
         /*base_id=*/50000,
-        /*frame_id=*/"map",
+        /*frame_id=*/par_.map_frame_id,
         /*lifetime_sec=*/1.0);
 
     pub_dgp_path_marker_->publish(dgp_path_marker_);
@@ -2069,7 +2069,7 @@ void MIGHTY_NODE::publishGlobalPath()
         /*line_width=*/0.03,   // meters
         /*dot_diameter=*/0.06, // meters
         /*base_id=*/60000,
-        /*frame_id=*/"map",
+        /*frame_id=*/par_.map_frame_id,
         /*lifetime_sec=*/1.0);
 
     pub_original_dgp_path_marker_->publish(original_dgp_path_marker_);
