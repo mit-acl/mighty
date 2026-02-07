@@ -133,6 +133,7 @@ void ObstacleTrackerNode::declareAndsetParameters()
     this->declare_parameter("velocity_threshold", 0.1);
     this->declare_parameter("acceleration_threshold", 0.1);
     this->declare_parameter("use_hardware", false);
+    this->declare_parameter("map_frame_id", "map");
 
     // Set parameters
     visual_level_ = this->get_parameter("visual_level").as_int();
@@ -152,6 +153,7 @@ void ObstacleTrackerNode::declareAndsetParameters()
     velocity_threshold_ = this->get_parameter("velocity_threshold").as_double();
     acceleration_threshold_ = this->get_parameter("acceleration_threshold").as_double();
     use_hardware_ = this->get_parameter("use_hardware").as_bool();
+    frame_id_ = this->get_parameter("map_frame_id").as_string();
 
     // Print the parameters
     // RCLCPP_INFO(this->get_logger(), "visual_level: %d", visual_level_);

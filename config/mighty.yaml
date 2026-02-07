@@ -20,8 +20,10 @@ mighty_node:
         # Hardware-related parameters
         provide_goal_in_global_frame: false                     # [-] Provide goal in the global frame
         use_hardware: false                                     # [-] Use hardware
-        
-        # Flight mode should be terminal_goal 
+        use_frame_alignment: false                               # [-] Use inter-agent frame alignment
+        num_agents: 10                                           # [-] Number of agents (for frame alignment subscriptions)
+
+        # Flight mode should be terminal_goal
         flight_mode: "terminal_goal"                            # ["terminal_goal"]
 
         # Visual (for real-world implementation, visual should be 0)

@@ -51,6 +51,7 @@ private:
     double slow_down_threshold_;     // Heading error threshold for speed reduction (rad)
     double w_smoothing_alpha_;       // Angular velocity smoothing factor (0 = no smoothing)
     bool use_hardware_;
+    std::string map_frame_id_;
     double prev_w_command_ = 0.0;
 };
 

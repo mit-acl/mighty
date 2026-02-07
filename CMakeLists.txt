@@ -157,6 +157,7 @@ install(PROGRAMS
   benchmarking/dynamic_obstacle_benchmark_node.py
   benchmarking/unc_benchmark_node.py
   scripts/repub_rviz_2Dgoal.py
+  scripts/frame_align_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

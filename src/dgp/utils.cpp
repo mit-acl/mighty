@@ -87,7 +87,7 @@ void pathLineDotsToMarkerArray(
 }
 
 void vectorOfVectors2MarkerArray(vec_Vecf<3> traj, visualization_msgs::msg::MarkerArray *m_array, std_msgs::msg::ColorRGBA color,
-                                 int type, std::vector<double> radii)
+                                 int type, std::vector<double> radii, const std::string &frame_id)
 {
 
   if (traj.size() == 0)
@@ -114,7 +114,7 @@ void vectorOfVectors2MarkerArray(vec_Vecf<3> traj, visualization_msgs::msg::Mark
     m.id = i;
     m.color = color;
     // m.scale.z = 1;
-    m.header.frame_id = "map";
+    m.header.frame_id = frame_id;
     // m.header.stamp = rclcpp::Clock().now();
     geometry_msgs::msg::Point p = eigen2point(it);
     if (type == visualization_msgs::msg::Marker::ARROW)
@@ -1103,14 +1103,15 @@ vec_Vecf<3> copyJPS(vec_Vecf<3> path)
 }
 
 visualization_msgs::msg::MarkerArray stateVector2ColoredMarkerArray(
-    const std::vector<state> &data, int type, double max_value, const rclcpp::Time &stamp)
+    const std::vector<state> &data, int type, double max_value, const rclcpp::Time &stamp,
+    const std::string &frame_id)
 {
   visualization_msgs::msg::MarkerArray marker_array;
   if (data.empty())
     return marker_array;
 
   visualization_msgs::msg::Marker m;
-  m.header.frame_id = "map";
+  m.header.frame_id = frame_id;
   m.header.stamp = stamp;
   m.ns = "state_vec";
   m.id = type; // single marker per type

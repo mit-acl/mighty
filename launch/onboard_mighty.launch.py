@@ -40,6 +40,11 @@ def generate_launch_description():
     use_onboard_localization_arg = DeclareLaunchArgument('use_onboard_localization', default_value='false', description='Use onboard localization (DLIO) vs Vicon')
     depth_camera_name_arg = DeclareLaunchArgument('depth_camera_name', default_value='d435', description='Depth camera name for topic remapping')
     robot_type_arg = DeclareLaunchArgument('robot_type', default_value='quadrotor', description='Robot type: quadrotor, red_rover, star_robot')
+    num_agents_arg = DeclareLaunchArgument('num_agents', default_value='10', description='Number of agents (for frame alignment subscriptions)')
+    map_frame_id_arg = DeclareLaunchArgument('map_frame_id', default_value='',
+        description='Override map frame ID (empty = auto from use_hardware)')
+    use_frame_alignment_arg = DeclareLaunchArgument('use_frame_alignment', default_value='',
+        description='Override use_frame_alignment (empty = use config default)')
 
     # Need to be the same as simulartor.launch.py
     map_size_x_arg = DeclareLaunchArgument('map_size_x', default_value='20.0')
@@ -73,6 +78,9 @@ def generate_launch_description():
         use_onboard_localization = convert_str_to_bool(LaunchConfiguration('use_onboard_localization').perform(context))
         depth_camera_name = LaunchConfiguration('depth_camera_name').perform(context)
         robot_type = LaunchConfiguration('robot_type').perform(context)
+        num_agents = int(LaunchConfiguration('num_agents').perform(context))
+        map_frame_id_override = LaunchConfiguration('map_frame_id').perform(context)
+        use_frame_alignment_str = LaunchConfiguration('use_frame_alignment').perform(context)
 
         # The path to the urdf file - select based on robot type
         urdf_filename = 'p3at.urdf.xacro' if use_ground_robot else 'quadrotor.urdf.xacro'
@@ -112,6 +120,13 @@ def generate_launch_description():
         if use_benchmark:
             parameters['global_planner'] = global_planner
    
+        # Map frame id: hardware uses per-agent map frame, simulation uses global "map"
+        map_frame_id = map_frame_id_override if map_frame_id_override else (f'{namespace}/map' if use_hardware else 'map')
+        parameters['map_frame_id'] = map_frame_id
+        parameters['num_agents'] = num_agents
+        if use_frame_alignment_str:
+            parameters['use_frame_alignment'] = convert_str_to_bool(use_frame_alignment_str)
+
         # Lidar topic remapping for hardware vs simulation
         lidar_point_cloud_topic = 'livox/lidar' if use_hardware else 'mid360_PointCloud2'
 
@@ -126,7 +141,7 @@ def generate_launch_description():
                     parameters=[parameters],
                     remappings=[('lidar_cloud_in', lidar_point_cloud_topic),
                                 ('depth_camera_cloud_in', f'{depth_camera_name}/depth/color/points')],
-                    arguments=['--ros-args', '--log-level', 'error']
+                    arguments=['--ros-args', '--log-level', 'error'],
                     # prefix='xterm -e gdb -q -ex run --args', # gdb debugging
         )
 
@@ -206,6 +221,7 @@ def generate_launch_description():
                 'slow_down_threshold_deg': parameters.get('pure_pursuit_slow_down_threshold_deg', 30.0),
                 'w_smoothing_alpha': parameters.get('pure_pursuit_w_smoothing_alpha', 0.3),
                 'use_hardware': use_hardware,
+                'map_frame_id': map_frame_id,
                 'control_rate': 50.0,
             }],
             output='screen',
@@ -231,7 +247,8 @@ def generate_launch_description():
                                  "publish_odom": publish_odom,
                                  "odom_topic": odom_topic,
                                  "odom_frame_id": odom_frame_id,
-                                 "base_frame_id": base_frame_id}],
+                                 "base_frame_id": base_frame_id,
+                                 "map_frame_id": map_frame_id}],
                     # prefix='xterm -e gdb -q -ex run --args', # gdb debugging
                     output='screen',
         )
@@ -278,10 +295,10 @@ def generate_launch_description():
             name='static_tf_map_to_odom', output='screen',
             arguments=['0','0','0','0','0','0','1', f'{namespace}/map', f'{namespace}/odom'])
         
-        map2map_tf_node = Node(
-            package='tf2_ros', executable='static_transform_publisher',
-            name='map2map_tf_node', output='screen',
-            arguments=['0','0','0','0','0','0','1', f'{namespace}/map', 'map'])
+        # map2map_tf_node = Node(
+        #     package='tf2_ros', executable='static_transform_publisher',
+        #     name='map2map_tf_node', output='screen',
+        #     arguments=['0','0','0','0','0','0','1', f'{namespace}/map', 'map'])
 
         # Return launch description
         nodes_to_start = [mighty_node]
@@ -290,8 +307,8 @@ def generate_launch_description():
                 if robot_type == QUADROTOR:
                     nodes_to_start.append(hw_odom_to_state_node)
                 elif robot_type in [STAR_ROBOT, RED_ROVER]:
-                    nodes_to_start.extend([hw_odom_to_state_node,
-                                           pure_pursuit_node, static_tf_node, map2map_tf_node])
+                    # nodes_to_start.extend([hw_odom_to_state_node, pure_pursuit_node, static_tf_node, map2map_tf_node])
+                    nodes_to_start.extend([hw_odom_to_state_node, pure_pursuit_node, static_tf_node])
             else:
                 nodes_to_start.append(pose_twist_to_state_node)  # Vicon
         else:
@@ -330,5 +347,8 @@ def generate_launch_description():
         use_onboard_localization_arg,
         depth_camera_name_arg,
         robot_type_arg,
+        num_agents_arg,
+        map_frame_id_arg,
+        use_frame_alignment_arg,
         OpaqueFunction(function=launch_setup)
     ])

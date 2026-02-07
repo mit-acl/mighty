@@ -20,6 +20,8 @@ mighty_node:
         # Hardware-related parameters
         provide_goal_in_global_frame: false # Should be true when not using rviz interface                     # [-] Provide goal in the global frame
         use_hardware: true                                     # [-] Use hardware
+        use_frame_alignment: true                                # [-] Use inter-agent frame alignment
+        num_agents: 10                                           # [-] Number of agents (for frame alignment subscriptions)
 
         # Flight mode should be terminal_goal
         flight_mode: "terminal_goal"                            # ["terminal_goal"]

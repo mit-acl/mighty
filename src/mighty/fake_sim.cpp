@@ -67,6 +67,8 @@ public:
         this->declare_parameter<bool>("publish_state", true);
         // Ground robot mode: integrate cmd_vel with unicycle kinematics
         this->declare_parameter<bool>("use_ground_robot", false);
+        // Configurable map frame (e.g. "RR01/map" for multi-agent frame alignment)
+        this->declare_parameter<std::string>("map_frame_id", "map");
 
         // Get parameters
         auto start_pos = this->get_parameter("start_pos").as_double_array();
@@ -82,6 +84,7 @@ public:
         publish_tf_ = this->get_parameter("publish_tf").as_bool();
         publish_state_ = this->get_parameter("publish_state").as_bool();
         use_ground_robot_ = this->get_parameter("use_ground_robot").as_bool();
+        map_frame_id_ = this->get_parameter("map_frame_id").as_string();
 
         // Print parameters
         RCLCPP_INFO(this->get_logger(), "Start position: %f, %f, %f", start_pos[0], start_pos[1], start_pos[2]);
@@ -103,7 +106,7 @@ public:
 
         // Initialize state
         state_ = dynus_interfaces::msg::State();
-        state_.header.frame_id = "map";
+        state_.header.frame_id = map_frame_id_;
         state_.pos.x = start_pos[0];
         state_.pos.y = start_pos[1];
         state_.pos.z = start_pos[2];
@@ -133,7 +136,7 @@ public:
             base_frame_id_ = target_frame_;
 
         // Initialize TF message
-        t_.header.frame_id = "map";
+        t_.header.frame_id = map_frame_id_;
         t_.child_frame_id = target_frame_;
 
         // Publishers
@@ -238,6 +241,7 @@ private:
     std::string odom_frame_id_{"map"};
     std::string base_frame_id_param_{""};
     std::string base_frame_id_{""};
+    std::string map_frame_id_{"map"};
 
     // Ground robot unicycle integration
     bool use_ground_robot_{false};
@@ -252,7 +256,7 @@ private:
         try
         {
             geometry_msgs::msg::TransformStamped transform =
-                tf2_buffer_->lookupTransform("map", target_frame_, tf2::TimePointZero);
+                tf2_buffer_->lookupTransform(map_frame_id_, target_frame_, tf2::TimePointZero);
 
             state_.header.stamp = this->get_clock()->now();
             state_.pos.x = transform.transform.translation.x;
@@ -461,7 +465,7 @@ private:
         visualization_msgs::msg::Marker marker;
         marker.id = drone_marker_id_;
         marker.ns = std::string("mesh_") + this->get_namespace();
-        marker.header.frame_id = "map";
+        marker.header.frame_id = map_frame_id_;
         marker.header.stamp = this->get_clock()->now();
         marker.type = marker.MESH_RESOURCE;
         marker.action = marker.ADD;

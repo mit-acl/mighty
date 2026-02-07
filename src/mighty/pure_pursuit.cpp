@@ -17,6 +17,7 @@ PurePursuit::PurePursuit()
     this->declare_parameter("slow_down_threshold_deg", 30.0);      // degrees
     this->declare_parameter("w_smoothing_alpha", 0.3);
     this->declare_parameter("use_hardware", false);
+    this->declare_parameter("map_frame_id", "map");
 
     // Get parameters
     L_min_ = this->get_parameter("L_min").as_double();
@@ -30,6 +31,7 @@ PurePursuit::PurePursuit()
     slow_down_threshold_ = this->get_parameter("slow_down_threshold_deg").as_double() * M_PI / 180.0;
     w_smoothing_alpha_ = this->get_parameter("w_smoothing_alpha").as_double();
     use_hardware_ = this->get_parameter("use_hardware").as_bool();
+    map_frame_id_ = this->get_parameter("map_frame_id").as_string();
 
     // Publishers and Subscribers
     std::string cmd_vel_string = use_hardware_ ? "cmd_vel_auto" : "cmd_vel";
@@ -184,7 +186,7 @@ void PurePursuit::controlCallback()
     // Publish lookahead marker for RViz visualization
     visualization_msgs::msg::Marker marker;
     marker.header.stamp = this->now();
-    marker.header.frame_id = "map";
+    marker.header.frame_id = map_frame_id_;
     marker.ns = "lookahead";
     marker.id = 0;
     marker.type = visualization_msgs::msg::Marker::SPHERE;

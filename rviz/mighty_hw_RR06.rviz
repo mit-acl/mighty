@@ -179,6 +179,32 @@ Visualization Manager:
                 Value: /RR06/traj_committed_colored
               Value: true
             - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: RR06 Other Agent Traj (raw)
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR06/traj_received
+              Value: true
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: RR06 Other Agent Traj (transformed)
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR06/traj_transformed
+              Value: true
+            - Class: rviz_default_plugins/Marker
               Enabled: false
               Name: RR06 Actual Traj
               Namespaces:

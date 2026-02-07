@@ -30,6 +30,7 @@ class GoalSender(Node):
 
         ## Get the z value for the goals
         self.default_goal_z = self.declare_parameter('default_goal_z', value=3.0).value
+        self.use_hardware = self.declare_parameter('use_hardware', value=False).value
 
         # Publisher
         self.pub_goals = {}
@@ -50,7 +51,7 @@ class GoalSender(Node):
 
         # Create a goal message
         msg = PoseStamped()
-        msg.header.frame_id = 'map'
+        msg.header.frame_id = f'{agent}/map' if self.use_hardware else 'map'
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.pose.position.x = float(goal[0])
         msg.pose.position.y = float(goal[1])

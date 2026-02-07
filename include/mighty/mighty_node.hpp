@@ -18,6 +18,7 @@
 #include "dynus_interfaces/msg/yaw_output.hpp"
 #include "dynus_interfaces/msg/pn_adaptation.hpp"
 #include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <mighty/utils.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -103,6 +104,8 @@ namespace mighty
         void convertDynTrajMsg2DynTraj(const dynus_interfaces::msg::DynTraj &msg, std::shared_ptr<dynTraj> &traj, double current_time);
         void cleanUpOldTrajsCallback();
         void getInitialPoseHwCallback();
+        void frameAlignCallback(const geometry_msgs::msg::TransformStamped::SharedPtr msg, int agent_id);
+        void applyFrameAlignTransform(std::shared_ptr<dynTraj> &traj, int sender_id);
 
         // Others
         void declareParameters();                                                                       
@@ -211,6 +214,8 @@ namespace mighty
         rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_static_push_points_;
         rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_p_points_;
         rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_vel_text_;
+        rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_traj_received_;
+        rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_traj_transformed_;
 
         // Subscribers
         rclcpp::Subscription<dynus_interfaces::msg::DynTraj>::SharedPtr sub_traj_;
@@ -339,6 +344,12 @@ namespace mighty
         bool initial_pose_received_ = false;
         std::string initial_pose_topic_;
         geometry_msgs::msg::TransformStamped init_pose_transform_stamped_;
+
+        // Frame alignment transforms (inter-agent)
+        std::vector<rclcpp::Subscription<geometry_msgs::msg::TransformStamped>::SharedPtr> frame_align_subs_;
+        std::unordered_map<int, Eigen::Matrix4d> frame_align_transforms_;
+        std::unordered_map<int, bool> frame_align_received_;
+        std::mutex frame_align_mutex_;
 
         // Timer to make sure we don't sample point cloud too often
         rclcpp::Time last_lidar_callback_time_;

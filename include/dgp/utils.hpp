@@ -62,7 +62,8 @@ void pathLineDotsToMarkerArray(
 
 void vectorOfVectors2MarkerArray(vec_Vecf<3> traj, visualization_msgs::msg::MarkerArray *m_array, std_msgs::msg::ColorRGBA color,
                                  int type = visualization_msgs::msg::Marker::ARROW,
-                                 std::vector<double> radii = std::vector<double>());
+                                 std::vector<double> radii = std::vector<double>(),
+                                 const std::string &frame_id = "map");
 
 std_msgs::msg::ColorRGBA getColorJet(double v, double vmin, double vmax);
 
@@ -185,7 +186,8 @@ std::ostream &operator<<(std::ostream &out, const std::vector<T> &v)
 
 visualization_msgs::msg::MarkerArray stateVector2ColoredMarkerArray(const std::vector<state> &data, int type,
                                                                     double max_value,
-                                                                    const rclcpp::Time &stamp);
+                                                                    const rclcpp::Time &stamp,
+                                                                    const std::string &frame_id = "map");
 
 void deleteVertexes(vec_Vecf<3> &JPS_path, int max_value);
 

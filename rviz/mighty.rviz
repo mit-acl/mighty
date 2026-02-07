@@ -6913,6 +6913,190 @@ Visualization Manager:
           Name: Others
       Enabled: true
       Name: NX10
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: RR01 Traj
+              Namespaces:
+                state_vec: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR01/traj_committed_colored
+              Value: true
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: RR01 Traj Received (raw)
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR01/traj_received
+              Value: true
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: RR01 Traj Transformed
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR01/traj_transformed
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: RR01 Original Global Path
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR01/original_dgp_path_marker
+              Value: true
+            - Alpha: 0.20000000298023224
+              BoundColor: 255; 154; 140
+              Class: decomp_rviz_plugins/PolyhedronArray
+              Enabled: true
+              MeshColor: 255; 154; 140
+              Name: RR01 Poly for Whole Traj
+              Scale: 0.009999999776482582
+              State: Both
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR01/poly_whole
+              Value: true
+              VsColor: 237; 51; 59
+              VsScale: 1
+          Enabled: true
+          Name: Planning
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: RR01 Drone marker
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR01/drone_marker
+              Value: true
+          Enabled: true
+          Name: Others
+      Enabled: true
+      Name: RR01
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: RR02 Traj
+              Namespaces:
+                state_vec: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR02/traj_committed_colored
+              Value: true
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: RR02 Traj Received (raw)
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR02/traj_received
+              Value: true
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: RR02 Traj Transformed
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR02/traj_transformed
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: RR02 Original Global Path
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR02/original_dgp_path_marker
+              Value: true
+            - Alpha: 0.20000000298023224
+              BoundColor: 98; 160; 234
+              Class: decomp_rviz_plugins/PolyhedronArray
+              Enabled: true
+              MeshColor: 98; 160; 234
+              Name: RR02 Poly for Whole Traj
+              Scale: 0.009999999776482582
+              State: Both
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR02/poly_whole
+              Value: true
+              VsColor: 28; 113; 216
+              VsScale: 1
+          Enabled: true
+          Name: Planning
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: RR02 Drone marker
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR02/drone_marker
+              Value: true
+          Enabled: true
+          Name: Others
+      Enabled: true
+      Name: RR02
   Enabled: true
   Global Options:
     Background Color: 154; 153; 150

@@ -92,7 +92,9 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   pub_point_E_ = this->create_publisher<geometry_msgs::msg::PointStamped>("point_E", 10);                                                             // visual level 1
   pub_point_G_term_ = this->create_publisher<geometry_msgs::msg::PointStamped>("point_G_term", 10);                                                   // visual level 1
   pub_current_state_ = this->create_publisher<geometry_msgs::msg::PointStamped>("point_current_state", 10);                                           // visual level 1
-  pub_vel_text_ = this->create_publisher<visualization_msgs::msg::Marker>("vel_text", 10);                                                            // visual level 1
+  pub_vel_text_ = this->create_publisher<visualization_msgs::msg::Marker>("vel_text", 10);
+  pub_traj_received_ = this->create_publisher<visualization_msgs::msg::Marker>("traj_received", 10);          // frame alignment debug
+  pub_traj_transformed_ = this->create_publisher<visualization_msgs::msg::Marker>("traj_transformed", 10);    // frame alignment debug                                                            // visual level 1
 
   // Debug publishers
   pub_yaw_output_ = this->create_publisher<dynus_interfaces::msg::YawOutput>("yaw_output", 10);
@@ -110,6 +112,28 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   sub_state_ = this->create_subscription<dynus_interfaces::msg::State>("state", critical_qos, std::bind(&MIGHTY_NODE::stateCallback, this, std::placeholders::_1), options_re_1);
   sub_terminal_goal_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("term_goal", critical_qos, std::bind(&MIGHTY_NODE::terminalGoalCallback, this, std::placeholders::_1));
   sub_lookahead_point_ = this->create_subscription<geometry_msgs::msg::PointStamped>("lookahead_point", 10, std::bind(&MIGHTY_NODE::lookaheadPointCallback, this, std::placeholders::_1));
+
+  // Frame alignment subscriptions (inter-agent transforms)
+  if (par_.use_frame_alignment)
+  {
+    for (int i = 1; i <= par_.num_agents; i++)
+    {
+      if (i == id_) continue;
+      std::string prefix = ns_.substr(0, ns_.size() - 2);
+      char other_name[16];
+      std::snprintf(other_name, sizeof(other_name), "%s%02d", prefix.c_str(), i);
+      std::string topic = "/lidar_registration/frame_align/" + ns_ + "/" + std::string(other_name);
+      frame_align_transforms_[i] = Eigen::Matrix4d::Identity();
+      frame_align_received_[i] = false;
+      auto sub = this->create_subscription<geometry_msgs::msg::TransformStamped>(
+          topic, 10,
+          [this, i](const geometry_msgs::msg::TransformStamped::SharedPtr msg) {
+            this->frameAlignCallback(msg, i);
+          }, options_re_1);
+      frame_align_subs_.push_back(sub);
+      RCLCPP_INFO(this->get_logger(), "Frame align: subscribed to %s", topic.c_str());
+    }
+  }
 
   // Timer for callback
   timer_replanning_ = this->create_wall_timer(10ms, std::bind(&MIGHTY_NODE::replanCallback, this), this->cb_group_replan_);
@@ -191,6 +215,9 @@ void MIGHTY_NODE::declareParameters()
   this->declare_parameter("vehicle_type", "uav");
   this->declare_parameter("provide_goal_in_global_frame", false);
   this->declare_parameter("use_hardware", false);
+  this->declare_parameter("map_frame_id", "map");
+  this->declare_parameter("use_frame_alignment", false);
+  this->declare_parameter("num_agents", 10);
 
   // Flight mode
   this->declare_parameter("flight_mode", "terminal_goal");
@@ -389,6 +416,9 @@ void MIGHTY_NODE::setParameters()
   par_.vehicle_type = this->get_parameter("vehicle_type").as_string();
   par_.provide_goal_in_global_frame = this->get_parameter("provide_goal_in_global_frame").as_bool();
   par_.use_hardware = this->get_parameter("use_hardware").as_bool();
+  par_.map_frame_id = this->get_parameter("map_frame_id").as_string();
+  par_.use_frame_alignment = this->get_parameter("use_frame_alignment").as_bool();
+  par_.num_agents = this->get_parameter("num_agents").as_int();
 
   // Flight mode
   par_.flight_mode = this->get_parameter("flight_mode").as_string();
@@ -599,6 +629,8 @@ void MIGHTY_NODE::printParameters()
   RCLCPP_INFO(this->get_logger(), "Vehicle Type: %d", par_.vehicle_type);
   RCLCPP_INFO(this->get_logger(), "Provide Goal in Global Frame: %d", par_.provide_goal_in_global_frame);
   RCLCPP_INFO(this->get_logger(), "Use Hardware: %d", par_.use_hardware);
+  RCLCPP_INFO(this->get_logger(), "Use Frame Alignment: %d", par_.use_frame_alignment);
+  RCLCPP_INFO(this->get_logger(), "Num Agents: %d", par_.num_agents);
 
   // Flight mode
   RCLCPP_INFO(this->get_logger(), "Flight Mode: %s", par_.flight_mode.c_str());
@@ -777,6 +809,48 @@ void MIGHTY_NODE::trajCallback(const dynus_interfaces::msg::DynTraj::SharedPtr m
   // Get dynTraj from the message
   auto traj = std::make_shared<dynTraj>();
   convertDynTrajMsg2DynTraj(*msg, traj, current_time);
+
+  // Helper to publish a trajectory as a LINE_STRIP marker
+  auto publishTrajMarker = [&](
+      const std::shared_ptr<dynTraj> &t,
+      rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr &pub,
+      float r, float g, float b, double z_offset)
+  {
+    visualization_msgs::msg::Marker m;
+    m.header.frame_id = par_.map_frame_id;
+    m.header.stamp = this->now();
+    m.ns = "other_agent_traj_" + std::to_string(msg->id);
+    m.id = msg->id;
+    m.type = visualization_msgs::msg::Marker::LINE_STRIP;
+    m.action = visualization_msgs::msg::Marker::ADD;
+    m.scale.x = 0.08;
+    m.color.r = r; m.color.g = g; m.color.b = b; m.color.a = 1.0;
+    m.lifetime = rclcpp::Duration(1, 0);  // 1 second
+    const int N = 30;
+    double t0 = current_time;
+    double tf = current_time + 2.0;
+    for (int i = 0; i <= N; i++)
+    {
+      double ti = t0 + (tf - t0) * i / N;
+      Eigen::Vector3d p = t->eval(ti);
+      geometry_msgs::msg::Point pt;
+      pt.x = p.x(); pt.y = p.y(); pt.z = p.z() + z_offset;
+      m.points.push_back(pt);
+    }
+    pub->publish(m);
+  };
+
+  // Apply frame alignment transform if enabled
+  if (par_.use_frame_alignment)
+  {
+    // Publish BEFORE transform (red, slight z offset for debug)
+    publishTrajMarker(traj, pub_traj_received_, 1.0, 0.2, 0.2, 0.1);
+
+    applyFrameAlignTransform(traj, msg->id);
+  }
+
+  // Always publish other agents' trajectories in solid blue (after transform if applicable)
+  publishTrajMarker(traj, pub_traj_transformed_, 0.1, 0.4, 1.0, 0.0);
 
   // Pass the dynTraj to mighty.cpp
   mighty_ptr_->addTraj(traj, current_time);
@@ -1012,7 +1086,7 @@ void MIGHTY_NODE::publishVelocityInText(const Eigen::Vector3d &position, double 
   std::string text = oss.str() + "m/s";
 
   visualization_msgs::msg::Marker marker;
-  marker.header.frame_id = "map";
+  marker.header.frame_id = par_.map_frame_id;
   marker.header.stamp = this->get_clock()->now();
   marker.action = visualization_msgs::msg::Marker::ADD;
   marker.pose.orientation.w = 1.0;
@@ -1076,6 +1150,102 @@ void MIGHTY_NODE::getInitialPoseHwCallback()
   {
     initial_pose_received_ = true;
     timer_initial_pose_->cancel();
+  }
+}
+
+// ----------------------------------------------------------------------------
+
+/**
+ * @brief Callback for frame alignment transforms from lidar registration
+ * @param msg TransformStamped message (T^{ego/map}_{other/map})
+ * @param agent_id The ID of the other agent
+ */
+void MIGHTY_NODE::frameAlignCallback(
+    const geometry_msgs::msg::TransformStamped::SharedPtr msg, int agent_id)
+{
+  Eigen::Matrix4d T = mighty_utils::transformStampedToMatrix(*msg);
+  std::lock_guard<std::mutex> lock(frame_align_mutex_);
+  frame_align_transforms_[agent_id] = T;
+  if (!frame_align_received_[agent_id])
+  {
+    frame_align_received_[agent_id] = true;
+    RCLCPP_INFO(this->get_logger(),
+                "Received first frame alignment for agent %d", agent_id);
+  }
+}
+
+// ----------------------------------------------------------------------------
+
+/**
+ * @brief Apply frame alignment transform to a trajectory from another agent
+ * @param traj The trajectory to transform (modified in place)
+ * @param sender_id The ID of the sending agent
+ */
+void MIGHTY_NODE::applyFrameAlignTransform(
+    std::shared_ptr<dynTraj> &traj, int sender_id)
+{
+  Eigen::Matrix4d T;
+  {
+    std::lock_guard<std::mutex> lock(frame_align_mutex_);
+    auto it = frame_align_transforms_.find(sender_id);
+    if (it == frame_align_transforms_.end() || !frame_align_received_[sender_id])
+    {
+      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+          "No frame alignment for agent %d yet", sender_id);
+      return;
+    }
+    T = it->second;
+  }
+
+  Eigen::Matrix3d R = T.block<3, 3>(0, 0);
+
+  // Transform PieceWiseQuinticPol
+  if (traj->mode == dynTraj::Mode::Piecewise)
+  {
+    for (size_t i = 0; i < traj->pwp.coeff_x.size(); i++)
+    {
+      for (int j = 0; j < 5; j++)  // non-constant: rotate only
+      {
+        Eigen::Vector3d c(traj->pwp.coeff_x[i](j),
+                          traj->pwp.coeff_y[i](j),
+                          traj->pwp.coeff_z[i](j));
+        c = R * c;
+        traj->pwp.coeff_x[i](j) = c.x();
+        traj->pwp.coeff_y[i](j) = c.y();
+        traj->pwp.coeff_z[i](j) = c.z();
+      }
+      // constant term (j=5): full transform
+      Eigen::Vector4d h;
+      h << traj->pwp.coeff_x[i](5), traj->pwp.coeff_y[i](5),
+           traj->pwp.coeff_z[i](5), 1.0;
+      h = T * h;
+      traj->pwp.coeff_x[i](5) = h(0);
+      traj->pwp.coeff_y[i](5) = h(1);
+      traj->pwp.coeff_z[i](5) = h(2);
+    }
+  }
+  else if (traj->mode == dynTraj::Mode::Quintic)
+  {
+    for (int j = 0; j < 5; j++)
+    {
+      Eigen::Vector3d c(traj->cx(j), traj->cy(j), traj->cz(j));
+      c = R * c;
+      traj->cx(j) = c.x(); traj->cy(j) = c.y(); traj->cz(j) = c.z();
+    }
+    Eigen::Vector4d h;
+    h << traj->cx(5), traj->cy(5), traj->cz(5), 1.0;
+    h = T * h;
+    traj->cx(5) = h(0); traj->cy(5) = h(1); traj->cz(5) = h(2);
+  }
+  // Analytic mode: string expressions can't be transformed — agents use pwp/quintic
+
+  // Transform goal
+  if (traj->is_agent)
+  {
+    Eigen::Vector4d g;
+    g << traj->goal.x(), traj->goal.y(), traj->goal.z(), 1.0;
+    g = T * g;
+    traj->goal = g.head<3>();
   }
 }
 
@@ -1221,7 +1391,7 @@ void MIGHTY_NODE::publisCps()
 
     // Create a marker
     visualization_msgs::msg::Marker marker;
-    marker.header.frame_id = "map";
+    marker.header.frame_id = par_.map_frame_id;
     marker.header.stamp = this->now();
     marker.ns = "cp";
     marker.id = seg;
@@ -1285,7 +1455,7 @@ void MIGHTY_NODE::publishStaticPushPoints()
   // Create a marker array
   visualization_msgs::msg::MarkerArray marker_array;
   visualization_msgs::msg::Marker marker;
-  marker.header.frame_id = "map";
+  marker.header.frame_id = par_.map_frame_id;
   marker.header.stamp = this->now();
   marker.ns = "static_push_points";
   marker.id = static_push_points_id_;
@@ -1522,7 +1692,7 @@ void MIGHTY_NODE::publishCurrentState(const state &state) const
 void MIGHTY_NODE::publishState(const state &data, const rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr &publisher) const
 {
   geometry_msgs::msg::PointStamped p;
-  p.header.frame_id = "map";
+  p.header.frame_id = par_.map_frame_id;
   p.header.stamp = this->now();
   p.point = eigen2point(data.pos);
   publisher->publish(p);
@@ -1542,7 +1712,7 @@ void MIGHTY_NODE::publishOwnTraj()
   // Create the message
   dynus_interfaces::msg::DynTraj msg;
   msg.header.stamp = this->now();
-  msg.header.frame_id = "map";
+  msg.header.frame_id = par_.map_frame_id;
   msg.bbox.push_back(par_.drone_bbox[0]);
   msg.bbox.push_back(par_.drone_bbox[1]);
   msg.bbox.push_back(par_.drone_bbox[2]);
@@ -1608,7 +1778,7 @@ void MIGHTY_NODE::publishActualTraj()
   m.scale.y = 0.0001;
   m.scale.z = 0.0001;
   m.header.stamp = this->now();
-  m.header.frame_id = "map";
+  m.header.frame_id = par_.map_frame_id;
 
   // pose is actually not used in the marker, but if not RVIZ complains about the quaternion
   m.pose.position = pointOrigin();
@@ -1672,7 +1842,7 @@ void MIGHTY_NODE::publishGoal()
     // Publish the goal (actual setpoint)
     dynus_interfaces::msg::Goal quadGoal;
     quadGoal.header.stamp = this->now();
-    quadGoal.header.frame_id = "map";
+    quadGoal.header.frame_id = par_.map_frame_id;
     quadGoal.p = eigen2rosvector(next_goal.pos);
     quadGoal.v = eigen2rosvector(next_goal.vel);
     quadGoal.a = eigen2rosvector(next_goal.accel);
@@ -1719,7 +1889,7 @@ void MIGHTY_NODE::publishTrajectory()
   // Create trajectory message
   dynus_interfaces::msg::Trajectory traj_msg;
   traj_msg.header.stamp = this->now();
-  traj_msg.header.frame_id = "map";
+  traj_msg.header.frame_id = par_.map_frame_id;
   traj_msg.trajectory_id = trajectory_id_;
   traj_msg.dt = par_.dc * step;  // Adjusted time step for downsampled trajectory
 
@@ -1772,7 +1942,7 @@ void MIGHTY_NODE::publishPoly()
   {
     decomp_ros_msgs::msg::PolyhedronArray poly_whole_msg = DecompROS::polyhedron_array_to_ros(poly_whole_);
     poly_whole_msg.header.stamp = this->now();
-    poly_whole_msg.header.frame_id = "map";
+    poly_whole_msg.header.frame_id = par_.map_frame_id;
     poly_whole_msg.lifetime = rclcpp::Duration::from_seconds(1.0);
     pub_poly_whole_->publish(poly_whole_msg);
   }
@@ -1782,7 +1952,7 @@ void MIGHTY_NODE::publishPoly()
   {
     decomp_ros_msgs::msg::PolyhedronArray poly_safe_msg = DecompROS::polyhedron_array_to_ros(poly_safe_);
     poly_safe_msg.header.stamp = this->now();
-    poly_safe_msg.header.frame_id = "map";
+    poly_safe_msg.header.frame_id = par_.map_frame_id;
     poly_safe_msg.lifetime = rclcpp::Duration::from_seconds(1.0);
     pub_poly_safe_->publish(poly_safe_msg);
   }
@@ -1801,7 +1971,7 @@ void MIGHTY_NODE::publishTraj()
   {
     visualization_msgs::msg::MarkerArray clear_msg;
     visualization_msgs::msg::Marker clear_m;
-    clear_m.header.frame_id = "map";
+    clear_m.header.frame_id = par_.map_frame_id;
     clear_m.header.stamp = now;
     clear_m.action = visualization_msgs::msg::Marker::DELETEALL;
     clear_msg.markers.push_back(clear_m);
@@ -1817,7 +1987,8 @@ void MIGHTY_NODE::publishTraj()
         goal_setpoints_,
         /*type=*/1,
         par_.v_max,
-        now);
+        now,
+        par_.map_frame_id);
     pub_traj_committed_colored_->publish(committed_ma);
   }
 
@@ -1833,7 +2004,8 @@ void MIGHTY_NODE::publishTraj()
           list_subopt_goal_setpoints_[i],
           /*type=*/i + 2,
           par_.v_max,
-          now);
+          now,
+          par_.map_frame_id);
       // append all markers from this one:
       subopt_ma.markers.insert(
           subopt_ma.markers.end(),
@@ -1921,7 +2093,8 @@ void MIGHTY_NODE::publishFreeGlobalPath()
 
   // Publish free_global_path
   clearMarkerArray(dgp_free_path_marker_, pub_free_dgp_path_marker_);
-  vectorOfVectors2MarkerArray(free_global_path, &dgp_free_path_marker_, color(GREEN));
+  vectorOfVectors2MarkerArray(free_global_path, &dgp_free_path_marker_, color(GREEN),
+                             visualization_msgs::msg::Marker::ARROW, {}, par_.map_frame_id);
   pub_free_dgp_path_marker_->publish(dgp_free_path_marker_);
 }
 
@@ -1942,7 +2115,8 @@ void MIGHTY_NODE::publishLocalGlobalPath()
   {
     // Publish local_global_path
     clearMarkerArray(dgp_local_global_path_marker_, pub_local_global_path_marker_);
-    vectorOfVectors2MarkerArray(local_global_path, &dgp_local_global_path_marker_, color(BLUE));
+    vectorOfVectors2MarkerArray(local_global_path, &dgp_local_global_path_marker_, color(BLUE),
+                               visualization_msgs::msg::Marker::ARROW, {}, par_.map_frame_id);
     pub_local_global_path_marker_->publish(dgp_local_global_path_marker_);
   }
 
@@ -1950,7 +2124,8 @@ void MIGHTY_NODE::publishLocalGlobalPath()
   {
     // Publish local_global_path_after_push
     clearMarkerArray(dgp_local_global_path_after_push_marker_, pub_local_global_path_after_push_marker_);
-    vectorOfVectors2MarkerArray(local_global_path_after_push, &dgp_local_global_path_after_push_marker_, color(ORANGE));
+    vectorOfVectors2MarkerArray(local_global_path_after_push, &dgp_local_global_path_after_push_marker_, color(ORANGE),
+                               visualization_msgs::msg::Marker::ARROW, {}, par_.map_frame_id);
     pub_local_global_path_after_push_marker_->publish(dgp_local_global_path_after_push_marker_);
   }
 }
@@ -1965,7 +2140,7 @@ void MIGHTY_NODE::createMarkerArrayFromVec_Vec3f(
 {
 
   visualization_msgs::msg::Marker marker;
-  marker.header.frame_id = "map";              // Set the appropriate frame
+  marker.header.frame_id = par_.map_frame_id;
   marker.header.stamp = rclcpp::Clock().now(); // Use ROS2 clock
   marker.ns = "namespace_" + std::to_string(namespace_id);
   marker.id = 0;
@@ -2154,7 +2329,7 @@ void MIGHTY_NODE::publishHeatMap()
   visualization_msgs::msg::MarkerArray ma;
   visualization_msgs::msg::Marker marker;
 
-  marker.header.frame_id = "map";
+  marker.header.frame_id = par_.map_frame_id;
   marker.header.stamp = this->now();
   marker.ns = "heat_map";
   marker.id = 0;
@@ -2241,7 +2416,7 @@ void MIGHTY_NODE::publishDynamicHeatCloud()
 
 BUILD_MSG:
   sensor_msgs::msg::PointCloud2 msg;
-  msg.header.frame_id = "map";
+  msg.header.frame_id = par_.map_frame_id;
   msg.header.stamp = this->now();
 
   sensor_msgs::PointCloud2Modifier modifier(msg);

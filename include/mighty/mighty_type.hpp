@@ -41,6 +41,9 @@ struct parameters
   std::string vehicle_type;
   bool provide_goal_in_global_frame;
   bool use_hardware;
+  std::string map_frame_id{"map"};
+  bool use_frame_alignment{false};
+  int num_agents{10};
 
   // Flight mode
   std::string flight_mode;
