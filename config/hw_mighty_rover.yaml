@@ -95,7 +95,7 @@ mighty_node:
         f_max: 12.0                        # Maximum thrust
         mass: 1.0                         # [kg] Mass of the drone
         g: 9.81                        # [m/s^2] Gravitational acceleration
-        fopt_threshold: 10000.0               # [-] Threshold for the fopt to consider the optimization successful
+        fopt_threshold: 100000.0               # [-] Threshold for the fopt to consider the optimization successful
 
         # L-BFGS parameters
         init_turn_bf: 60.0                          # [deg] Initial turn buffer in degrees
