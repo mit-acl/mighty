@@ -66,9 +66,9 @@ void DGPManager::setParameters(const parameters &par)
         // Enable static heat (boundary halo around static obstacles)
         map_util_->setStaticHeatEnabled(use_astar_heat || par.static_heat_enabled);
 
-        // Configure static heat parameters
-        const float STATIC_RMAX = use_astar_heat ? std::max(0.5f, 3.0f * float(par.drone_radius)) : par.static_heat_rmax_m;
-        const float STATIC_ALPHA = use_astar_heat ? 5.0f : par.static_heat_alpha;
+        // Configure static heat parameters (always use YAML values)
+        const float STATIC_RMAX = par.static_heat_rmax_m;
+        const float STATIC_ALPHA = par.static_heat_alpha;
 
         map_util_->setStaticHeatParams(
             STATIC_ALPHA, par.static_heat_p, par.static_heat_Hmax,
