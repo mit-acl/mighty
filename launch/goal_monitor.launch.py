@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -10,27 +10,44 @@ def generate_launch_description():
         default_value='0.5',
         description='Distance tolerance to consider a goal reached'
     )
-    # list out the four namespaces you want
-    namespaces = ['NX01', 'NX02', 'NX03', 'NX04', 'NX05',
-                  'NX06', 'NX07', 'NX08', 'NX09', 'NX10']
+    agent_prefix_arg = DeclareLaunchArgument(
+        'agent_prefix',
+        default_value='NX',
+        description='Agent namespace prefix: NX for drones, RR for ground robots'
+    )
+    use_hardware_arg = DeclareLaunchArgument(
+        'use_hardware',
+        default_value='false',
+        description='Use hardware mode (affects goal frame_id)'
+    )
 
-    # for each namespace, create one Node
-    nodes = []
-    for ns in namespaces:
-        nodes.append(
-            Node(
-                package='mighty',
-                executable='goal_monitor_node.py',
-                namespace=ns,
-                name='goal_monitor_node',  # this will live under /<ns>/goal_monitor_node
-                output='screen',
-                parameters=[{
-                    'goal_tolerance': LaunchConfiguration('goal_tolerance')
-                }]
+    def launch_setup(context):
+        prefix = LaunchConfiguration('agent_prefix').perform(context)
+        use_hardware = LaunchConfiguration('use_hardware').perform(context)
+        goal_tolerance = LaunchConfiguration('goal_tolerance').perform(context)
+
+        namespaces = [f'{prefix}{i:02d}' for i in range(1, 11)]
+
+        nodes = []
+        for ns in namespaces:
+            nodes.append(
+                Node(
+                    package='mighty',
+                    executable='goal_monitor_node.py',
+                    namespace=ns,
+                    name='goal_monitor_node',
+                    output='screen',
+                    parameters=[{
+                        'goal_tolerance': float(goal_tolerance),
+                        'use_hardware': use_hardware.lower() in ('true', '1'),
+                    }]
+                )
             )
-        )
+        return nodes
 
     return LaunchDescription([
         goal_tol_arg,
-        *nodes
+        agent_prefix_arg,
+        use_hardware_arg,
+        OpaqueFunction(function=launch_setup),
     ])

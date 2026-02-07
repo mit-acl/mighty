@@ -26,6 +26,8 @@ class GoalMonitorNode(Node):
         # Parameters
         self.declare_parameter('goal_tolerance', 1.0)  # Distance tolerance to consider goal reached
         self.goal_tolerance = self.get_parameter('goal_tolerance').value
+        self.declare_parameter('use_hardware', False)
+        self.use_hardware = self.get_parameter('use_hardware').value
         self.distance_check_frequency = 1.0  # Frequency to check the distance to the goal
         self.current_goal_index = 0
 
@@ -71,7 +73,11 @@ class GoalMonitorNode(Node):
         elif self.namespace == 'NX10':
             # opposite of NX05
             self.goal_points = [[ -8.090,  5.878, 1.0], [  8.090, -5.878, 1.0]]
-            
+
+        elif self.namespace.startswith('RR'):
+            # RR01–RR10: line pattern [0,0,0.5] → [8,0,0.5]
+            self.goal_points = [[8.0, 0.0, 0.5], [0.0, 0.0, 0.5]]
+
         else:
             self.get_logger().error(f"Unknown namespace: {self.namespace}. No goal points defined.")
             self.goal_points = [[0.0, 0.0, 0.0]]  # Default goal point if namespace is unknown
@@ -131,7 +137,7 @@ class GoalMonitorNode(Node):
         term_goal = PoseStamped()
         term_goal.header = Header()
         term_goal.header.stamp = self.get_clock().now().to_msg()
-        term_goal.header.frame_id = "world"
+        term_goal.header.frame_id = f'{self.namespace}/map' if self.use_hardware else 'map'
 
         term_goal.pose.position.x = goal_x
         term_goal.pose.position.y = goal_y
