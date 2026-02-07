@@ -16,6 +16,7 @@ PurePursuit::PurePursuit()
     this->declare_parameter("turn_in_place_threshold_deg", 60.0);  // degrees
     this->declare_parameter("slow_down_threshold_deg", 30.0);      // degrees
     this->declare_parameter("w_smoothing_alpha", 0.3);
+    this->declare_parameter("use_hardware", false);
 
     // Get parameters
     L_min_ = this->get_parameter("L_min").as_double();
@@ -28,9 +29,11 @@ PurePursuit::PurePursuit()
     turn_in_place_threshold_ = this->get_parameter("turn_in_place_threshold_deg").as_double() * M_PI / 180.0;
     slow_down_threshold_ = this->get_parameter("slow_down_threshold_deg").as_double() * M_PI / 180.0;
     w_smoothing_alpha_ = this->get_parameter("w_smoothing_alpha").as_double();
+    use_hardware_ = this->get_parameter("use_hardware").as_bool();
 
     // Publishers and Subscribers
-    pub_cmd_vel_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+    std::string cmd_vel_string = use_hardware_ ? "cmd_vel_auto" : "cmd_vel";
+    pub_cmd_vel_ = this->create_publisher<geometry_msgs::msg::Twist>(cmd_vel_string, 10);
     pub_lookahead_ = this->create_publisher<geometry_msgs::msg::PointStamped>("lookahead_point", 10);
     pub_lookahead_marker_ = this->create_publisher<visualization_msgs::msg::Marker>("lookahead_marker", 10);
 

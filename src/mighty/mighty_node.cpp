@@ -147,15 +147,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   // Initialize the initial pose topic name
   initial_pose_topic_ = ns_ + "/init_pose";
 
-  if (par_.sim_env == "fake_sim")
-  {
-    sub_fake_sim_occupancy_map_ = this->create_subscription<sensor_msgs::msg::PointCloud2>("sensor_point_cloud",
-    rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)),
-    std::bind(&MIGHTY_NODE::occupancyMapCallback, this, std::placeholders::_1),
-    options_map);
-
-  }
-  else
+  if (par_.use_hardware || par_.sim_env != "fake_sim")
   {
     // Synchronize the occupancy grid and unknown grid
     occup_grid_sub_.subscribe(this, "occupancy_grid", rmw_qos_profile_sensor_data, options_map);
@@ -163,6 +155,14 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
     sync_.reset(new Sync(MySyncPolicy(10), occup_grid_sub_, unknown_grid_sub_));
     sync_->registerCallback(std::bind(&MIGHTY_NODE::mapCallback, this, std::placeholders::_1, std::placeholders::_2));
   }
+  else
+  {
+    sub_fake_sim_occupancy_map_ = this->create_subscription<sensor_msgs::msg::PointCloud2>("sensor_point_cloud",
+    rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)),
+    std::bind(&MIGHTY_NODE::occupancyMapCallback, this, std::placeholders::_1),
+    options_map);
+  }
+
 }
 
 // ----------------------------------------------------------------------------
@@ -2103,6 +2103,7 @@ void MIGHTY_NODE::mapCallback(
     const sensor_msgs::msg::PointCloud2::ConstPtr &map_msg,
     const sensor_msgs::msg::PointCloud2::ConstPtr &unk_msg)
 {
+
   // use PCL's own Ptr (boost::shared_ptr)
   pcl::PointCloud<pcl::PointXYZ>::Ptr map_pc(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::fromROSMsg(*map_msg, *map_pc);

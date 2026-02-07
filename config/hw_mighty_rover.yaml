@@ -11,6 +11,9 @@ mighty_node:
 
     ros__parameters:
 
+        # Sim environment
+        sim_env: "gazebo"                            # ["gazebo", "fake_sim"]
+
         # Vehicle type
         vehicle_type: "ground_robot"                                     # ["uav", "ground_robot", "qudruped_robot"]
 
@@ -25,7 +28,7 @@ mighty_node:
         visual_level: 2                                         # [-] visual level (0: no visual, 1: minimal visual, 2: full visual)
 
         # Gloabl planner parameters
-        global_planner: "sjps"                                  # ["sjps"]
+        global_planner: "astar_heat"                                # ["sjps"]
         factor_dgp: 1.0                                         # do not change - [m] actual_resolution = factor_dgp * (resolution of the map)
         inflation_dgp: 0.15                                    # [m] The obstacles are inflated (to run DGP) by this amount
         x_min: -1000.0                                          # [m] x_min of the map
@@ -59,9 +62,10 @@ mighty_node:
         shrinked_box_size: 0.0                  # [m] Size of the shrinked box
 
         # Optimization parameters
+        num_N: 3                                    # [-] Number of trajectory pieces for local optimization
         horizon: 15.0                               # [m] Horizon
         dc: 0.01                                    # [s] Duration for the interpolation=Value of the timer pubGoal
-        v_max: 1.0 #1.0                                  # [m/s]  max velocity
+        v_max: 0.5 #1.0                                  # [m/s]  max velocity
         a_max: 3.0 #3.0                                 # [m/s2] max acceleration
         j_max: 5.0 #5.0                              # [m/s3] max jerk
         dynamic_weight: 1e+1                        # [-] Weight of the obstacles and agents distance in the optimization
@@ -124,7 +128,7 @@ mighty_node:
         default_goal_z: 0.0                    # [m] Default goal height
 
         # Debug flags
-        global_planner_verbose: true           # debug output
+        global_planner_verbose: false           # debug output
         debug_verbose: false                    # [-] Verbose the debug information
         closed_form_traj_verbose: false         # Verbosity of closed-form traj.
         verbose_computation_time: false         # [-] Verbose the computation time
@@ -190,3 +194,49 @@ mighty_node:
         use_multiple_initial_guesses: false          # [-] Use multiple initial guesses
         num_perturbation_for_ig: 8                  # [-] Number of perturbations for the initial guess
         r_max_for_ig: 1.0                           # [m] radius for the initial guess perturbation
+
+        # Heat map parameters (soft cost layer)
+        use_heat_map: true
+        heat_weight: 1.0
+
+        # Dynamic obstacle heat (time-varying soft costs)
+        dynamic_heat_enabled: false
+        dynamic_as_occupied_current: true
+        dynamic_as_occupied_future: false
+        heat_alpha0: 1.0
+        heat_alpha1: 2.0
+        heat_p: 2
+        heat_q: 2
+        heat_tau_ratio: 0.5
+        heat_gamma: 0.0
+        heat_Hmax: 10.0
+        dyn_base_inflation_m: 0.5
+        heat_num_samples: 15
+
+        # Static obstacle heat (boundary halo)
+        static_heat_enabled: true
+        static_heat_alpha: 2.0
+        static_heat_p: 2
+        static_heat_Hmax: 100.0
+        static_heat_rmax_m: 5.0
+        static_heat_default_radius_m: 5.0
+        static_heat_boundary_only: true
+        static_heat_apply_on_unknown: false
+        static_heat_exclude_dynamic: true
+
+        # Trajectory publishing parameters
+        trajectory_downsample_points: 500  # [-] Number of points to downsample trajectory to (~10x denser than 50)
+
+        # Ground robot planning parameters
+        ground_robot_L_min: 1.0       # [m] Lookahead distance for point A (planning start point)
+        ground_robot_v_max: 0.5       # [m/s] Maximum linear velocity for ground robot
+        ground_robot_w_max: 3.0       # [rad/s] Maximum angular velocity for smooth tracking
+
+        # Pure pursuit controller parameters (for vehicle_type: "ground_robot")
+        pure_pursuit_L_min: 0.8       # [m] Minimum lookahead distance (higher = smoother)
+        pure_pursuit_k_v: 0.5         # [s] Velocity-dependent lookahead factor (L = L_min + k_v * v)
+        pure_pursuit_stopping_radius: 0.1  # [m] Stop when within this distance of goal
+        pure_pursuit_adaptive_lookahead_distance: 2.0  # [m] Start reducing lookahead when within this distance of goal
+        pure_pursuit_turn_in_place_threshold_deg: 20.0  # [deg] Heading error threshold for turn-in-place behavior
+        pure_pursuit_slow_down_threshold_deg: 5.0      # [deg] Heading error threshold for speed reduction
+        pure_pursuit_w_smoothing_alpha: 0.2             # [-] Angular velocity smoothing (0 = no smoothing, 1 = full smoothing)

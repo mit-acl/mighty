@@ -205,6 +205,7 @@ def generate_launch_description():
                 'turn_in_place_threshold_deg': parameters.get('pure_pursuit_turn_in_place_threshold_deg', 60.0),
                 'slow_down_threshold_deg': parameters.get('pure_pursuit_slow_down_threshold_deg', 30.0),
                 'w_smoothing_alpha': parameters.get('pure_pursuit_w_smoothing_alpha', 0.3),
+                'use_hardware': use_hardware,
                 'control_rate': 50.0,
             }],
             output='screen',
@@ -276,21 +277,25 @@ def generate_launch_description():
             package='tf2_ros', executable='static_transform_publisher',
             name='static_tf_map_to_odom', output='screen',
             arguments=['0','0','0','0','0','0','1', f'{namespace}/map', f'{namespace}/odom'])
+        
+        map2map_tf_node = Node(
+            package='tf2_ros', executable='static_transform_publisher',
+            name='map2map_tf_node', output='screen',
+            arguments=['0','0','0','0','0','0','1', f'{namespace}/map', 'map'])
 
         # Return launch description
+        nodes_to_start = [mighty_node]
         if use_hardware:
-            nodes_to_start = [mighty_node]
             if use_onboard_localization:
                 if robot_type == QUADROTOR:
                     nodes_to_start.append(hw_odom_to_state_node)
                 elif robot_type in [STAR_ROBOT, RED_ROVER]:
                     nodes_to_start.extend([hw_odom_to_state_node,
-                                           pure_pursuit_node, static_tf_node])
+                                           pure_pursuit_node, static_tf_node, map2map_tf_node])
             else:
                 nodes_to_start.append(pose_twist_to_state_node)  # Vicon
         else:
             # === EXISTING SIM CODE — COMPLETELY UNCHANGED ===
-            nodes_to_start = [mighty_node]
             nodes_to_start.append(pose_twist_to_state_node) if use_hardware else None
             nodes_to_start.append(fake_sim_node) if not use_hardware else None
             nodes_to_start.append(robot_state_publisher_node) if parameters['sim_env'] == 'gazebo' else None

@@ -67,13 +67,15 @@ void DGPManager::setParameters(const parameters &par)
         map_util_->setStaticHeatEnabled(use_astar_heat || par.static_heat_enabled);
 
         // Configure static heat parameters
-        const float STATIC_RMAX = std::max(0.5f, 3.0f * float(par.drone_radius));
+        const float STATIC_RMAX = use_astar_heat ? std::max(0.5f, 3.0f * float(par.drone_radius)) : par.static_heat_rmax_m;
         const float STATIC_ALPHA = use_astar_heat ? 5.0f : par.static_heat_alpha;
 
         map_util_->setStaticHeatParams(
             STATIC_ALPHA, par.static_heat_p, par.static_heat_Hmax,
             STATIC_RMAX, par.static_heat_boundary_only,
             par.static_heat_apply_on_unknown, par.static_heat_exclude_dynamic);
+
+        map_util_->setStaticHeatRadiusFunction(nullptr, par.static_heat_default_radius_m);
     }
 }
 
@@ -547,6 +549,7 @@ void DGPManager::updateMap(double wdx, double wdy, double wdz, const Vec3f &cent
     {
         map_initialized_ = true;
     }
+
 }
 
 bool DGPManager::isMapInitialized() const
