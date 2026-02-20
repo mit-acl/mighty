@@ -110,7 +110,8 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node")
   sub_traj_ = this->create_subscription<dynus_interfaces::msg::DynTraj>("/trajs", critical_qos, std::bind(&MIGHTY_NODE::trajCallback, this, std::placeholders::_1), options_re_1);
   sub_predicted_traj_ = this->create_subscription<dynus_interfaces::msg::DynTraj>("predicted_trajs", critical_qos, std::bind(&MIGHTY_NODE::trajCallback, this, std::placeholders::_1), options_re_1);
   sub_state_ = this->create_subscription<dynus_interfaces::msg::State>("state", critical_qos, std::bind(&MIGHTY_NODE::stateCallback, this, std::placeholders::_1), options_re_1);
-  sub_terminal_goal_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("term_goal", critical_qos, std::bind(&MIGHTY_NODE::terminalGoalCallback, this, std::placeholders::_1));
+  // sub_terminal_goal_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("term_goal", critical_qos, std::bind(&MIGHTY_NODE::terminalGoalCallback, this, std::placeholders::_1));
+  sub_terminal_goal_ = this->create_subscription<dynus_interfaces::msg::State>("term_goal", critical_qos, std::bind(&MIGHTY_NODE::terminalGoalCallback, this, std::placeholders::_1), options_re_1);
   sub_lookahead_point_ = this->create_subscription<geometry_msgs::msg::PointStamped>("lookahead_point", 10, std::bind(&MIGHTY_NODE::lookaheadPointCallback, this, std::placeholders::_1));
 
   // Frame alignment subscriptions (inter-agent transforms)
@@ -1029,7 +1030,9 @@ void MIGHTY_NODE::replanCallback()
  * @brief Callback function for the terminal goal
  * @param msg Terminal goal message
  */
-void MIGHTY_NODE::terminalGoalCallback(const geometry_msgs::msg::PoseStamped &msg)
+// void MIGHTY_NODE::terminalGoalCallback(const geometry_msgs::msg::PoseStamped &msg)
+// {
+void MIGHTY_NODE::terminalGoalCallback(const dynus_interfaces::msg::State::SharedPtr msg)
 {
   // Record the time when goal is received (for command-to-execution timing)
   goal_received_time_ = this->now();
@@ -1043,7 +1046,8 @@ void MIGHTY_NODE::terminalGoalCallback(const geometry_msgs::msg::PoseStamped &ms
   if (par_.force_goal_z)
     goal_z = par_.default_goal_z;
   else
-    goal_z = msg.pose.position.z;
+    // goal_z = msg.pose.position.z;
+    goal_z = msg->pos.z;
 
   // Check if the goal_z is within the limits
   if (goal_z < par_.z_min || goal_z > par_.z_max)
@@ -1053,7 +1057,11 @@ void MIGHTY_NODE::terminalGoalCallback(const geometry_msgs::msg::PoseStamped &ms
   }
 
   // Set the terminal goal
-  G_term.setPos(msg.pose.position.x, msg.pose.position.y, goal_z);
+  // G_term.setPos(msg.pose.position.x, msg.pose.position.y, goal_z);
+  G_term.setPos(msg->pos.x, msg->pos.y, goal_z);
+
+  // Set terminal goal velocity
+  G_term.setVel(msg->vel.x, msg->vel.y, msg->vel.z);
 
   // Update the terminal goal
   mighty_ptr_->setTerminalGoal(G_term);

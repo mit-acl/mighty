@@ -127,6 +127,9 @@ void MIGHTY::computeG(const state &A, const state &G_term, double horizon)
   Eigen::Vector3d dir = (G_term.pos - local_G.pos).normalized();
   local_G.yaw = atan2(dir[1], dir[0]);
 
+  // Add velocity for G
+  local_G.vel = G_term.vel;
+
   // Set G
   setG(local_G);
 }
@@ -803,14 +806,21 @@ bool MIGHTY::generateLocalTrajectory(const state &local_A, double A_time,
   state local_E;
   Vec3f mean_point;
 
-  if (drone_status_ == DroneStatus::GOAL_REACHED || drone_status_ == DroneStatus::GOAL_SEEN)
-  {
-    local_E = local_G;
-  }
-  else
-  {
-    local_E.pos = global_path.back();
-  }
+  // if (drone_status_ == DroneStatus::GOAL_REACHED || drone_status_ == DroneStatus::GOAL_SEEN)
+  // {
+  //   local_E = local_G;
+  // }
+  // else
+  // {
+  //   local_E.pos = global_path.back();
+  // }
+
+  // Overwrite local_E with ctf term goals
+  state local_G_term;
+  getGterm(local_G_term);
+
+  local_E.pos = local_G_term.pos;
+  local_E.vel = local_G_term.vel;
 
   // if using ground robot, we fix the z
   if (par_.vehicle_type != "uav")
@@ -828,12 +838,12 @@ bool MIGHTY::generateLocalTrajectory(const state &local_A, double A_time,
     global_path_ = global_path; // Update the global path
   }
 
-  // update local_E
-  local_E.pos = global_path.back();
-  {
-    std::lock_guard<std::mutex> lock(mtx_E_);
-    E_ = local_E; // Update the local_E
-  }
+  // // update local_E
+  // local_E.pos = global_path.back();
+  // {
+  //   std::lock_guard<std::mutex> lock(mtx_E_);
+  //   E_ = local_E; // Update the local_E
+  // }
 
   if (par_.debug_verbose)
     std::cout << "Solver prepared" << std::endl;

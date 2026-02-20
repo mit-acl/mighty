@@ -932,7 +932,8 @@ void SolverLBFGS::prepareSolverForReplan(double t0,
     // Push the waypoints by static corridor
     // pushWaypointsByStaticCorridor(global_wps_);
 
-    xf_ = global_wps_.back();
+    // xf_ = global_wps_.back();
+    xf_ = goal_state.pos;
     vf_ = goal_state.vel;
     af_ = goal_state.accel;
 

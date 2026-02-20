@@ -96,7 +96,8 @@ namespace mighty
         void replanCallback();
         void trajCallback(const dynus_interfaces::msg::DynTraj::SharedPtr msg);
         void stateCallback(const dynus_interfaces::msg::State::SharedPtr msg);
-        void terminalGoalCallback(const geometry_msgs::msg::PoseStamped &msg);
+        // void terminalGoalCallback(const geometry_msgs::msg::PoseStamped &msg);
+        void terminalGoalCallback(const dynus_interfaces::msg::State::SharedPtr msg);
         void lookaheadPointCallback(const geometry_msgs::msg::PointStamped::SharedPtr msg);
         void mapCallback(const sensor_msgs::msg::PointCloud2::ConstPtr &pcl2ptr_map_ros, const sensor_msgs::msg::PointCloud2::ConstPtr &pcl2ptr_unk_ros);
         void occupancyMapCallback(const sensor_msgs::msg::PointCloud2::ConstPtr &map_msg);
@@ -221,7 +222,8 @@ namespace mighty
         rclcpp::Subscription<dynus_interfaces::msg::DynTraj>::SharedPtr sub_traj_;
         rclcpp::Subscription<dynus_interfaces::msg::DynTraj>::SharedPtr sub_predicted_traj_;
         rclcpp::Subscription<dynus_interfaces::msg::State>::SharedPtr sub_state_;
-        rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_terminal_goal_;
+        // rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_terminal_goal_;
+        rclcpp::Subscription<dynus_interfaces::msg::State>::SharedPtr sub_terminal_goal_;
         rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_fake_sim_occupancy_map_;
         rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr sub_lookahead_point_;
 

@@ -14,6 +14,7 @@ from dynus_interfaces.msg import State
 from geometry_msgs.msg import PoseStamped, Vector3
 from std_msgs.msg import Header
 import math
+import os
 
 class GoalMonitorNode(Node):
     def __init__(self):
@@ -22,6 +23,9 @@ class GoalMonitorNode(Node):
         # Get namespace
         self.namespace = self.get_namespace().strip('/')
         self.get_logger().info(f"Namespace: {self.namespace}")
+        vehtype = os.getenv("VEHTYPE", default = None)
+        vehnum = os.getenv("VEHNUM", default = None)
+        self.rover_name = vehtype + vehnum
 
         # Parameters
         self.declare_parameter('goal_tolerance', 1.0)  # Distance tolerance to consider goal reached
@@ -34,53 +38,61 @@ class GoalMonitorNode(Node):
         # Define goal points (x, y, z) in the world frame
         # Agents are on a circle of radius 10.0 at z=1.0 and swap with their opposite partner (i <-> i+5).
 
-        if self.namespace == 'NX01':
-            # start: ( 10.000,  0.000) ↔ opposite: (-10.000,  0.000) (NX06)
-            self.goal_points = [[-10.000,  0.000, 1.0], [ 10.000,  0.000, 1.0]]
+        # if self.namespace == 'NX01':
+        #     # start: ( 10.000,  0.000) ↔ opposite: (-10.000,  0.000) (NX06)
+        #     self.goal_points = [[-10.000,  0.000, 1.0], [ 10.000,  0.000, 1.0]]
 
-        elif self.namespace == 'NX02':
-            # start: (  8.090,  5.878) ↔ opposite: ( -8.090, -5.878) (NX07)
-            self.goal_points = [[ -8.090, -5.878, 1.0], [  8.090,  5.878, 1.0]]
+        # elif self.namespace == 'NX02':
+        #     # start: (  8.090,  5.878) ↔ opposite: ( -8.090, -5.878) (NX07)
+        #     self.goal_points = [[ -8.090, -5.878, 1.0], [  8.090,  5.878, 1.0]]
 
-        elif self.namespace == 'NX03':
-            # start: (  3.090,  9.511) ↔ opposite: ( -3.090, -9.511) (NX08)
-            self.goal_points = [[ -3.090, -9.511, 1.0], [  3.090,  9.511, 1.0]]
+        # elif self.namespace == 'NX03':
+        #     # start: (  3.090,  9.511) ↔ opposite: ( -3.090, -9.511) (NX08)
+        #     self.goal_points = [[ -3.090, -9.511, 1.0], [  3.090,  9.511, 1.0]]
 
-        elif self.namespace == 'NX04':
-            # start: ( -3.090,  9.511) ↔ opposite: (  3.090, -9.511) (NX09)
-            self.goal_points = [[  3.090, -9.511, 1.0], [ -3.090,  9.511, 1.0]]
+        # elif self.namespace == 'NX04':
+        #     # start: ( -3.090,  9.511) ↔ opposite: (  3.090, -9.511) (NX09)
+        #     self.goal_points = [[  3.090, -9.511, 1.0], [ -3.090,  9.511, 1.0]]
 
-        elif self.namespace == 'NX05':
-            # start: ( -8.090,  5.878) ↔ opposite: (  8.090, -5.878) (NX10)
-            self.goal_points = [[  8.090, -5.878, 1.0], [ -8.090,  5.878, 1.0]]
+        # elif self.namespace == 'NX05':
+        #     # start: ( -8.090,  5.878) ↔ opposite: (  8.090, -5.878) (NX10)
+        #     self.goal_points = [[  8.090, -5.878, 1.0], [ -8.090,  5.878, 1.0]]
 
-        elif self.namespace == 'NX06':
-            # opposite of NX01
-            self.goal_points = [[ 10.000,  0.000, 1.0], [-10.000,  0.000, 1.0]]
+        # elif self.namespace == 'NX06':
+        #     # opposite of NX01
+        #     self.goal_points = [[ 10.000,  0.000, 1.0], [-10.000,  0.000, 1.0]]
 
-        elif self.namespace == 'NX07':
-            # opposite of NX02
-            self.goal_points = [[  8.090,  5.878, 1.0], [ -8.090, -5.878, 1.0]]
+        # elif self.namespace == 'NX07':
+        #     # opposite of NX02
+        #     self.goal_points = [[  8.090,  5.878, 1.0], [ -8.090, -5.878, 1.0]]
 
-        elif self.namespace == 'NX08':
-            # opposite of NX03
-            self.goal_points = [[  3.090,  9.511, 1.0], [ -3.090, -9.511, 1.0]]
+        # elif self.namespace == 'NX08':
+        #     # opposite of NX03
+        #     self.goal_points = [[  3.090,  9.511, 1.0], [ -3.090, -9.511, 1.0]]
 
-        elif self.namespace == 'NX09':
-            # opposite of NX04
-            self.goal_points = [[ -3.090,  9.511, 1.0], [  3.090, -9.511, 1.0]]
+        # elif self.namespace == 'NX09':
+        #     # opposite of NX04
+        #     self.goal_points = [[ -3.090,  9.511, 1.0], [  3.090, -9.511, 1.0]]
 
-        elif self.namespace == 'NX10':
-            # opposite of NX05
-            self.goal_points = [[ -8.090,  5.878, 1.0], [  8.090, -5.878, 1.0]]
+        # elif self.namespace == 'NX10':
+        #     # opposite of NX05
+        #     self.goal_points = [[ -8.090,  5.878, 1.0], [  8.090, -5.878, 1.0]]
 
-        elif self.namespace.startswith('RR'):
-            # RR01–RR10: line pattern [0,0,0.5] → [8,0,0.5]
-            self.goal_points = [[8.0, 0.0, 0.5], [0.0, 0.0, 0.5]]
+        # elif self.namespace.startswith('RR'):
+        #     # RR01–RR10: line pattern [0,0,0.5] → [8,0,0.5]
+        #     self.goal_points = [[8.0, 0.0, 0.5], [0.0, 0.0, 0.5]]
 
-        else:
-            self.get_logger().error(f"Unknown namespace: {self.namespace}. No goal points defined.")
-            self.goal_points = [[0.0, 0.0, 0.0]]  # Default goal point if namespace is unknown
+        # else:
+        #     self.get_logger().error(f"Unknown namespace: {self.namespace}. No goal points defined.")
+        #     self.goal_points = [[0.0, 0.0, 0.0]]  # Default goal point if namespace is unknown
+    
+        # self.goal_points = [[2.0, 2.7, 0.5]] # [[1., 2., 1.0]]
+        self.goal_points = [[1.0, 1.0, 0.5]] # [[1., 2., 1.0]]
+        self.goal_vels = [[0.5, 0.0, 0.0]]
+        # self.goal_vels = [[0.0, 0.5, 0.0]]
+
+        # self.goal_vels = [[0.0, -0.5, 0.0]]
+        # self.goal_vels = [[-0.5, 0.0, 0.0]]
 
         # repeat the two-goal pattern N times
         num_iterations = 3
@@ -92,7 +104,8 @@ class GoalMonitorNode(Node):
 
         # Publishers and Subscribers
         self.state_sub = self.create_subscription(State, 'state', self.state_callback, 10)
-        self.term_goal_pub = self.create_publisher(PoseStamped, 'term_goal', 10)
+        # self.term_goal_pub = self.create_publisher(PoseStamped, 'term_goal', 10)
+        self.term_goal_pub = self.create_publisher(State, f'{self.rover_name}/term_goal', 10)
 
         # Timer to check the distance to the current goal
         self.goal_timer = self.create_timer(self.distance_check_frequency, self.distance_check_callback)
@@ -133,20 +146,41 @@ class GoalMonitorNode(Node):
         """Publishes the current goal as a PoseStamped message."""
         goal_x, goal_y, goal_z = self.goal_points[self.current_goal_index]
 
+        goal_vx, goal_vy, goal_vz = self.goal_vels[self.current_goal_index]
+
         # Create PoseStamped message
-        term_goal = PoseStamped()
+        term_goal = State()
         term_goal.header = Header()
         term_goal.header.stamp = self.get_clock().now().to_msg()
-        term_goal.header.frame_id = f'{self.namespace}/map' if self.use_hardware else 'map'
+        term_goal.header.frame_id = "world"
 
-        term_goal.pose.position.x = goal_x
-        term_goal.pose.position.y = goal_y
-        term_goal.pose.position.z = goal_z
+        term_goal.pos.x = goal_x
+        term_goal.pos.y = goal_y
+        term_goal.pos.z = goal_z
 
-        term_goal.pose.orientation.x = 0.0
-        term_goal.pose.orientation.y = 0.0
-        term_goal.pose.orientation.z = 0.0
-        term_goal.pose.orientation.w = 1.0  # Identity quaternion
+        term_goal.vel.x = goal_vx
+        term_goal.vel.y = goal_vy
+        term_goal.vel.z = goal_vz
+
+        term_goal.quat.x = 0.0
+        term_goal.quat.y = 0.0
+        term_goal.quat.z = 0.0
+        term_goal.quat.w = 1.0  # Identity quaternion
+
+        # # Create PoseStamped message
+        # term_goal = PoseStamped()
+        # term_goal.header = Header()
+        # term_goal.header.stamp = self.get_clock().now().to_msg()
+        # term_goal.header.frame_id = f'{self.namespace}/map' if self.use_hardware else 'map'
+
+        # term_goal.pose.position.x = goal_x
+        # term_goal.pose.position.y = goal_y
+        # term_goal.pose.position.z = goal_z
+
+        # term_goal.pose.orientation.x = 0.0
+        # term_goal.pose.orientation.y = 0.0
+        # term_goal.pose.orientation.z = 0.0
+        # term_goal.pose.orientation.w = 1.0  # Identity quaternion
 
         # Publish the term goal
         self.term_goal_pub.publish(term_goal)

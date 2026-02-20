@@ -70,7 +70,7 @@ mighty_node:
         v_max: 0.5 #1.0                                  # [m/s]  max velocity
         a_max: 3.0 #3.0                                 # [m/s2] max acceleration
         j_max: 5.0 #5.0                              # [m/s3] max jerk
-        dynamic_weight: 1e+0                        # [-] Weight of the obstacles and agents distance in the optimization
+        dynamic_weight: 1e+1                        # [-] Weight of the obstacles and agents distance in the optimization
         time_weight: 5e+2                            # [-] Weight of the time cost in the optimization
         pos_anchor_weight: 0.0                      # [-] Weight of the position anchors in the optimization
         stat_weight: 1e+3                           # [-] Weight of the static obstacles in the optimization
@@ -209,10 +209,10 @@ mighty_node:
         heat_alpha1: 2.0
         heat_p: 2
         heat_q: 2
-        heat_tau_ratio: 0.5
+        heat_tau_ratio: 1.0
         heat_gamma: 0.0
-        heat_Hmax: 50.0
-        dyn_base_inflation_m: 0.5
+        heat_Hmax: 100.0
+        dyn_base_inflation_m: 1.0
         heat_num_samples: 15
 
         # Static obstacle heat (boundary halo)
@@ -220,7 +220,7 @@ mighty_node:
         static_heat_alpha: 2.0
         static_heat_p: 2
         static_heat_Hmax: 100.0
-        static_heat_rmax_m: 1.0
+        static_heat_rmax_m: 0.2 #1.5
         static_heat_default_radius_m: 1.0
         static_heat_boundary_only: true
         static_heat_apply_on_unknown: false
@@ -239,6 +239,6 @@ mighty_node:
         pure_pursuit_k_v: 0.5         # [s] Velocity-dependent lookahead factor (L = L_min + k_v * v)
         pure_pursuit_stopping_radius: 0.1  # [m] Stop when within this distance of goal
         pure_pursuit_adaptive_lookahead_distance: 2.0  # [m] Start reducing lookahead when within this distance of goal
-        pure_pursuit_turn_in_place_threshold_deg: 20.0  # [deg] Heading error threshold for turn-in-place behavior
+        pure_pursuit_turn_in_place_threshold_deg: 50.0  # [deg] Heading error threshold for turn-in-place behavior
         pure_pursuit_slow_down_threshold_deg: 5.0      # [deg] Heading error threshold for speed reduction
         pure_pursuit_w_smoothing_alpha: 0.2             # [-] Angular velocity smoothing (0 = no smoothing, 1 = full smoothing)
