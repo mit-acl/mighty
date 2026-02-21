@@ -37,7 +37,7 @@ mighty_node:
         x_max: 1000.0                                           # [m] x_max of the map
         y_min: -1000.0                                          # [m] y_min of the map
         y_max: 1000.0                                           # [m] y_max of the map
-        z_min: 0.0                                              # [m] points below this are considered ground
+        z_min: -0.4 #0.0                                              # [m] points below this are considered ground
         z_max: 1.0 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
         dgp_timeout_duration_ms: 10000                          # [ms] Timeout duration for the DGP
         use_free_start: true                                    # [-] Use free start for the DGP
@@ -202,8 +202,8 @@ mighty_node:
         heat_weight: 1.0
 
         # Dynamic obstacle heat (time-varying soft costs)
-        dynamic_heat_enabled: true
-        dynamic_as_occupied_current: true
+        dynamic_heat_enabled: false #true
+        dynamic_as_occupied_current: false #true
         dynamic_as_occupied_future: false
         heat_alpha0: 1.0
         heat_alpha1: 2.0
@@ -220,7 +220,7 @@ mighty_node:
         static_heat_alpha: 2.0
         static_heat_p: 2
         static_heat_Hmax: 100.0
-        static_heat_rmax_m: 0.2 #1.5
+        static_heat_rmax_m: 0.7 #1.5
         static_heat_default_radius_m: 1.0
         static_heat_boundary_only: true
         static_heat_apply_on_unknown: false

@@ -610,8 +610,8 @@ bool MIGHTY::generateGlobalPath(vec_Vecf<3> &global_path, double current_time, d
   // if using ground robot, we fix the z
   if (par_.vehicle_type != "uav")
   {
-    local_A.pos[2] = 0.5;
-    local_G.pos[2] = 0.5;
+    local_A.pos[2] = 0.0;
+    local_G.pos[2] = 0.0;
   }
 
   // 1) Build a direction hint from the *previous* global path
@@ -724,7 +724,7 @@ bool MIGHTY::planLocalTrajectory(vec_Vecf<3> &global_path)
 
   if (par_.vehicle_type != "uav")
   {
-    local_A.pos[2] = 0.5;
+    local_A.pos[2] = 0.0;
   }
 
   optimization_succeeded = generateLocalTrajectory(
@@ -825,7 +825,7 @@ bool MIGHTY::generateLocalTrajectory(const state &local_A, double A_time,
   // if using ground robot, we fix the z
   if (par_.vehicle_type != "uav")
   {
-    local_E.pos[2] = 0.5;
+    local_E.pos[2] = 0.0;
   }
 
   whole_traj_solver_ptr->prepareSolverForReplan(A_time, global_path, safe_corridor_polytopes_whole_, local_trajs, local_A, local_E, initial_guess_computation_time, par_.use_multiple_initial_guesses);
