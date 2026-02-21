@@ -32,13 +32,13 @@ mighty_node:
         # Gloabl planner parameters
         global_planner: "astar_heat"                                # ["sjps"]
         factor_dgp: 1.0                                         # do not change - [m] actual_resolution = factor_dgp * (resolution of the map)
-        inflation_dgp: 0.15                                    # [m] The obstacles are inflated (to run DGP) by this amount
+        inflation_dgp: 0.5 #15                                    # [m] The obstacles are inflated (to run DGP) by this amount
         x_min: -1000.0                                          # [m] x_min of the map
         x_max: 1000.0                                           # [m] x_max of the map
         y_min: -1000.0                                          # [m] y_min of the map
         y_max: 1000.0                                           # [m] y_max of the map
         z_min: -0.4 #0.0                                              # [m] points below this are considered ground
-        z_max: 1.0 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
+        z_max: 0.0 #1.0 #3.5                                             # [m] DGP is run with resolution=factor_dgp*(resolution of the map)
         dgp_timeout_duration_ms: 10000                          # [ms] Timeout duration for the DGP
         use_free_start: true                                    # [-] Use free start for the DGP
         free_start_factor: 6.0 #1.0                                  # [-] Factor for the free start
@@ -127,7 +127,7 @@ mighty_node:
 
         # Simulation env parameters
         force_goal_z: false                     # [-] Force the goal to be at the certain height since Rviz GUI's goal's z is 0
-        default_goal_z: 0.5                    # [m] Default goal height
+        default_goal_z: 0.0                    # [m] Default goal height
 
         # Debug flags
         global_planner_verbose: false           # debug output
