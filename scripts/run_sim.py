@@ -92,7 +92,7 @@ def generate_multiagent_positions(num_agents: int, radius: float = 10.0, z: floa
     return agents
 
 
-def generate_multiagent_yaml(setup_bash: Path, agents: list, sim_env: str, ros_domain_id: int = 7) -> str:
+def generate_multiagent_yaml(setup_bash: Path, agents: list, sim_env: str, ros_domain_id: int = 7, auto_goal: bool = True) -> str:
     """Generate YAML for multi-agent fake simulation."""
     panes = []
 
@@ -113,13 +113,14 @@ def generate_multiagent_yaml(setup_bash: Path, agents: list, sim_env: str, ros_d
             ]
         })
 
-    # Goal monitor
-    panes.append({
-        'shell_command': [
-            'sleep 20',
-            'ros2 launch mighty goal_monitor.launch.py'
-        ]
-    })
+    # Goal monitor (skip when using manual 2D Nav Goal)
+    if auto_goal:
+        panes.append({
+            'shell_command': [
+                'sleep 20',
+                'ros2 launch mighty goal_monitor.launch.py'
+            ]
+        })
 
     yaml_content = {
         'session_name': 'mighty_sim',
@@ -314,6 +315,12 @@ def main():
     )
 
     parser.add_argument(
+        '--no-auto-goal',
+        action='store_true',
+        help='Disable automatic goal sending (use RViz2 2D Goal Pose instead)'
+    )
+
+    parser.add_argument(
         '--dry-run',
         action='store_true',
         help='Print the generated YAML without launching'
@@ -329,7 +336,8 @@ def main():
     if args.mode == 'multiagent':
         sim_env = 'fake_sim'
         agents = generate_multiagent_positions(args.num_agents, args.radius)
-        yaml_content = generate_multiagent_yaml(setup_bash, agents, sim_env, args.ros_domain_id)
+        auto_goal = not args.no_auto_goal
+        yaml_content = generate_multiagent_yaml(setup_bash, agents, sim_env, args.ros_domain_id, auto_goal=auto_goal)
         print(f"[INFO] Mode: Multi-agent simulation with {args.num_agents} agents (sim_env={sim_env})")
     else:  # gazebo
         sim_env = 'gazebo'

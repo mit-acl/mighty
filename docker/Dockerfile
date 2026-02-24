@@ -92,6 +92,10 @@ RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
 
 # Build the workspace
 ##########################################
+# For Mac (amd64 emulation), limit parallelism to avoid OOM:
+#   docker build --build-arg JOBS=4 ...
+ARG JOBS=""
+
 ### for decomp
 WORKDIR /home/kkondo/code/decomp_ws
 RUN . /opt/ros/humble/setup.sh && colcon build --packages-select decomp_util
@@ -101,7 +105,7 @@ RUN . /home/kkondo/code/decomp_ws/install/setup.sh && colcon build --cmake-args 
 WORKDIR /home/kkondo/code/Livox-SDK2
 RUN mkdir build
 WORKDIR /home/kkondo/code/Livox-SDK2/build
-RUN cmake .. && make -j && sudo make install
+RUN cmake .. && make -j${JOBS} && sudo make install
 
 ### for livox_ros_driver2
 WORKDIR /home/kkondo/code/livox_ws/src/livox_ros_driver2
@@ -111,7 +115,8 @@ RUN . /opt/ros/humble/setup.sh && ./build.sh humble
 WORKDIR /home/kkondo/code/mighty_ws
 RUN . /opt/ros/humble/setup.sh && \
     . /home/kkondo/code/decomp_ws/install/setup.sh && \
-    export CMAKE_PREFIX_PATH=/home/kkondo/code/livox_ws/install/livox_ros_driver2:/home/kkondo/code/decomp_ws/install/decomp_util && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+    export CMAKE_PREFIX_PATH=/home/kkondo/code/livox_ws/install/livox_ros_driver2:/home/kkondo/code/decomp_ws/install/decomp_util && \
+    colcon build ${JOBS:+--parallel-workers $JOBS} --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # Gazebo
 ##########################################
@@ -122,7 +127,7 @@ RUN echo    'pcm.!default { \
             }' >> /usr/share/alsa/alsa.conf
 
 # For livox lidar
-ENV LD_LIBRARY_PATH=/home/kkondo/code/livox_ws/install/livox_ros_driver2/lib:${LD_LIBRARY_PATH}:/usr/local/lib:/usr/local/include
+ENV LD_LIBRARY_PATH=/home/kkondo/code/livox_ws/install/livox_ros_driver2/lib:${LD_LIBRARY_PATH:-}:/usr/local/lib:/usr/local/include
 
 # Alias
 RUN echo 'alias tks="tmux kill-server"' >> ~/.bashrc
@@ -139,6 +144,15 @@ RUN echo 'alias cbsl="roscd && colcon build --symlink-install && sb"' >> ~/.bash
 RUN echo 'alias cbps="roscd && colcon build --packages-select"' >> ~/.bashrc
 RUN echo 'alias tf_visualize="ros2 run rqt_tf_tree rqt_tf_tree"' >> ~/.bashrc
 RUN echo 'alias tks="tmux kill-server"' >> ~/.bashrc
+
+# macOS visualization support
+##########################################
+# Xpra: forwards individual windows efficiently (recommended for Mac)
+# Foxglove: web-based topic viewer
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xpra xvfb libgl1-mesa-glx libgl1-mesa-dri \
+    ros-${ROS_DISTRO}-foxglove-bridge \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set up Entry Point
 # ##########################################

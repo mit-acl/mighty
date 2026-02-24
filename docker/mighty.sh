@@ -5,6 +5,32 @@ source /home/kkondo/code/mighty_ws/install/setup.bash
 source /home/kkondo/code/decomp_ws/install/setup.bash
 source /usr/share/gazebo/setup.sh
 
+# If USE_XPRA is set, start Xpra server for remote window forwarding
+if [ "${USE_XPRA}" = "true" ]; then
+    unset LIBGL_ALWAYS_INDIRECT
+    export LIBGL_ALWAYS_SOFTWARE=1
+    export GALLIUM_DRIVER=llvmpipe
+    xpra start :100 \
+        --bind-tcp=0.0.0.0:8080 \
+        --html=on \
+        --encoding=jpeg \
+        --quality=85 \
+        --speed=70 \
+        --min-speed=50
+    sleep 5
+    export DISPLAY=:100
+    echo "[Docker] Xpra server running on port 8080"
+    echo "[Docker] Open in browser: http://localhost:8080"
+fi
+
+# If USE_FOXGLOVE is set, start the foxglove bridge
+if [ "${USE_FOXGLOVE}" = "true" ]; then
+    export ROS_DOMAIN_ID=7
+    ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765 &
+    sleep 2
+    echo "[Docker] Foxglove bridge running on ws://localhost:8765"
+fi
+
 cd /home/kkondo/code/mighty_ws
 
 # Default values
@@ -17,6 +43,15 @@ ENV="${ENV:-hard_forest}"
 
 # Build arguments
 ARGS="--mode $MODE -s /home/kkondo/code/mighty_ws/install/setup.bash"
+
+# If using Foxglove, skip RViz inside Docker (Xpra keeps RViz, it just forwards the window)
+if [ "${USE_FOXGLOVE}" = "true" ]; then
+    ARGS="$ARGS --no-rviz"
+fi
+
+if [ "${NO_AUTO_GOAL}" = "true" ]; then
+    ARGS="$ARGS --no-auto-goal"
+fi
 
 if [ "$MODE" = "gazebo" ]; then
     ARGS="$ARGS --goal $GOAL_X $GOAL_Y $GOAL_Z --env $ENV"

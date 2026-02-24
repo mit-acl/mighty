@@ -109,9 +109,13 @@ make shell
   |--------|-------------|---------|
   | `make build` | Build the Docker image | - |
   | `make build-no-cache` | Build without cache (forces fresh build) | - |
+  | `make build-mighty` | Incremental rebuild of just the mighty package (fast) | - |
   | `make run` | Run multiagent simulation (default: 10 agents) | - |
   | `make run-multiagent` | Run multiagent with custom agent count | `NUM_AGENTS=N` (default: 10) |
   | `make run-gazebo` | Run single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z` (default: 305, 0, 3), `ENV` (default: hard_forest) |
+  | `make run-mac` | Run multiagent on Mac (Xpra, browser at localhost:8080) | `NUM_AGENTS=N` (default: 10) |
+  | `make run-mac-gazebo` | Run Gazebo on Mac (Xpra) | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
+  | `make run-mac-interactive` | Run single agent on Mac with manual goal (RViz2 2D Goal Pose) | - |
   | `make shell` | Open interactive shell for debugging | - |
 
 </details>
@@ -135,6 +139,68 @@ make shell
     ```
 
 </details>
+
+---
+
+### Running on Mac (Apple Silicon / Intel)
+
+MIGHTY runs on macOS via Docker with [Xpra](https://xpra.org/) for browser-based visualization (no X11/XQuartz needed). The Docker setup handles cross-compilation, software rendering, and window forwarding automatically.
+
+#### Prerequisites
+
+**1. Install Docker Desktop**
+
+Download and install [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/).
+
+**2. Configure Docker Desktop**
+
+Open Docker Desktop and go to **Settings** (gear icon):
+
+- **General** > Enable **"Use Rosetta for x86_64/amd64 emulation on Apple Silicon"** under Visual Machine Options (Apple Silicon Macs only — significantly speeds up the amd64 build and runtime)
+- **Resources** > Set **Memory** to at least **24 GB** (32 GB recommended). The default 4 GB is not enough and will cause out-of-memory failures during the build.
+
+**3. Build the Docker Image**
+
+```bash
+git clone https://github.com/mit-acl/mighty.git
+cd mighty/docker
+make build
+```
+
+> The first build takes a while (~30-60 min on Apple Silicon) since it cross-compiles for amd64. Subsequent builds use Docker layer caching and are much faster.
+
+#### Running Simulations
+
+All `run-mac*` targets use Xpra to stream GUI windows to your browser at **http://localhost:8080**.
+
+```bash
+cd mighty/docker
+
+# Multi-agent simulation (default: 10 agents)
+make run-mac
+
+# Multi-agent with custom agent count
+make run-mac NUM_AGENTS=5
+
+# Single agent with manual goal control (use RViz2's "2D Goal Pose" tool)
+make run-mac-interactive
+
+# Single-agent Gazebo simulation
+make run-mac-gazebo
+```
+
+After launching, open **http://localhost:8080** in your browser. RViz2 (and other GUI windows) will appear there.
+
+#### Development Workflow
+
+Local source files are automatically mounted into the container, so changes to Python scripts, config files, and launch parameters take effect immediately without rebuilding the Docker image.
+
+For **C++ changes**, use the incremental rebuild target:
+
+```bash
+# Rebuild only the mighty package (much faster than full build)
+make build-mighty
+```
 
 ---
 

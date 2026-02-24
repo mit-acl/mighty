@@ -410,7 +410,7 @@ bool DGPPlanner::plan(const Vecf<3> &start, const Vecf<3> &start_vel, const Vecf
       std::cout << "Map origin: " << map_util_->getOrigin().transpose() << std::endl;
     }
     status_ = 2;
-    std::cout << bold << red << "goal is not free!" << reset << std::endl;
+    // std::cout << bold << red << "goal is not free!" << reset << std::endl;
     return false;
   }
 
