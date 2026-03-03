@@ -109,7 +109,6 @@ make shell
   |--------|-------------|---------|
   | `make build` | Build the Docker image | - |
   | `make build-no-cache` | Build without cache (forces fresh build) | - |
-  | `make build-mighty` | Incremental rebuild of just the mighty package (fast) | - |
   | `make run` | Run multiagent simulation (default: 10 agents) | - |
   | `make run-multiagent` | Run multiagent with custom agent count | `NUM_AGENTS=N` (default: 10) |
   | `make run-gazebo` | Run single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z` (default: 305, 0, 3), `ENV` (default: hard_forest) |
@@ -144,7 +143,7 @@ make shell
 
 ### Running on Mac (Apple Silicon / Intel)
 
-MIGHTY runs on macOS via Docker with [Xpra](https://xpra.org/) for browser-based visualization (no X11/XQuartz needed). The Docker setup handles cross-compilation, software rendering, and window forwarding automatically.
+MIGHTY runs on macOS via Docker with [Xpra](https://xpra.org/) for browser-based visualization. Xpra is installed inside the Docker image automatically — you do **not** need to install Xpra, X11, or XQuartz on your Mac.
 
 #### Prerequisites
 
@@ -154,12 +153,12 @@ Download and install [Docker Desktop for Mac](https://www.docker.com/products/do
 
 **2. Configure Docker Desktop**
 
-Open Docker Desktop and go to **Settings** (gear icon):
+Open Docker Desktop and go to **Settings** (gear icon). Two settings must be changed:
 
-- **General** > Enable **"Use Rosetta for x86_64/amd64 emulation on Apple Silicon"** under Visual Machine Options (Apple Silicon Macs only — significantly speeds up the amd64 build and runtime)
+- **General** > Under "Virtual Machine Options", enable **"Use Rosetta for x86_64/amd64 emulation on Apple Silicon"** (Apple Silicon Macs only — significantly speeds up the amd64 build and runtime)
 - **Resources** > Set **Memory** to at least **24 GB** (32 GB recommended). The default 4 GB is not enough and will cause out-of-memory failures during the build.
 
-**3. Build the Docker Image**
+#### Building
 
 ```bash
 git clone https://github.com/mit-acl/mighty.git
@@ -167,11 +166,11 @@ cd mighty/docker
 make build
 ```
 
-> The first build takes a while (~30-60 min on Apple Silicon) since it cross-compiles for amd64. Subsequent builds use Docker layer caching and are much faster.
+> The first build takes a while (~30-60 min on Apple Silicon) since it cross-compiles for amd64. Subsequent builds use Docker layer caching and are much faster. Use `make build-no-cache` to force a fresh build.
 
 #### Running Simulations
 
-All `run-mac*` targets use Xpra to stream GUI windows to your browser at **http://localhost:8080**.
+All `run-mac*` targets use Xpra to stream GUI windows (RViz2, etc.) to your browser.
 
 ```bash
 cd mighty/docker
@@ -189,18 +188,39 @@ make run-mac-interactive
 make run-mac-gazebo
 ```
 
-After launching, open **http://localhost:8080** in your browser. RViz2 (and other GUI windows) will appear there.
+#### Visualization
 
-#### Development Workflow
+After running any `run-mac*` command, open your browser and go to:
 
-Local source files are automatically mounted into the container, so changes to Python scripts, config files, and launch parameters take effect immediately without rebuilding the Docker image.
+**http://localhost:8080**
 
-For **C++ changes**, use the incremental rebuild target:
+RViz2 and other GUI windows will appear in the browser. You can interact with them just like native windows — pan, zoom, and use the RViz2 toolbar.
 
-```bash
-# Rebuild only the mighty package (much faster than full build)
-make build-mighty
-```
+To send a goal manually (in `run-mac-interactive` mode):
+1. In the RViz2 toolbar, click **"2D Goal Pose"**
+2. Click and drag on the map to set the goal position and orientation
+3. The agent will plan and navigate to the goal
+
+<details>
+  <summary><b>Mac Make Targets Reference</b></summary>
+
+  | Target | Description | Options |
+  |--------|-------------|---------|
+  | `make run-mac` | Run multiagent simulation | `NUM_AGENTS=N` (default: 10) |
+  | `make run-mac-interactive` | Single agent with manual 2D Goal Pose | - |
+  | `make run-mac-gazebo` | Single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
+
+</details>
+
+<details>
+  <summary><b>Troubleshooting</b></summary>
+
+  - **Build fails with out-of-memory error**: Increase Docker Desktop memory allocation (Settings > Resources > Memory). 24 GB minimum, 32 GB recommended.
+  - **Build is very slow**: Make sure Rosetta emulation is enabled in Docker Desktop settings (General > Virtual Machine Options).
+  - **Browser shows nothing at localhost:8080**: Wait 10-20 seconds after launching — Xpra takes a moment to start. Check the terminal for `[Docker] Xpra server running on port 8080`.
+  - **Port 8080 already in use**: Another service is using port 8080. Stop it first, or modify the `-p 8080:8080` in the Makefile to use a different port (e.g., `-p 9090:8080`).
+
+</details>
 
 ---
 
