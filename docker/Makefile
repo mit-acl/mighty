@@ -4,7 +4,7 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
   PLATFORM_FLAG = --platform linux/amd64
   GPU ?= false
-  JOBS ?= 4
+  JOBS ?= 2
   XHOST_CMD = /opt/X11/bin/xhost +localhost
   DISPLAY_ENV = -e DISPLAY=host.docker.internal:0 -e LIBGL_ALWAYS_SOFTWARE=1 -e GALLIUM_DRIVER=llvmpipe
   NETWORK_FLAG =
