@@ -133,6 +133,16 @@ void HGPManager::setupHGPPlanner(const std::string& global_planner, bool global_
     planner_ptr_->setEsdfGrid(esdf_grid_, esdf_weight_astar_, esdf_d_safe_astar_);
   }
 
+  // Corridor-center corner snap post-processing (ground robot only).
+  // Gated on is_ground_robot_ to guarantee UAV flow is untouched.
+  planner_ptr_->setCornerSnapParams(
+      is_ground_robot_ && par_.corridor_hop_enabled,
+      par_.corridor_corner_angle_deg,
+      par_.corridor_clearance_threshold_m,
+      par_.corridor_max_ascent_m,
+      par_.corridor_ascent_step_m,
+      par_.corridor_ascent_max_iters);
+
   // Path smoothing configuration
   planner_ptr_->setDisableAllSmoothing(par_.disable_all_smoothing);
   planner_ptr_->setSkipPathSmoothing(par_.skip_path_smoothing);

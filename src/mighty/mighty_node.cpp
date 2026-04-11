@@ -170,6 +170,8 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
       "traj_received", 10);  // frame alignment debug
   pub_traj_transformed_ = this->create_publisher<visualization_msgs::msg::Marker>(
       "traj_transformed", 10);  // frame alignment debug // visual level 1
+  pub_corridor_yaw_target_ = this->create_publisher<visualization_msgs::msg::Marker>(
+      "corridor_yaw_target", 10);  // ground-robot corridor-hop TIP target arrow
 
   // Debug publishers
   pub_yaw_output_ = this->create_publisher<dynus_interfaces::msg::YawOutput>("yaw_output", 10);
@@ -637,6 +639,17 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("esdf_d_safe", 1.0);
   this->declare_parameter("esdf_truncation_distance", 10);
 
+  // Bend pre-alignment (ground robot only)
+  this->declare_parameter("corridor_hop_enabled", false);
+  this->declare_parameter("corridor_corner_angle_deg", 75.0);
+  this->declare_parameter("corridor_detection_window_m", 0.8);
+  this->declare_parameter("corridor_backoff_m", 0.4);
+  this->declare_parameter("corridor_min_leg_m", 0.3);
+  this->declare_parameter("corridor_clearance_threshold_m", 0.7);
+  this->declare_parameter("corridor_max_ascent_m", 0.0);
+  this->declare_parameter("corridor_ascent_step_m", 0.05);
+  this->declare_parameter("corridor_ascent_max_iters", 0);
+
   this->declare_parameter("trajectory_downsample_points", 500);
   this->declare_parameter("mpc_path_spacing", 0.05);
 
@@ -973,6 +986,16 @@ void MIGHTY_NODE::setParameters() {
   par_.esdf_weight = this->get_parameter("esdf_weight").as_double();
   par_.esdf_d_safe = this->get_parameter("esdf_d_safe").as_double();
   par_.esdf_truncation_distance = this->get_parameter("esdf_truncation_distance").as_int();
+
+  par_.corridor_hop_enabled = this->get_parameter("corridor_hop_enabled").as_bool();
+  par_.corridor_corner_angle_deg = this->get_parameter("corridor_corner_angle_deg").as_double();
+  par_.corridor_detection_window_m = this->get_parameter("corridor_detection_window_m").as_double();
+  par_.corridor_backoff_m = this->get_parameter("corridor_backoff_m").as_double();
+  par_.corridor_min_leg_m = this->get_parameter("corridor_min_leg_m").as_double();
+  par_.corridor_clearance_threshold_m = this->get_parameter("corridor_clearance_threshold_m").as_double();
+  par_.corridor_max_ascent_m = this->get_parameter("corridor_max_ascent_m").as_double();
+  par_.corridor_ascent_step_m = this->get_parameter("corridor_ascent_step_m").as_double();
+  par_.corridor_ascent_max_iters = this->get_parameter("corridor_ascent_max_iters").as_int();
 
   par_.trajectory_downsample_points = this->get_parameter("trajectory_downsample_points").as_int();
   par_.mpc_path_spacing = this->get_parameter("mpc_path_spacing").as_double();
@@ -2212,6 +2235,40 @@ void MIGHTY_NODE::publishPointG() const {
 
   // Publish the goal for visualization
   publishState(G, pub_point_G_);
+
+  // Corridor-hop TIP target arrow (ground robot only).
+  // Draws a yellow arrow at G pointing in direction G.yaw, which is the
+  // heading the robot will turn-in-place to once it arrives at this
+  // subgoal. Skips visualization entirely for UAVs or when the feature is
+  // disabled so no markers clutter the scene.
+  if (par_.vehicle_type == "ground_robot" && par_.corridor_hop_enabled) {
+    visualization_msgs::msg::Marker arrow;
+    arrow.header.frame_id = par_.map_frame_id;
+    arrow.header.stamp = this->now();
+    arrow.ns = "corridor_yaw_target";
+    arrow.id = 0;
+    arrow.type = visualization_msgs::msg::Marker::ARROW;
+    arrow.action = visualization_msgs::msg::Marker::ADD;
+    arrow.scale.x = 0.05;  // shaft diameter
+    arrow.scale.y = 0.10;  // head diameter
+    arrow.scale.z = 0.10;  // head length
+    arrow.color.r = 1.0;
+    arrow.color.g = 1.0;
+    arrow.color.b = 0.0;
+    arrow.color.a = 1.0;
+    arrow.lifetime = rclcpp::Duration::from_seconds(1.0);
+    geometry_msgs::msg::Point p_start, p_end;
+    p_start.x = G.pos.x();
+    p_start.y = G.pos.y();
+    p_start.z = G.pos.z();
+    const double arrow_len = 0.6;
+    p_end.x = G.pos.x() + arrow_len * std::cos(G.yaw);
+    p_end.y = G.pos.y() + arrow_len * std::sin(G.yaw);
+    p_end.z = G.pos.z();
+    arrow.points.push_back(p_start);
+    arrow.points.push_back(p_end);
+    pub_corridor_yaw_target_->publish(arrow);
+  }
 }
 
 // ----------------------------------------------------------------------------

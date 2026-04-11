@@ -529,6 +529,11 @@ bool HGPPlanner::plan(const Vecf<3>& start, const Vecf<3>& start_vel, const Vecf
     path_ = tmp;
   }
 
+  // Corridor-center corner snap (ground robot only). No-op if snap_enabled_
+  // is false (UAV flow is never touched). Runs after all other smoothing so
+  // the input already has collinear/corner redundancy removed.
+  snapCornersToClearance(path_);
+
   // Debug log: dump full HGP plan call (input start/goal voxels, clamping,
   // raw_path size, processed path size, path endpoints, map metadata).
   if (auto& s = hgp_debug_log(); s.is_open()) {
@@ -573,6 +578,70 @@ void HGPPlanner::cleanUpPath(vec_Vecf<3>& path) {
   std::reverse(std::begin(path), std::end(path));
   path = removeCornerPts(path);
   std::reverse(std::begin(path), std::end(path));
+}
+
+void HGPPlanner::snapCornersToClearance(vec_Vecf<3>& path) const {
+  // Ground-robot post-processing: push each sharp-corner waypoint toward the
+  // local ESDF max-clearance point via gradient ascent. Open-field corners
+  // (already ≥ snap_clearance_threshold_m_ from any obstacle) are left alone.
+  if (!snap_enabled_ || !esdf_grid_) return;
+  if (path.size() < 3) return;
+
+  const double cos_thresh = std::cos(snap_corner_angle_rad_);
+
+  for (size_t i = 1; i + 1 < path.size(); ++i) {
+    const Vecf<3>& p_prev = path[i - 1];
+    const Vecf<3>& p_curr = path[i];
+    const Vecf<3>& p_next = path[i + 1];
+
+    // Direction-change check: compare unit vectors of the two incident edges
+    // in the xy plane (path is 2D for ground robot). If the turn is shallower
+    // than snap_corner_angle_rad_ it's not a corner — skip.
+    Eigen::Vector2d v1(p_curr.x() - p_prev.x(), p_curr.y() - p_prev.y());
+    Eigen::Vector2d v2(p_next.x() - p_curr.x(), p_next.y() - p_curr.y());
+    const double n1 = v1.norm();
+    const double n2 = v2.norm();
+    if (n1 < 1e-6 || n2 < 1e-6) continue;
+    const double cos_turn = (v1 / n1).dot(v2 / n2);
+    if (cos_turn >= cos_thresh) continue;  // nearly straight, not a corner
+
+    // Open-field guard: already ≥ threshold from obstacles, no push needed.
+    if (!esdf_grid_->isInBounds(p_curr.x(), p_curr.y())) continue;
+    const double d0 = esdf_grid_->queryDistance(p_curr.x(), p_curr.y());
+    if (d0 >= snap_clearance_threshold_m_) continue;
+
+    // Gradient ascent from the corner toward the local max-clearance point.
+    // Cap by max_ascent_m and stop once clearance meets the threshold.
+    double px = p_curr.x();
+    double py = p_curr.y();
+    double total_ascent = 0.0;
+
+    for (int iter = 0; iter < snap_ascent_max_iters_; ++iter) {
+      if (!esdf_grid_->isInBounds(px, py)) break;
+      const Eigen::Vector2d g = esdf_grid_->queryGradient(px, py);
+      const double g_norm = g.norm();
+      if (g_norm < 1e-3) break;  // local max or flat region
+
+      // Cap the step so we never exceed the total ascent budget.
+      double step_len = snap_ascent_step_m_;
+      if (total_ascent + step_len > snap_max_ascent_m_) {
+        step_len = snap_max_ascent_m_ - total_ascent;
+        if (step_len <= 0.0) break;
+      }
+      const Eigen::Vector2d step = (g / g_norm) * step_len;
+      px += step.x();
+      py += step.y();
+      total_ascent += step_len;
+
+      const double d = esdf_grid_->queryDistance(px, py);
+      if (d >= snap_clearance_threshold_m_) break;  // reached corridor center
+      if (total_ascent >= snap_max_ascent_m_) break;
+    }
+
+    // Commit the snapped xy; preserve z (operating in the 2D plane).
+    path[i].x() = px;
+    path[i].y() = py;
+  }
 }
 
 vec_Vecf<3> HGPPlanner::smoothPathHeatAware(const vec_Vecf<3>& path, int iterations,

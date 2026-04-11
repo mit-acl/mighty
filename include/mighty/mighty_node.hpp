@@ -245,6 +245,8 @@ class MIGHTY_NODE : public rclcpp::Node {
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_vel_text_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_traj_received_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_traj_transformed_;
+  // Corridor-hop yaw-target arrow at G (ground robot only).
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_corridor_yaw_target_;
 
   // Subscribers
   rclcpp::Subscription<dynus_interfaces::msg::DynTraj>::SharedPtr sub_traj_;

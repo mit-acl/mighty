@@ -291,6 +291,26 @@ mighty_node:
         esdf_d_safe: 0.7                                # [m] Safety distance threshold
         esdf_truncation_distance: 15                    # [voxels] Must match mapper's distance_grid_2d.truncation_distance
 
+        # --- Bend Pre-Alignment (ground robot only) ---
+        # At each sharp HGP bend, back-off the subgoal along the incoming direction
+        # so the robot stops *short* of the inside corner, TIPs to face the outgoing
+        # segment, then drives straight through the bend without clipping the wall.
+        # Narrow corridors are fine because the robot never gets close to the inside
+        # corner during the turn. Only real bends (angle >= corridor_corner_angle_deg)
+        # trigger a stop; shallow curves are left to L-BFGS.
+        corridor_hop_enabled: true                      # [-] Master switch
+        corridor_corner_angle_deg: 75.0                 # [deg] Min direction change to count as a real bend (L/T/+ junctions)
+        corridor_detection_window_m: 0.8                # [m] Arclength to average incoming/outgoing direction over (larger = more robust, less sensitive to resample phase)
+        corridor_backoff_m: 0.4                         # [m] Distance to back off the subgoal along the incoming direction
+        corridor_min_leg_m: 0.3                         # [m] Min distance from robot to the (backed-off) subgoal
+        # Snap params are vestigial — kept so the existing wiring compiles. The
+        # snap is a no-op in practice because narrow corridors leave nowhere for
+        # the gradient ascent to push to.
+        corridor_clearance_threshold_m: 0.7
+        corridor_max_ascent_m: 0.0                      # 0 disables the ascent entirely
+        corridor_ascent_step_m: 0.05
+        corridor_ascent_max_iters: 0                    # 0 disables the ascent entirely
+
         # --- Trajectory Publishing ---
         trajectory_downsample_points: 500               # [-] Number of points to downsample trajectory to
         use_trajectory_tracker: false                    # [-] Use FF+FB trajectory tracker instead of pure pursuit
