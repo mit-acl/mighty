@@ -32,7 +32,7 @@
   <xacro:include filename="$(find mighty)/urdf/_d435.urdf.xacro" />
   <xacro:sensor_d435 name="$(arg namespace)_d435" topics_ns="$(arg namespace)" range_max_depth="$(arg d435_range_max_depth)" parent="base_link"
                      publish_pointcloud="false" color_sensor_rate="0" depth_sensor_rate="15" depth_plugin_rate="15.0" color_plugin_rate="0.0">
-    <origin xyz="1.0 0.0 1.0" rpy="0 0 0"/>
+    <origin xyz="0.2 0.0 0.45" rpy="0 0 0"/>
   </xacro:sensor_d435>
       
 </robot>

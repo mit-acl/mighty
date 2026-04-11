@@ -57,7 +57,7 @@ mighty_node:
         g: 9.81                                         # [m/s^2] Gravitational acceleration
 
         # --- Trajectory Segments ---
-        num_N: 6                                        # [-] Number of trajectory pieces for local optimization
+        num_N: 8                                        # [-] Number of trajectory pieces for local optimization
 
         # --- Map Bounds ---
         x_min: -1000.0                                  # [m] Map x lower bound
@@ -106,9 +106,9 @@ mighty_node:
 
         # --- L-BFGS Optimization Weights ---
         dynamic_weight: 1e+3                            # [-] Dynamic obstacle avoidance weight
-        time_weight: 1e+2                               # [-] Time cost weight
+        time_weight: 1e+1                               # [-] Time cost weight
         stat_weight: 0.0                               # [-] Static obstacle weight
-        jerk_weight: 1e+4                               # [-] Jerk smoothness weight
+        jerk_weight: 1e+3                               # [-] Jerk smoothness weight
         dyn_constr_vel_weight: 1e+3                     # [-] Velocity constraint violation weight
         dyn_constr_acc_weight: 1e+3                     # [-] Acceleration constraint violation weight
         dyn_constr_jerk_weight: 1e+3                    # [-] Jerk constraint violation weight
@@ -289,7 +289,7 @@ mighty_node:
         use_esdf_cost: true                             # [-] Enable ESDF distance cost in L-BFGS
         esdf_weight: 1.0e+5                             # [-] ESDF cost weight in objective
         esdf_d_safe: 0.7                                # [m] Safety distance threshold
-        esdf_truncation_distance: 5                    # [voxels] Must match mapper's distance_grid_2d.truncation_distance
+        esdf_truncation_distance: 15                    # [voxels] Must match mapper's distance_grid_2d.truncation_distance
 
         # --- Trajectory Publishing ---
         trajectory_downsample_points: 500               # [-] Number of points to downsample trajectory to

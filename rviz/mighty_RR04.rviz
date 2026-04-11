@@ -4,15 +4,11 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Global Options1
-        - /Common1
         - /Common1/TF1
         - /Common1/TF1/Frames1
         - /Benchmarking1/Trajectories1/Namespaces1
         - /RR041
-        - /RR041/Planning1
         - /RR041/Planning1/RR04 Traj1/Topic1
-        - /RR041/Mapping1
         - /RR041/Mapping1/RR04 D435 PointCloud1/Topic1
         - /RR041/Mapping1/RR04 Lidar PointCloud1/Topic1
         - /RR041/Ground 2D1
@@ -36,7 +32,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: RR04 ACL Map Occupied
+    SyncSource: RR04 2D Occupied Grid
 Visualization Manager:
   Class: ""
   Displays:
@@ -65,22 +61,6 @@ Visualization Manager:
           Frame Timeout: 15
           Frames:
             All Enabled: false
-            RR03/base_link:
-              Value: true
-            RR03/lidar:
-              Value: true
-            RR03/livox_frame:
-              Value: true
-            RR03/map:
-              Value: true
-            RR03/odom:
-              Value: true
-            RR03/sensor_tower:
-              Value: true
-            RR03_d435_link:
-              Value: true
-            RR03_d455_link:
-              Value: true
             RR04/base_link:
               Value: true
             RR04/lidar:
@@ -105,17 +85,7 @@ Visualization Manager:
           Tree:
             RR04/map:
               RR04/odom:
-                RR04/base_link:
-                  RR04/lidar:
-                    {}
-                  RR04/livox_frame:
-                    {}
-                  RR04/sensor_tower:
-                    {}
-                  RR04_d435_link:
-                    {}
-                  RR04_d455_link:
-                    {}
+                {}
           Update Interval: 0
           Value: true
         - Class: rviz_default_plugins/Marker
@@ -236,8 +206,7 @@ Visualization Manager:
               Enabled: true
               Name: RR04 Original Global Path
               Namespaces:
-                global_path_dots: true
-                global_path_line: true
+                {}
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
@@ -249,8 +218,7 @@ Visualization Manager:
               Enabled: true
               Name: RR04 HGP path
               Namespaces:
-                global_path_dots: true
-                global_path_line: true
+                {}
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
@@ -262,7 +230,7 @@ Visualization Manager:
               Enabled: true
               Name: RR04 Traj
               Namespaces:
-                state_vec: true
+                {}
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
@@ -354,59 +322,6 @@ Visualization Manager:
                 Reliability Policy: Reliable
                 Value: /RR04/point_A
               Value: false
-            - Class: rviz_default_plugins/MarkerArray
-              Enabled: true
-              Name: RR04 Frontiers
-              Namespaces:
-                {}
-              Topic:
-                Depth: 10
-                Durability Policy: Volatile
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/exploration/frontiers
-              Value: true
-            - Alpha: 0.699999988079071
-              Class: rviz_default_plugins/Map
-              Color Scheme: map
-              Draw Behind: false
-              Enabled: true
-              Name: RR04 Visited Map
-              Topic:
-                Depth: 1
-                Durability Policy: Transient Local
-                Filter size: 10
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/exploration/visited_map
-              Update Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/exploration/visited_map_updates
-              Use Timestamp: false
-              Value: true
-            - Alpha: 1
-              Axes Length: 1
-              Axes Radius: 0.10000000149011612
-              Class: rviz_default_plugins/Pose
-              Color: 255; 170; 0
-              Enabled: true
-              Head Length: 0.30000001192092896
-              Head Radius: 0.30000001192092896
-              Name: RR04 Exploration Current Goal
-              Shaft Length: 1
-              Shaft Radius: 0.10000000149011612
-              Shape: Arrow
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                Filter size: 10
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/exploration/current_goal
-              Value: true
           Enabled: true
           Name: Planning
         - Class: rviz_common/Group
@@ -691,7 +606,28 @@ Visualization Manager:
               Class: rviz_default_plugins/Map
               Color Scheme: map
               Draw Behind: false
-              Enabled: true
+              Enabled: false
+              Name: RR04 Visited Map
+              Topic:
+                Depth: 1
+                Durability Policy: Transient Local
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR04/exploration/visited_map
+              Update Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR04/exploration/visited_map_updates
+              Use Timestamp: false
+              Value: false
+            - Alpha: 0.699999988079071
+              Class: rviz_default_plugins/Map
+              Color Scheme: map
+              Draw Behind: false
+              Enabled: false
               Name: RR04 2D Occ from ACL Mapper
               Topic:
                 Depth: 5
@@ -707,7 +643,7 @@ Visualization Manager:
                 Reliability Policy: Reliable
                 Value: /RR04/occ_2d_topic_updates
               Use Timestamp: false
-              Value: true
+              Value: false
             - Alpha: 0.800000011920929
               Autocompute Intensity Bounds: true
               Autocompute Value Bounds:
@@ -797,6 +733,38 @@ Visualization Manager:
                 Value: /RR04/esdf_2d_topic_updates
               Use Timestamp: false
               Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: RR04 Frontiers
+              Namespaces:
+                {}
+              Topic:
+                Depth: 10
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR04/exploration/frontiers
+              Value: true
+            - Alpha: 1
+              Axes Length: 1
+              Axes Radius: 0.10000000149011612
+              Class: rviz_default_plugins/Pose
+              Color: 255; 170; 0
+              Enabled: false
+              Head Length: 0.30000001192092896
+              Head Radius: 0.30000001192092896
+              Name: RR04 Exploration Current Goal
+              Shaft Length: 1
+              Shaft Radius: 0.10000000149011612
+              Shape: Arrow
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /RR04/exploration/current_goal
+              Value: false
           Enabled: true
           Name: Ground 2D
         - Class: rviz_common/Group
@@ -805,7 +773,7 @@ Visualization Manager:
               Enabled: true
               Name: RR04 Vel Text
               Namespaces:
-                velocity: true
+                {}
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
@@ -940,25 +908,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 25.804502487182617
+      Distance: 38.018672943115234
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 1.5332788228988647
-        Y: -0.3995530605316162
-        Z: -0.877854585647583
+        X: 3.360872745513916
+        Y: -1.707669973373413
+        Z: -2.2398388385772705
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.1697965860366821
+      Pitch: 1.339796543121338
       Target Frame: map
       Value: Orbit (rviz_default_plugins)
-      Yaw: 3.1343390941619873
+      Yaw: 3.159341335296631
     Saved: ~
 Window Geometry:
   Displays:

@@ -289,7 +289,7 @@ mighty_node:
         use_esdf_cost: true                             # [-] Enable ESDF distance cost in L-BFGS
         esdf_weight: 1.0e+5                             # [-] ESDF cost weight in objective
         esdf_d_safe: 0.7                                # [m] Safety distance threshold
-        esdf_truncation_distance: 8                    # [voxels] Must match mapper's distance_grid_2d.truncation_distance
+        esdf_truncation_distance: 15                    # [voxels] Must match mapper's distance_grid_2d.truncation_distance
 
         # --- Trajectory Publishing ---
         trajectory_downsample_points: 500               # [-] Number of points to downsample trajectory to

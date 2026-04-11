@@ -10,9 +10,10 @@
 /** @brief 2D Euclidean Signed Distance Field grid with O(1) bilinear queries.
  *
  *  Constructed from a nav_msgs::OccupancyGrid published by the ACL mapper.
- *  The mapper encodes: value = 100 * (1 - dist_sq / dmax), where dmax =
- *  truncation_distance^2 (in voxels). This class pre-converts to float
- *  distances in meters for fast bilinear interpolation during optimization.
+ *  The mapper encodes linearly in distance: value = 100 * (1 - d / d_max),
+ *  where d_max = truncation_distance * resolution (meters). This class
+ *  pre-converts to float distances in meters for fast bilinear interpolation
+ *  during optimization.
  *
  *  Instances are immutable (const after construction) and can be shared
  *  across threads via shared_ptr<const EsdfGrid2D>.
@@ -34,10 +35,11 @@ class EsdfGrid2D {
     grid->width_ = static_cast<int>(msg.info.width);
     grid->height_ = static_cast<int>(msg.info.height);
 
-    const double dmax = static_cast<double>(truncation_voxels * truncation_voxels);
     grid->max_distance_ = static_cast<double>(truncation_voxels) * grid->resolution_;
 
-    // Pre-compute float distance grid (meters) from int8 OccupancyGrid encoding
+    // Pre-compute float distance grid (meters) from int8 OccupancyGrid encoding.
+    // Mapper encodes linearly: value = 100 * (1 - d / d_max), so
+    //   d = d_max * (1 - value / 100).
     const size_t n = msg.data.size();
     grid->dist_.resize(n);
     for (size_t i = 0; i < n; ++i) {
@@ -47,10 +49,7 @@ class EsdfGrid2D {
       } else if (val >= 100) {
         grid->dist_[i] = 0.0;  // on obstacle
       } else {
-        // Decode: value = 100 * (1 - dist_sq/dmax)
-        // => dist_sq = dmax * (1 - value/100)
-        double dist_sq_voxels = dmax * (1.0 - static_cast<double>(val) / 100.0);
-        grid->dist_[i] = std::sqrt(dist_sq_voxels) * grid->resolution_;
+        grid->dist_[i] = grid->max_distance_ * (1.0 - static_cast<double>(val) / 100.0);
       }
     }
     return grid;
