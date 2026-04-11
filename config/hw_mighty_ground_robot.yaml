@@ -106,9 +106,9 @@ mighty_node:
 
         # --- L-BFGS Optimization Weights ---
         dynamic_weight: 1e+3                            # [-] Dynamic obstacle avoidance weight
-        time_weight: 1e+1                               # [-] Time cost weight
+        time_weight: 8e+2                               # [-] Time cost weight
         stat_weight: 0.0                               # [-] Static obstacle weight
-        jerk_weight: 1e+3                               # [-] Jerk smoothness weight
+        jerk_weight: 1e+4                               # [-] Jerk smoothness weight
         dyn_constr_vel_weight: 1e+3                     # [-] Velocity constraint violation weight
         dyn_constr_acc_weight: 1e+3                     # [-] Acceleration constraint violation weight
         dyn_constr_jerk_weight: 1e+3                    # [-] Jerk constraint violation weight
