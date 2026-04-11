@@ -4,21 +4,12 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Global Options1
-        - /Common1
-        - /Common1/TF1
-        - /Common1/TF1/Frames1
         - /Benchmarking1/Trajectories1/Namespaces1
-        - /RR041
-        - /RR041/Planning1
-        - /RR041/Planning1/RR04 Traj1/Topic1
-        - /RR041/Mapping1
-        - /RR041/Mapping1/RR04 D435 PointCloud1/Topic1
-        - /RR041/Mapping1/RR04 Lidar PointCloud1/Topic1
-        - /RR041/Ground 2D1
-        - /RR041/Ground 2D1/RR04 2D ESDF1/Position1
+        - /NX011/Planning1/NX01 Traj1/Topic1
+        - /NX011/Mapping1/NX01 D435 PointCloud1/Topic1
+        - /NX011/Mapping1/NX01 Lidar PointCloud1/Topic1
       Splitter Ratio: 0.5
-    Tree Height: 1668
+    Tree Height: 511
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -36,7 +27,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: RR04 ACL Map Occupied
+    SyncSource: Simulation Global Map
 Visualization Manager:
   Class: ""
   Displays:
@@ -55,72 +46,28 @@ Visualization Manager:
           Offset:
             X: 0
             Y: 0
-            Z: -0.4000000059604645
+            Z: 0
           Plane: XY
           Plane Cell Count: 10
           Reference Frame: <Fixed Frame>
           Value: true
         - Class: rviz_default_plugins/TF
-          Enabled: true
+          Enabled: false
           Frame Timeout: 15
           Frames:
             All Enabled: false
-            RR03/base_link:
-              Value: true
-            RR03/lidar:
-              Value: true
-            RR03/livox_frame:
-              Value: true
-            RR03/map:
-              Value: true
-            RR03/odom:
-              Value: true
-            RR03/sensor_tower:
-              Value: true
-            RR03_d435_link:
-              Value: true
-            RR03_d455_link:
-              Value: true
-            RR04/base_link:
-              Value: true
-            RR04/lidar:
-              Value: false
-            RR04/livox_frame:
-              Value: false
-            RR04/map:
-              Value: false
-            RR04/odom:
-              Value: false
-            RR04/sensor_tower:
-              Value: false
-            RR04_d435_link:
-              Value: false
-            RR04_d455_link:
-              Value: false
           Marker Scale: 5
           Name: TF
           Show Arrows: false
           Show Axes: true
-          Show Names: true
+          Show Names: false
           Tree:
-            RR04/map:
-              RR04/odom:
-                RR04/base_link:
-                  RR04/lidar:
-                    {}
-                  RR04/livox_frame:
-                    {}
-                  RR04/sensor_tower:
-                    {}
-                  RR04_d435_link:
-                    {}
-                  RR04_d455_link:
-                    {}
+            {}
           Update Interval: 0
-          Value: true
+          Value: false
         - Class: rviz_default_plugins/Marker
-          Enabled: false
-          Name: TF Axis
+          Enabled: true
+          Name: Formation Edges
           Namespaces:
             {}
           Topic:
@@ -129,8 +76,8 @@ Visualization Manager:
             Filter size: 10
             History Policy: Keep Last
             Reliability Policy: Reliable
-            Value: /tf_axis
-          Value: false
+            Value: /formation_viz
+          Value: true
         - Class: rviz_default_plugins/MarkerArray
           Enabled: true
           Name: Dynamic Obstacles GT
@@ -165,7 +112,7 @@ Visualization Manager:
           Position Transformer: XYZ
           Selectable: true
           Size (Pixels): 3
-          Size (m): 0.10000000149011612
+          Size (m): 0.05000000074505806
           Style: Flat Squares
           Topic:
             Depth: 5
@@ -177,6 +124,32 @@ Visualization Manager:
           Use Fixed Frame: true
           Use rainbow: true
           Value: true
+        - Alpha: 1
+          Class: rviz_default_plugins/RobotModel
+          Collision Enabled: false
+          Description File: ""
+          Description Source: Topic
+          Description Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /NX01/robot_description
+          Enabled: true
+          Links:
+            All Links Enabled: true
+            Expand Joint Details: false
+            Expand Link Details: false
+            Expand Tree: false
+            Link Tree Style: Links in Alphabetic Order
+          Mass Properties:
+            Inertia: false
+            Mass: false
+          Name: RobotModel
+          TF Prefix: NX01
+          Update Interval: 0
+          Value: true
+          Visual Enabled: true
       Enabled: true
       Name: Common
     - Class: rviz_common/Group
@@ -234,7 +207,7 @@ Visualization Manager:
           Displays:
             - Class: rviz_default_plugins/MarkerArray
               Enabled: true
-              Name: RR04 Original Global Path
+              Name: NX01 Original Global Path
               Namespaces:
                 global_path_dots: true
                 global_path_line: true
@@ -243,11 +216,11 @@ Visualization Manager:
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/original_hgp_path_marker
+                Value: /NX01/original_hgp_path_marker
               Value: true
             - Class: rviz_default_plugins/MarkerArray
               Enabled: true
-              Name: RR04 HGP path
+              Name: NX01 HGP path
               Namespaces:
                 global_path_dots: true
                 global_path_line: true
@@ -256,107 +229,28 @@ Visualization Manager:
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/hgp_path_marker
+                Value: /NX01/hgp_path_marker
               Value: true
+            - Alpha: 0.009999999776482582
+              BoundColor: 38; 162; 105
+              Class: decomp_rviz_plugins/PolyhedronArray
+              Enabled: true
+              MeshColor: 143; 240; 164
+              Name: NX01 SFC Whole
+              Scale: 0.009999999776482582
+              State: Both
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX01/poly_whole
+              Value: true
+              VsColor: 0; 255; 0
+              VsScale: 1
             - Class: rviz_default_plugins/MarkerArray
               Enabled: true
-              Name: RR04 Traj
-              Namespaces:
-                state_vec: true
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/traj_committed_colored
-              Value: true
-            - Class: rviz_default_plugins/MarkerArray
-              Enabled: false
-              Name: RR04 Subopt Trajs
-              Namespaces:
-                {}
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/traj_subopt_colored
-              Value: false
-            - Class: rviz_default_plugins/MarkerArray
-              Enabled: false
-              Name: RR04 Hover Avoidance
-              Namespaces:
-                {}
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/hover_avoidance_viz
-              Value: false
-            - Alpha: 1
-              Class: rviz_default_plugins/PointStamped
-              Color: 38; 162; 105
-              Enabled: true
-              History Length: 1
-              Name: RR04 Point Term G
-              Radius: 0.5
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                Filter size: 10
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/point_G_term
-              Value: true
-            - Alpha: 1
-              Class: rviz_default_plugins/PointStamped
-              Color: 28; 113; 216
-              Enabled: false
-              History Length: 1
-              Name: RR04 Point G
-              Radius: 0.5
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                Filter size: 10
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/point_G
-              Value: false
-            - Alpha: 1
-              Class: rviz_default_plugins/PointStamped
-              Color: 38; 162; 105
-              Enabled: true
-              History Length: 1
-              Name: RR04 Point E
-              Radius: 0.5
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                Filter size: 10
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/point_E
-              Value: true
-            - Alpha: 1
-              Class: rviz_default_plugins/PointStamped
-              Color: 204; 41; 204
-              Enabled: false
-              History Length: 1
-              Name: RR04 Point A
-              Radius: 0.5
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                Filter size: 10
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /RR04/point_A
-              Value: false
-            - Class: rviz_default_plugins/MarkerArray
-              Enabled: true
-              Name: RR04 Frontiers
+              Name: NX01 Frontiers
               Namespaces:
                 {}
               Topic:
@@ -364,49 +258,137 @@ Visualization Manager:
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/exploration/frontiers
+                Value: /NX01/exploration/frontiers
               Value: true
             - Alpha: 0.699999988079071
               Class: rviz_default_plugins/Map
               Color Scheme: map
               Draw Behind: false
               Enabled: true
-              Name: RR04 Visited Map
+              Name: NX01 Visited Map
               Topic:
                 Depth: 1
                 Durability Policy: Transient Local
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/exploration/visited_map
+                Value: /NX01/exploration/visited_map
               Update Topic:
                 Depth: 5
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/exploration/visited_map_updates
+                Value: /NX01/exploration/visited_map_updates
               Use Timestamp: false
               Value: true
-            - Alpha: 1
-              Axes Length: 1
-              Axes Radius: 0.10000000149011612
-              Class: rviz_default_plugins/Pose
-              Color: 255; 170; 0
+            - Class: rviz_default_plugins/MarkerArray
               Enabled: true
-              Head Length: 0.30000001192092896
-              Head Radius: 0.30000001192092896
-              Name: RR04 Exploration Current Goal
-              Shaft Length: 1
-              Shaft Radius: 0.10000000149011612
-              Shape: Arrow
+              Name: NX01 Traj
+              Namespaces:
+                state_vec: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX01/traj_committed_colored
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX01 Actual Trajectory
+              Namespaces:
+                actual_traj_01: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX01/actual_traj
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: NX01 Subopt Trajs
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX01/traj_subopt_colored
+              Value: false
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: NX01 Hover Avoidance
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX01/hover_avoidance_viz
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 38; 162; 105
+              Enabled: true
+              History Length: 1
+              Name: NX01 Point Term G
+              Radius: 0.5
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/exploration/current_goal
+                Value: /NX01/point_G_term
               Value: true
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 28; 113; 216
+              Enabled: false
+              History Length: 1
+              Name: NX01 Point G
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX01/point_G
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 38; 162; 105
+              Enabled: false
+              History Length: 1
+              Name: NX01 Point E
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX01/point_E
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 204; 41; 204
+              Enabled: false
+              History Length: 1
+              Name: NX01 Point A
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX01/point_A
+              Value: false
           Enabled: true
           Name: Planning
         - Class: rviz_common/Group
@@ -429,7 +411,7 @@ Visualization Manager:
               Max Intensity: 4096
               Min Color: 0; 0; 0
               Min Intensity: 0
-              Name: RR04 D435 PointCloud
+              Name: NX01 D435 PointCloud
               Position Transformer: XYZ
               Selectable: true
               Size (Pixels): 1
@@ -441,7 +423,7 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Best Effort
-                Value: /RR04/d435/depth/color/points
+                Value: /NX01/d435/depth/color/points
               Use Fixed Frame: true
               Use rainbow: true
               Value: false
@@ -452,10 +434,10 @@ Visualization Manager:
                 Min Value: 1.7602663040161133
                 Value: true
               Axis: Z
-              Channel Name: intensity
+              Channel Name: z
               Class: rviz_default_plugins/PointCloud2
               Color: 46; 194; 126
-              Color Transformer: FlatColor
+              Color Transformer: Intensity
               Decay Time: 9999
               Enabled: false
               Invert Rainbow: false
@@ -463,11 +445,11 @@ Visualization Manager:
               Max Intensity: 4096
               Min Color: 0; 0; 0
               Min Intensity: 0
-              Name: RR04 Lidar PointCloud
+              Name: NX01 Lidar PointCloud
               Position Transformer: XYZ
               Selectable: true
               Size (Pixels): 1.5
-              Size (m): 0.009999999776482582
+              Size (m): 0.10000000149011612
               Style: Points
               Topic:
                 Depth: 1
@@ -475,7 +457,7 @@ Visualization Manager:
                 Filter size: 30
                 History Policy: Keep Last
                 Reliability Policy: Best Effort
-                Value: /RR04/mid360_PointCloud2
+                Value: /NX01/mid360_PointCloud2
               Use Fixed Frame: true
               Use rainbow: true
               Value: false
@@ -497,7 +479,7 @@ Visualization Manager:
               Max Intensity: 4096
               Min Color: 0; 0; 0
               Min Intensity: 0
-              Name: RR04 ACL Map Free
+              Name: NX01 ACL Map Free
               Position Transformer: XYZ
               Selectable: true
               Size (Pixels): 3
@@ -509,7 +491,7 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Best Effort
-                Value: /RR04/free_grid
+                Value: /NX01/free_grid
               Use Fixed Frame: true
               Use rainbow: true
               Value: false
@@ -531,7 +513,7 @@ Visualization Manager:
               Max Intensity: 4096
               Min Color: 0; 0; 0
               Min Intensity: 0
-              Name: RR04 ACL Map Unknown
+              Name: NX01 ACL Map Unknown
               Position Transformer: XYZ
               Selectable: true
               Size (Pixels): 3
@@ -543,7 +525,7 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Best Effort
-                Value: /RR04/unknown_grid
+                Value: /NX01/unknown_grid
               Use Fixed Frame: true
               Use rainbow: true
               Value: false
@@ -559,13 +541,13 @@ Visualization Manager:
               Color: 246; 97; 81
               Color Transformer: FlatColor
               Decay Time: 0
-              Enabled: false
+              Enabled: true
               Invert Rainbow: false
               Max Color: 255; 255; 255
               Max Intensity: 4096
               Min Color: 0; 0; 0
               Min Intensity: 0
-              Name: RR04 ACL Map Occupied
+              Name: NX01 ACL Map Occupied
               Position Transformer: XYZ
               Selectable: true
               Size (Pixels): 3
@@ -577,10 +559,10 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Best Effort
-                Value: /RR04/occupancy_grid
+                Value: /NX01/occupancy_grid
               Use Fixed Frame: true
               Use rainbow: true
-              Value: false
+              Value: true
             - Alpha: 1
               Autocompute Intensity Bounds: true
               Autocompute Value Bounds:
@@ -599,7 +581,7 @@ Visualization Manager:
               Max Intensity: 4096
               Min Color: 0; 0; 0
               Min Intensity: 0
-              Name: RR04 ACL Map Dynamic
+              Name: NX01 ACL Map Dynamic
               Position Transformer: XYZ
               Selectable: true
               Size (Pixels): 3
@@ -611,7 +593,7 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/dynamic_grid
+                Value: /NX01/dynamic_grid
               Use Fixed Frame: true
               Use rainbow: false
               Value: false
@@ -633,7 +615,7 @@ Visualization Manager:
               Max Intensity: 4096
               Min Color: 0; 0; 0
               Min Intensity: 0
-              Name: RR04 Sensor PCL
+              Name: NX01 Sensor PCL
               Position Transformer: XYZ
               Selectable: true
               Size (Pixels): 3
@@ -645,7 +627,7 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: RR04/sensor_point_cloud
+                Value: NX01/sensor_point_cloud
               Use Fixed Frame: true
               Use rainbow: true
               Value: true
@@ -667,7 +649,7 @@ Visualization Manager:
               Max Intensity: 1
               Min Color: 0; 0; 0
               Min Intensity: 5.160481669008732e-05
-              Name: RR04 Heat Cloud
+              Name: NX01 Heat Cloud
               Position Transformer: XYZ
               Selectable: true
               Size (Pixels): 3
@@ -679,7 +661,7 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/heat_cloud
+                Value: /NX01/heat_cloud
               Use Fixed Frame: true
               Use rainbow: true
               Value: false
@@ -690,22 +672,22 @@ Visualization Manager:
             - Alpha: 0.699999988079071
               Class: rviz_default_plugins/Map
               Color Scheme: map
-              Draw Behind: false
+              Draw Behind: true
               Enabled: true
-              Name: RR04 2D Occ from ACL Mapper
+              Name: NX01 2D Occ from ACL Mapper
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/occ_2d_topic
+                Value: /NX01/occ_2d_topic
               Update Topic:
                 Depth: 5
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/occ_2d_topic_updates
+                Value: /NX01/occ_2d_topic_updates
               Use Timestamp: false
               Value: true
             - Alpha: 0.800000011920929
@@ -720,13 +702,13 @@ Visualization Manager:
               Color: 255; 170; 0
               Color Transformer: FlatColor
               Decay Time: 0
-              Enabled: true
+              Enabled: false
               Invert Rainbow: false
               Max Color: 255; 255; 255
               Max Intensity: 4096
               Min Color: 0; 0; 0
               Min Intensity: 0
-              Name: RR04 2D Occupied Grid
+              Name: NX01 2D Occupied Grid
               Position Transformer: XYZ
               Selectable: true
               Size (Pixels): 5
@@ -738,10 +720,10 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/ground_2d_occupied
+                Value: /NX01/ground_2d_occupied
               Use Fixed Frame: true
               Use rainbow: false
-              Value: true
+              Value: false
             - Alpha: 1
               Autocompute Intensity Bounds: true
               Autocompute Value Bounds:
@@ -760,7 +742,7 @@ Visualization Manager:
               Max Intensity: 5
               Min Color: 0; 0; 0
               Min Intensity: 0.055728036910295486
-              Name: RR04 2D Ground Heat
+              Name: NX01 2D Ground Heat
               Position Transformer: XYZ
               Selectable: true
               Size (Pixels): 3
@@ -772,7 +754,7 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/ground_2d_heat
+                Value: /NX01/ground_2d_heat
               Use Fixed Frame: true
               Use rainbow: true
               Value: false
@@ -781,20 +763,20 @@ Visualization Manager:
               Color Scheme: costmap
               Draw Behind: true
               Enabled: true
-              Name: RR04 2D ESDF
+              Name: NX01 2D ESDF
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/esdf_2d_topic
+                Value: /NX01/esdf_2d_topic
               Update Topic:
                 Depth: 5
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/esdf_2d_topic_updates
+                Value: /NX01/esdf_2d_topic_updates
               Use Timestamp: false
               Value: true
           Enabled: true
@@ -803,7 +785,7 @@ Visualization Manager:
           Displays:
             - Class: rviz_default_plugins/Marker
               Enabled: true
-              Name: RR04 Vel Text
+              Name: NX01 Vel Text
               Namespaces:
                 velocity: true
               Topic:
@@ -812,11 +794,11 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/vel_text
+                Value: /NX01/vel_text
               Value: true
             - Class: rviz_default_plugins/Marker
               Enabled: false
-              Name: RR04 FOV
+              Name: NX01 FOV
               Namespaces:
                 {}
               Topic:
@@ -825,24 +807,24 @@ Visualization Manager:
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/fov
+                Value: /NX01/fov
               Value: false
             - Class: rviz_default_plugins/Marker
               Enabled: true
-              Name: RR04 Drone marker
+              Name: NX01 Drone marker
               Namespaces:
-                {}
+                mesh_/NX01: true
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
                 Filter size: 10
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/drone_marker
+                Value: /NX01/drone_marker
               Value: true
             - Class: rviz_default_plugins/MarkerArray
               Enabled: true
-              Name: RR04 tracked obstacles
+              Name: NX01 tracked obstacles
               Namespaces:
                 {}
               Topic:
@@ -850,11 +832,11 @@ Visualization Manager:
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/tracked_obstacles
+                Value: /NX01/tracked_obstacles
               Value: true
             - Class: rviz_default_plugins/MarkerArray
               Enabled: true
-              Name: RR04 Cluster Bbox
+              Name: NX01 Cluster Bbox
               Namespaces:
                 {}
               Topic:
@@ -862,11 +844,11 @@ Visualization Manager:
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/cluster_bounding_boxes
+                Value: /NX01/cluster_bounding_boxes
               Value: true
             - Class: rviz_default_plugins/MarkerArray
               Enabled: true
-              Name: RR04 Dyn Obst Unc Sphere
+              Name: NX01 Dyn Obst Unc Sphere
               Namespaces:
                 {}
               Topic:
@@ -874,30 +856,30 @@ Visualization Manager:
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/uncertainty_spheres
+                Value: /NX01/uncertainty_spheres
               Value: true
             - Class: rviz_default_plugins/Image
               Enabled: true
               Max Value: 1
               Median window: 5
               Min Value: 0
-              Name: RR04 Front Camera
+              Name: NX01 Front Camera
               Normalize Range: true
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
-                Value: /RR04/d435/color/image_raw
+                Value: /NX01/d435/color/image_raw
               Value: true
           Enabled: true
           Name: Others
       Enabled: true
-      Name: RR04
+      Name: NX01
   Enabled: true
   Global Options:
     Background Color: 222; 221; 218
-    Fixed Frame: RR04/map
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:
@@ -924,7 +906,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /RR04/term_goal
+        Value: /NX01/term_goal
     - Class: rviz_default_plugins/PublishPoint
       Single click: true
       Topic:
@@ -940,35 +922,35 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 25.804502487182617
+      Distance: 17.736309051513672
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 1.5332788228988647
-        Y: -0.3995530605316162
-        Z: -0.877854585647583
+        X: 0.6946094036102295
+        Y: -0.5179787874221802
+        Z: 3.392430543899536
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.1697965860366821
-      Target Frame: map
+      Pitch: 1.4797964096069336
+      Target Frame: NX01/base_link
       Value: Orbit (rviz_default_plugins)
-      Yaw: 3.1343390941619873
+      Yaw: 4.712404251098633
     Saved: ~
 Window Geometry:
   Displays:
     collapsed: false
-  Height: 2123
+  Height: 1376
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd0000000400000000000003cb000007adfc020000003dfb0000001200530065006c0065006300740069006f006e000000003d0000008f0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003d000006c1000000c900fffffffb0000001e004e005800300031002000660072006f006e00740020007600690065007701000002a1000003180000000000000000fb0000001e004e005800300032002000660072006f006e00740020007600690065007700000005e7000001e80000000000000000fb00000022004e005800300031002000460072006f006e0074002000430061006d0065007200610000000307000004e30000000000000000fb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000001e004e00580030003100200059004f004c004f00200049006d00610067006500000003d8000001e10000000000000000fb0000000a0049006d00610067006501000007810000004e0000000000000000fb0000000a0049006d00610067006500000004310000003f0000000000000000fb000000320054003200360035002000460072006f006e007400200046006900730068006500790065002000430061006d00650072006100000004e7000002170000000000000000fb0000000a0049006d00610067006500000006ac0000013e0000000000000000fb0000001800460072006f006e0074002000430061006d00650072006101000004fb000002ef0000000000000000fb00000022004e005800300032002000460072006f006e0074002000430061006d00650072006100000002a8000000c90000000000000000fb00000022004e005800300033002000460072006f006e0074002000430061006d0065007200610000000327000000fa0000000000000000fb00000022004e005800300033002000460072006f006e0074002000430061006d00650072006100000006fb000000d40000000000000000fb0000001e004e005800300033002000660072006f006e0074002000760069006500770000000222000001e20000000000000000fb0000000a0049006d006100670065010000067e000001510000000000000000fb0000000a0049006d00610067006501000006a00000012f0000000000000000fb0000001e004e00580030003500200059004f004c004f00200049006d006100670065000000025b000000ab0000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d00650072006100000003ed000001120000000000000000fb0000001e004e005800300035002000660072006f006e00740020007600690065007700000002c5000002790000000000000000fb0000001e004e005800300034002000660072006f006e0074002000760069006500770000000402000003cd0000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d006100670065000000041e000001330000000000000000fb00000022004e005800300035002000460072006f006e0074002000430061006d00650072006100000004de0000017a0000000000000000fb00000022004e005800300035002000460072006f006e0074002000430061006d0065007200610000000602000001cd0000000000000000fb0000001e004e00580030003200200059004f004c004f00200049006d0061006700650000000429000000d60000000000000000fb0000001e004e00580030003300200059004f004c004f00200049006d00610067006500000003c50000013a0000000000000000fb0000001e004e00580030003100200059004f004c004f00200049006d00610067006501000006e9000001010000000000000000fb00000022004e005800300031002000460072006f006e0074002000430061006d0065007200610000000720000000ca0000000000000000fb0000001e004e00580030003200200059004f004c004f00200049006d006100670065000000040c000000c60000000000000000fb00000022004e005800300032002000460072006f006e0074002000430061006d006500720061000000047d000000fd0000000000000000fb0000001e004e00580030003200200059004f004c004f00200049006d00610067006500000005220000014a0000000000000000fb00000022004e005800300032002000460072006f006e0074002000430061006d0065007200610000000624000001c60000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d0065007200610000000373000000b00000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d0061006700650000000403000000fc0000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d00650072006100000001ae0000004d0000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d00610067006500000002260000007f0000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d0065007200610000000256000000aa0000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d006100670065000000029e000000ec0000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d0061006700650000000313000001580000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d00650072006100000003ef0000022a0000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d0065007200610000000348000000860000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d0061006700650000000399000000af0000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d006100670065000000040f000000ed0000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d00650072006100000004cc0000014d0000000000000000fb0000001e004e00580030003700200059004f004c004f00200049006d006100670065000000024f0000005c0000000000000000fb00000022004e005800300037002000460072006f006e0074002000430061006d0065007200610000000275000000620000000000000000fb00000022004e005800300039002000460072006f006e0074002000430061006d00650072006100000002a00000006a0000000000000000fb0000001e004e00580030003900200059004f004c004f00200049006d00610067006500000002d2000000740000000000000000fb0000001e004e00580031003000200059004f004c004f00200049006d006100670065000000030e0000007c0000000000000000fb00000022004e005800310030002000460072006f006e0074002000430061006d0065007200610000000353000000890000000000000000fb00000022004e005800300038002000460072006f006e0074002000430061006d00650072006100000003a7000000990000000000000000fb0000001e004e00580030003800200059004f004c004f00200049006d006100670065000000040f000000ab0000000000000000fb0000001e004e00580030003600200059004f004c004f00200049006d0061006700650000000492000000bd0000000000000000fb00000022004e005800300036002000460072006f006e0074002000430061006d0065007200610000000538000000e10000000000000000fb000000220052005200300034002000460072006f006e0074002000430061006d0065007200610100000704000000e60000002800ffffff0000000100000182000004c2fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003d000004c2000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e1000001970000000300000f000000003efc0100000002fb0000000800540069006d0065010000000000000f00000002fb00fffffffb0000000800540069006d0065010000000000000450000000000000000000000b2f000007ad00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
-  RR04 Front Camera:
+  NX01 Front Camera:
     collapsed: false
+  QMainWindow State: 000000ff00000000fd0000000400000000000001f7000004c2fc020000003efb0000001200530065006c0065006300740069006f006e000000003d0000008f0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003d0000023c000000c900fffffffb0000001e004e005800300031002000660072006f006e00740020007600690065007701000002a1000003180000000000000000fb0000001e004e005800300032002000660072006f006e00740020007600690065007700000005e7000001e80000000000000000fb00000022004e005800300031002000460072006f006e0074002000430061006d006500720061010000027f000002800000002800fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000001e004e00580030003100200059004f004c004f00200049006d00610067006500000003d8000001e10000000000000000fb0000000a0049006d00610067006501000007810000004e0000000000000000fb0000000a0049006d00610067006500000004310000003f0000000000000000fb000000320054003200360035002000460072006f006e007400200046006900730068006500790065002000430061006d00650072006100000004e7000002170000000000000000fb0000000a0049006d00610067006500000006ac0000013e0000000000000000fb0000001800460072006f006e0074002000430061006d00650072006101000004fb000002ef0000000000000000fb00000022004e005800300032002000460072006f006e0074002000430061006d00650072006100000002a8000000c90000000000000000fb00000022004e005800300033002000460072006f006e0074002000430061006d0065007200610000000327000000fa0000000000000000fb00000022004e005800300033002000460072006f006e0074002000430061006d00650072006100000006fb000000d40000000000000000fb0000001e004e005800300033002000660072006f006e0074002000760069006500770000000222000001e20000000000000000fb0000000a0049006d006100670065010000067e000001510000000000000000fb0000000a0049006d00610067006501000006a00000012f0000000000000000fb0000001e004e00580030003500200059004f004c004f00200049006d006100670065000000025b000000ab0000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d00650072006100000003ed000001120000000000000000fb0000001e004e005800300035002000660072006f006e00740020007600690065007700000002c5000002790000000000000000fb0000001e004e005800300034002000660072006f006e0074002000760069006500770000000402000003cd0000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d006100670065000000041e000001330000000000000000fb00000022004e005800300035002000460072006f006e0074002000430061006d00650072006100000004de0000017a0000000000000000fb00000022004e005800300035002000460072006f006e0074002000430061006d0065007200610000000602000001cd0000000000000000fb0000001e004e00580030003200200059004f004c004f00200049006d0061006700650000000429000000d60000000000000000fb0000001e004e00580030003300200059004f004c004f00200049006d00610067006500000003c50000013a0000000000000000fb0000001e004e00580030003100200059004f004c004f00200049006d00610067006501000006e9000001010000000000000000fb00000022004e005800300031002000460072006f006e0074002000430061006d0065007200610000000720000000ca0000000000000000fb0000001e004e00580030003200200059004f004c004f00200049006d006100670065000000040c000000c60000000000000000fb00000022004e005800300032002000460072006f006e0074002000430061006d006500720061000000047d000000fd0000000000000000fb0000001e004e00580030003200200059004f004c004f00200049006d00610067006500000005220000014a0000000000000000fb00000022004e005800300032002000460072006f006e0074002000430061006d0065007200610000000624000001c60000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d0065007200610000000373000000b00000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d0061006700650000000403000000fc0000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d00650072006100000001ae0000004d0000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d00610067006500000002260000007f0000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d0065007200610000000256000000aa0000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d006100670065000000029e000000ec0000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d0061006700650000000313000001580000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d00650072006100000003ef0000022a0000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d0065007200610000000348000000860000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d0061006700650000000399000000af0000000000000000fb0000001e004e00580030003400200059004f004c004f00200049006d006100670065000000040f000000ed0000000000000000fb00000022004e005800300034002000460072006f006e0074002000430061006d00650072006100000004cc0000014d0000000000000000fb0000001e004e00580030003700200059004f004c004f00200049006d006100670065000000024f0000005c0000000000000000fb00000022004e005800300037002000460072006f006e0074002000430061006d0065007200610000000275000000620000000000000000fb00000022004e005800300039002000460072006f006e0074002000430061006d00650072006100000002a00000006a0000000000000000fb0000001e004e00580030003900200059004f004c004f00200049006d00610067006500000002d2000000740000000000000000fb0000001e004e00580031003000200059004f004c004f00200049006d006100670065000000030e0000007c0000000000000000fb00000022004e005800310030002000460072006f006e0074002000430061006d0065007200610000000353000000890000000000000000fb00000022004e005800300038002000460072006f006e0074002000430061006d00650072006100000003a7000000990000000000000000fb0000001e004e00580030003800200059004f004c004f00200049006d006100670065000000040f000000ab0000000000000000fb0000001e004e00580030003600200059004f004c004f00200049006d0061006700650000000492000000bd0000000000000000fb00000022004e005800300036002000460072006f006e0074002000430061006d0065007200610000000538000000e10000000000000000fb0000000a0049006d0061006700650000000704000000e60000000000000000fb0000000a0049006d0061006700650000000547000002a300000000000000000000000100000182000004c2fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003d000004c2000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e1000001970000000300000d2a0000003efc0100000002fb0000000800540069006d0065010000000000000d2a000002fb00fffffffb0000000800540069006d0065010000000000000450000000000000000000000b2d000004c200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
@@ -977,6 +959,6 @@ Window Geometry:
     collapsed: false
   Views:
     collapsed: false
-  Width: 3840
-  X: 0
-  Y: 0
+  Width: 3370
+  X: 3910
+  Y: 336

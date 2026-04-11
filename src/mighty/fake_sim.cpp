@@ -406,8 +406,8 @@ class FakeSim : public rclcpp::Node {
       publishOdometry();
     }
 
-    // Publish drone marker
-    if (publish_marker_drone_) {
+    // Publish drone marker (UAV only — ground robot is rendered from URDF via RobotModel display)
+    if (publish_marker_drone_ && !use_ground_robot_) {
       pub_marker_drone_->publish(getDroneMarker());
     }
 
