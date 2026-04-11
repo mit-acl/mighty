@@ -3011,6 +3011,10 @@ void MIGHTY_NODE::esdfCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg
 }
 
 void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg) {
+  // Remember the global mapper's ground-plane z so publishVisitedMap() can
+  // render at the same height as the live occ_2d layer in RViz.
+  occ2d_origin_z_ = msg->info.origin.position.z;
+
   // Persistent-map fusion: any cell that arrived UNKNOWN from the mapper but
   // was previously observed (FREE or OCCUPIED) gets restored from
   // visited_map_ before we build OccGrid2D. So when the robot revisits a
@@ -3431,7 +3435,11 @@ void MIGHTY_NODE::publishVisitedMap() {
   msg.info.height     = static_cast<unsigned>(visited_map_->height());
   msg.info.origin.position.x    = visited_map_->originX();
   msg.info.origin.position.y    = visited_map_->originY();
-  msg.info.origin.position.z    = par_.expl_default_goal_z;
+  // Match whatever z the live occ_2d layer is at (global_mapper uses
+  // z_ground). Falls back to the exploration default goal z until the first
+  // occ_2d arrives so a late RViz subscriber still sees a sensible plane.
+  msg.info.origin.position.z    =
+      occ2d_origin_z_.value_or(par_.expl_default_goal_z);
   msg.info.origin.orientation.w = 1.0;
 
   const auto& v = visited_map_->data();

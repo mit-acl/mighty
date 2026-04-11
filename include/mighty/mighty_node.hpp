@@ -9,6 +9,7 @@
 #pragma once
 
 #include <fstream>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -293,6 +294,12 @@ class MIGHTY_NODE : public rclcpp::Node {
   // grows incrementally and `transient_local` QoS replays the latest snapshot
   // to late subscribers.
   double last_visited_publish_t_ = 0.0;
+
+  // Latched origin.z of the most recent occ_2d_topic message, so the
+  // visited_map we republish renders at the same ground plane as the live
+  // occupancy grid (global_mapper sets it to z_ground). std::nullopt until
+  // we've seen a real occ_2d — falls back to expl_default_goal_z then.
+  std::optional<double> occ2d_origin_z_;
 
   // Wall-clock seconds of the last visualization publish in replanCallback.
   // The replan loop runs at 100 Hz which is fine for control but floods RViz
