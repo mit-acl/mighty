@@ -58,7 +58,9 @@ class PurePursuit : public rclcpp::Node {
   double turn_in_place_threshold_;      // Heading error threshold for turn-in-place (rad)
   double slow_down_threshold_;          // Heading error threshold for speed reduction (rad)
   double w_smoothing_alpha_;            // Angular velocity smoothing factor (0 = no smoothing)
+  double max_linear_accel_;             // Slew-rate limit on linear.x (m/s^2). 0 disables.
   bool use_hardware_;
   std::string map_frame_id_;
   double prev_w_command_ = 0.0;
+  double prev_v_command_ = 0.0;
 };

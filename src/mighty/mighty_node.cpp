@@ -351,6 +351,9 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
       mp.dist_ref_m      = par_.expl_dist_ref_m;
       mp.sensor_radius_m = par_.expl_sensor_radius_m;
       mp.goal_select_threshold = par_.expl_goal_select_threshold;
+      mp.pursuit_timeout_factor  = par_.expl_pursuit_timeout_factor;
+      mp.pursuit_timeout_v_ref   = par_.expl_pursuit_timeout_v_ref;
+      mp.pursuit_timeout_min_sec = par_.expl_pursuit_timeout_min_sec;
       frontier_manager_ = std::make_unique<FrontierManager>(mp);
 
       // Persistent visited bitmap. Records every cell ever observed across
@@ -683,6 +686,9 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.manager.verify_radius_cells", 2);
   this->declare_parameter("exploration.manager.max_frontiers", 1000);
   this->declare_parameter("exploration.manager.unreachable_consec_thresh", 5);
+  this->declare_parameter("exploration.manager.pursuit_timeout_factor", 10.0);
+  this->declare_parameter("exploration.manager.pursuit_timeout_v_ref", 0.5);
+  this->declare_parameter("exploration.manager.pursuit_timeout_min_sec", 10.0);
   this->declare_parameter("exploration.visited_map.center_x", 0.0);
   this->declare_parameter("exploration.visited_map.center_y", 0.0);
   this->declare_parameter("exploration.visited_map.width_m", 100.0);
@@ -1033,6 +1039,12 @@ void MIGHTY_NODE::setParameters() {
   par_.expl_max_frontiers        = this->get_parameter("exploration.manager.max_frontiers").as_int();
   par_.expl_unreachable_consec_thresh =
       this->get_parameter("exploration.manager.unreachable_consec_thresh").as_int();
+  par_.expl_pursuit_timeout_factor =
+      this->get_parameter("exploration.manager.pursuit_timeout_factor").as_double();
+  par_.expl_pursuit_timeout_v_ref =
+      this->get_parameter("exploration.manager.pursuit_timeout_v_ref").as_double();
+  par_.expl_pursuit_timeout_min_sec =
+      this->get_parameter("exploration.manager.pursuit_timeout_min_sec").as_double();
   par_.expl_visited_map_center_x   = this->get_parameter("exploration.visited_map.center_x").as_double();
   par_.expl_visited_map_center_y   = this->get_parameter("exploration.visited_map.center_y").as_double();
   par_.expl_visited_map_width_m    = this->get_parameter("exploration.visited_map.width_m").as_double();
@@ -3273,6 +3285,9 @@ void MIGHTY_NODE::exploreSelectCallback() {
   current_explore_id_       = next->id;
   exploration_active_       = true;
   unreachable_consec_count_ = 0;
+  frontier_manager_->markSelected(
+      next->id, Eigen::Vector2d(robot_pose.x(), robot_pose.y()),
+      this->now().seconds());
   publishExplorationCurrentGoal(*next);
 }
 

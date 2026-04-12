@@ -85,6 +85,7 @@ mighty_node:
         pure_pursuit_turn_in_place_threshold_deg: 20.0  # [deg] Heading error threshold for turn-in-place
         pure_pursuit_slow_down_threshold_deg: 5.0       # [deg] Heading error threshold for speed reduction
         pure_pursuit_w_smoothing_alpha: 0.2             # [-] Angular velocity smoothing (0 = none, 1 = full)
+        pure_pursuit_max_linear_accel: 0.5              # [m/s^2] Slew-rate limit on cmd_vel linear.x (0 disables). Prevents lurch on auto-mode engage.
 
         # --- Dynamic Obstacles ---
         obst_max_vel: 0.3                               # [m/s] Expected max velocity of dynamic obstacles
@@ -102,7 +103,7 @@ mighty_node:
         # --- Local Planning ---
         horizon: 10.0                                   # [m] Planning horizon
         goal_radius: 0.5                                # [m] Goal reached threshold
-        goal_seen_radius: 1.0                           # [m] Distance to stop replanning
+        goal_seen_radius: 0.5                           # [m] Distance to stop replanning
 
         # --- L-BFGS Optimization Weights ---
         dynamic_weight: 1e+3                            # [-] Dynamic obstacle avoidance weight
@@ -184,7 +185,7 @@ mighty_node:
         static_heat_exclude_dynamic: true               # [-] Exclude dynamic obstacles from static heat
 
         # --- Soft-Cost Obstacles ---
-        use_soft_cost_obstacles: true                   # [-] Enable soft-cost traversal mode
+        use_soft_cost_obstacles: false                   # [-] Enable soft-cost traversal mode
         obstacle_soft_cost: 50.0                        # [-] Cost per occupied cell step
 
         # --- Path Smoothing ---
@@ -298,7 +299,7 @@ mighty_node:
         # Narrow corridors are fine because the robot never gets close to the inside
         # corner during the turn. Only real bends (angle >= corridor_corner_angle_deg)
         # trigger a stop; shallow curves are left to L-BFGS.
-        corridor_hop_enabled: true                      # [-] Master switch
+        corridor_hop_enabled: false                      # [-] Master switch
         corridor_corner_angle_deg: 75.0                 # [deg] Min direction change to count as a real bend (L/T/+ junctions)
         corridor_detection_window_m: 0.8                # [m] Arclength to average incoming/outgoing direction over (larger = more robust, less sensitive to resample phase)
         corridor_backoff_m: 0.5                         # [m] Distance to back off the subgoal along the incoming direction
@@ -343,11 +344,11 @@ mighty_node:
         exploration.detector.obstacle_clearance_cells: 1
         exploration.detector.min_obstacle_distance_m: 0.5
         exploration.detector.robot_snap_radius_m: 1.0
-        exploration.bounds.enabled: false
-        exploration.bounds.min_x: -10.0
-        exploration.bounds.max_x:  10.0
-        exploration.bounds.min_y: -10.0
-        exploration.bounds.max_y:  10.0
+        exploration.bounds.enabled: true
+        exploration.bounds.min_x: -3.0
+        exploration.bounds.max_x:  11.0
+        exploration.bounds.min_y: -14.0
+        exploration.bounds.max_y:  10.5
         exploration.utility.w_size: 1.0
         exploration.utility.w_dist: 2.0
         exploration.utility.w_info: 1.0
@@ -364,11 +365,16 @@ mighty_node:
         exploration.manager.verify_radius_cells: 2
         exploration.manager.max_frontiers: 1000
         exploration.manager.unreachable_consec_thresh: 5
+        # Pursuit timeout: auto-INVALIDATE a frontier we've been chasing longer
+        # than max(min_sec, dist/v_ref*factor). Set factor <= 0 to disable.
+        exploration.manager.pursuit_timeout_factor: 5.0
+        exploration.manager.pursuit_timeout_v_ref: 0.5
+        exploration.manager.pursuit_timeout_min_sec: 10.0
         exploration.visited_map.center_x: 0.0
         exploration.visited_map.center_y: 0.0
         exploration.visited_map.width_m: 100.0
         exploration.visited_map.height_m: 100.0
         exploration.visited_map.resolution_m: 0.15
         exploration.visited_map.publish: true
-        exploration.visited_map.fuse_into_local: true   # restore old FREE/OCCUPIED into UNKNOWN local cells on revisit (static-env only)
+        exploration.visited_map.fuse_into_local: false  # disabled to stop stale observations re-seeding phantom FREE inside closed rooms
         exploration.visualization.publish_markers: true

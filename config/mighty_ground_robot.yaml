@@ -85,6 +85,7 @@ mighty_node:
         pure_pursuit_turn_in_place_threshold_deg: 20.0  # [deg] Heading error threshold for turn-in-place
         pure_pursuit_slow_down_threshold_deg: 5.0       # [deg] Heading error threshold for speed reduction
         pure_pursuit_w_smoothing_alpha: 0.2             # [-] Angular velocity smoothing (0 = none, 1 = full)
+        pure_pursuit_max_linear_accel: 1.0              # [m/s^2] Slew-rate limit on cmd_vel linear.x (0 disables)
 
         # --- Dynamic Obstacles ---
         obst_max_vel: 0.3                               # [m/s] Expected max velocity of dynamic obstacles
@@ -369,6 +370,11 @@ mighty_node:
         exploration.manager.verify_radius_cells: 2               # [cells] unknown-neighbor radius for VISITED check
         exploration.manager.max_frontiers: 1000                  # [-]   DB cap; oldest VISITED evicted first
         exploration.manager.unreachable_consec_thresh: 5         # [-]   HGP failures -> INVALIDATED
+        # Pursuit timeout: auto-INVALIDATE a frontier that we've been chasing
+        # longer than max(min_sec, dist/v_ref*factor). Set factor <= 0 to disable.
+        exploration.manager.pursuit_timeout_factor: 10.0         # [-]   slack multiplier on straight-line travel time
+        exploration.manager.pursuit_timeout_v_ref: 0.5           # [m/s] reference velocity for budget calc
+        exploration.manager.pursuit_timeout_min_sec: 10.0        # [s]   floor regardless of distance
         # Persistent visited bitmap. Records every cell ever observed (FREE or
         # OCCUPIED) so the detector skips frontiers along the seam where the
         # sliding mapper window re-blanks revisited areas to UNKNOWN. Light
@@ -381,5 +387,5 @@ mighty_node:
         exploration.visited_map.height_m: 100.0                  # [m]
         exploration.visited_map.resolution_m: 0.15               # [m]   match the local occ_2d resolution
         exploration.visited_map.publish: true                    # [-]   publish on /exploration/visited_map for RViz
-        exploration.visited_map.fuse_into_local: true            # [-]   restore last-known FREE/OCCUPIED into UNKNOWN local cells on revisit (static-env only)
+        exploration.visited_map.fuse_into_local: false           # [-]   disabled to stop stale observations re-seeding phantom FREE inside closed rooms
         exploration.visualization.publish_markers: true          # [-]   Publish /exploration/frontiers

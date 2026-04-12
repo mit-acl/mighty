@@ -342,6 +342,11 @@ mighty_node:
         exploration.manager.verify_radius_cells: 2               # [cells] unknown-neighbor radius for VISITED check
         exploration.manager.max_frontiers: 1000                  # [-]   DB cap; oldest VISITED evicted first
         exploration.manager.unreachable_consec_thresh: 5         # [-]   HGP failures -> INVALIDATED
+        # Pursuit timeout: auto-INVALIDATE a frontier that we've been chasing
+        # longer than max(min_sec, dist/v_ref*factor). Set factor <= 0 to disable.
+        exploration.manager.pursuit_timeout_factor: 10.0         # [-]   slack multiplier on straight-line travel time
+        exploration.manager.pursuit_timeout_v_ref: 1.0           # [m/s] reference velocity for budget calc
+        exploration.manager.pursuit_timeout_min_sec: 10.0        # [s]   floor regardless of distance
         exploration.visited_map.center_x: 0.0                    # [m]   bitmap center x (world frame)
         exploration.visited_map.center_y: 0.0                    # [m]   bitmap center y (world frame)
         exploration.visited_map.width_m: 100.0                   # [m]   total extent (must cover full mission area)

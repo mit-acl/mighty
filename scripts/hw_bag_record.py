@@ -12,104 +12,83 @@ import argparse
 
 def record_ros2_bag(bag_name, bag_path, agents, topics=None):
 
-    # Define the topics template that is common across all agents
+    # Per-agent topics — this list mirrors what the RR04 rviz config displays
+    # (rviz/mighty_RR04.rviz) plus a few essentials for offline analysis
+    # (state, cmd_vel, dlio, lookahead).
     base_topics = [
-        "/agent_initial_guess_pos",
-        "/agent_pos",
-        "/agent_pos_array",
-        "/camera_info",
-        "/depth_camera/free_cells_vis_array",
-        "/depth_camera/occupied_cells_vis_array",
-        "/drone_marker",
-        "/drone_marker_array",
-        "/dummy_traj_pos",
-        "/goal",
-        "/image_raw",
-        "/joint_states",
-        "/dgp_path_marker",
-        "/free_dgp_path_marker",
-        "/lidar/free_cells_vis_array",
-        "/lidar/occupied_cells_vis_array",
-        "/mode",
-        "/own_traj",
-        "/point_G",
-        "/point_G_term",
-        "/poly",
-        "/projected_map",
-        "/robot_description",
-        "/state",
-        "/term_goal",
-        "/traj",
-        "/traj_committed_colored",
-        "/mid360_PointCloud2",
-        # "/d455/color/image_raw",
-        # "/d455/color/image_raw/compressed",
-        # "/d455/depth/color/points",
-        # "/d455/depth/image_raw",
-        # "/d455/depth/image_raw/compressed",
-        # "/d455/depth/image_raw/compressedDepth",
-        "/d455/color/camera_info",
-        # "/d455/depth/camera_info",
-        "/dynamic_map_marker",
-        "/actual_traj",
-        "/tracked_obstacles",
-        "/cluster_bounding_boxes",
-        "/yaw_output",
-        "/predicted_trajs",
-        "/heat_cloud",
+        # --- Global paths / subgoals / trajectories ---
         "/original_hgp_path_marker",
         "/hgp_path_marker",
-        "/poly_whole",
+        "/traj_committed_colored",
         "/traj_subopt_colored",
         "/hover_avoidance_viz",
-        "/point_E",
         "/point_A",
+        "/point_E",
+        "/point_G",
+        "/point_G_term",
+        "/term_goal",
+        "/goal",
+        # --- Raw sensors ---
+        "/mid360_PointCloud2",
         "/livox/lidar",
+        "/d435/depth/color/points",
+        "/d435/color/image_raw",
+        "/d435/color/image_raw/compressed",
+        "/d435/color/camera_info",
+        # --- 3D voxel grids ---
         "/free_grid",
         "/unknown_grid",
         "/occupancy_grid",
         "/dynamic_grid",
+        "/heat_cloud",
+        # --- 2D projections / ESDF / exploration ---
+        "/occ_2d_topic",
+        "/occ_2d_topic_updates",
+        "/esdf_2d_topic",
+        "/esdf_2d_topic_updates",
         "/ground_2d_occupied",
         "/ground_2d_heat",
+        "/exploration/visited_map",
+        "/exploration/visited_map_updates",
+        "/exploration/frontiers",
+        "/exploration/current_goal",
+        # --- Vehicle state & viz ---
+        "/state",
+        "/drone_marker",
+        "/drone_marker_array",
         "/vel_text",
         "/fov",
+        "/tracked_obstacles",
+        "/cluster_bounding_boxes",
         "/uncertainty_spheres",
+        # --- Control (pure pursuit / cmd_vel) ---
+        "/cmd_vel",
+        "/cmd_vel_auto",
+        "/lookahead_point",
+        "/lookahead_marker",
+        # --- DLIO odometry ---
         "/dlio/odom_node/pose",
-        "/frame_align/viz/pose_array"
+        "/dlio/odom_node/odom",
     ]
 
-    # Static topics (not agent-specific)
+    # Static / non-agent-namespaced topics
     static_topics = [
         "/clicked_point",
         "/clock",
-        "/dummy_traj",
         "/initialpose",
         "/parameter_events",
-        # "/performance_metrics",
-        # "/plug/link_states_plug",
-        # "/plug/model_states_plug",
-        "/trajs",
         "/rosout",
         "/tf",
         "/tf_static",
         "/map_generator/global_cloud",
+        "/robot_description",
     ]
-    
+
     # Generate topics for all agents
     all_topics = []
     for agent in agents:
         for topic in base_topics:
             all_topics.append(f"/{agent}{topic}")
-
-    # hardware d455
-    all_topics.append(f"{agent}/{agent}_d455/color/image_raw/compressed")
-
-    # frame alginemnt 
-    other_agents = ["RR03", "RR04", "RR05", "RR06", "RR08"]
-    for oa in other_agents:
-        if oa != agent:
-            all_topics.append(f"/frame_align/{agent}/{oa}")
-            all_topics.append(f"/frame_align/{oa}/{agent}")
 
     # Add static topics (non-agent-specific topics)
     all_topics.extend(static_topics)
@@ -135,10 +114,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Record a ROS2 bag")
     parser.add_argument("--bag_number", type=int, help="Bag number to record")
     parser.add_argument("--bag_name", type=str, help="Custom bag name (overrides --bag_number)", default=None)
-    # parser.add_argument("--bag_path", type=str, help="Path to save the bag", default="/media/kkondo/T7/dynus/sim/multiagent")
-    parser.add_argument("--bag_path", type=str, help="Path to save the bag", default="/home/swarm/data/dynus")
-    # parser.add_argument("--agents", nargs="+", help="List of agents to record", default=["NX01", "NX02", "NX03"])
-    parser.add_argument("--agents", nargs="+", help="List of agents to record", default=["RR06"])
+    parser.add_argument("--bag_path", type=str, help="Path to save the bag",
+                        default="/home/swarm/data/mighty_office_exploration")
+    parser.add_argument("--agents", nargs="+", help="List of agents to record",
+                        default=["RR04"])
     args = parser.parse_args()
 
     # Customize bag name and path as needed

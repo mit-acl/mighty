@@ -269,6 +269,7 @@ def generate_launch_description():
                 'turn_in_place_threshold_deg': parameters.get('pure_pursuit_turn_in_place_threshold_deg', 60.0),
                 'slow_down_threshold_deg': parameters.get('pure_pursuit_slow_down_threshold_deg', 30.0),
                 'w_smoothing_alpha': parameters.get('pure_pursuit_w_smoothing_alpha', 0.3),
+                'max_linear_accel': parameters.get('pure_pursuit_max_linear_accel', 1.0),
                 'use_hardware': use_hardware,
                 'map_frame_id': map_frame_id,
                 'control_rate': 50.0,

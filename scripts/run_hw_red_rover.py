@@ -80,18 +80,19 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
     else:
         dlio_cmd = f'ros2 launch direct_lidar_inertial_odometry dlio.launch.py namespace:={rover_name}'
 
-    # Global mapper: mocap uses pose_stamped on "world" topic, DLIO uses dlio/odom_node/pose
+    # Global mapper: mocap uses pose_stamped on "world" topic, DLIO uses dlio/odom_node/pose.
+    # `ground_robot:=true` plus `hardware:=true` picks hw_ground_robot.yaml from the launch default.
     if odom_type == 'mocap':
         mapper_cmd = (
             f'ros2 launch global_mapper_ros global_mapper_node.launch.py'
-            f' hardware:=true quad:={rover_name}'
+            f' hardware:=true ground_robot:=true quad:={rover_name}'
             f' depth_pointcloud_topic:=livox/lidar'
             f' pose_topic:=world pose_type:=pose_stamped'
         )
     else:
         mapper_cmd = (
             f'ros2 launch global_mapper_ros global_mapper_node.launch.py'
-            f' hardware:=true quad:={rover_name}'
+            f' hardware:=true ground_robot:=true quad:={rover_name}'
             f' depth_pointcloud_topic:=livox/lidar'
             f' pose_topic:=dlio/odom_node/pose'
         )
@@ -171,16 +172,16 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
         #     ]
         # },
         # Bag recorder
-        {
-            'shell_command': [
-                source_ws,
-                f'echo "odom_type={odom_type}  rover={rover_name}  goal_type={goal_type}"',
-                f'python3 {MIGHTY_WS / "src" / "mighty" / "scripts" / "hw_bag_record.py"}'
-                f' --bag_path /home/swarm/data/multi_mighty'
-                f' --agents {rover_name}'
-                f' --bag_name {rover_name}_{timestamp}',
-            ]
-        },
+        # {
+        #     'shell_command': [
+        #         source_ws,
+        #         f'echo "odom_type={odom_type}  rover={rover_name}  goal_type={goal_type}"',
+        #         f'python3 {MIGHTY_WS / "src" / "mighty" / "scripts" / "hw_bag_record.py"}'
+        #         f' --bag_path /home/swarm/data/multi_mighty'
+        #         f' --agents {rover_name}'
+        #         f' --bag_name {rover_name}_{timestamp}',
+        #     ]
+        # },
     ]
 
     yaml_content = {

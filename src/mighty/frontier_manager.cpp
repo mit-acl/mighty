@@ -150,6 +150,25 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
     }
   }
 
+  // ---- Pursuit-timeout check ----
+  // Any record with an armed deadline that has elapsed gets INVALIDATED if
+  // it's still ACTIVE or DORMANT. Records already VISITED/INVALIDATED are
+  // left alone (their deadlines were cleared on transition anyway).
+  if (params_.pursuit_timeout_factor > 0.0) {
+    for (auto& r : records_) {
+      if (r.pursuit_deadline_t <= 0.0) continue;
+      if (r.state != FrontierState::ACTIVE &&
+          r.state != FrontierState::DORMANT) {
+        r.pursuit_deadline_t = -1.0;
+        continue;
+      }
+      if (t_now >= r.pursuit_deadline_t) {
+        r.state = FrontierState::INVALIDATED;
+        r.pursuit_deadline_t = -1.0;
+      }
+    }
+  }
+
   evictIfOverCap();
   last_update_t_ = t_now;
 }
@@ -244,6 +263,7 @@ void FrontierManager::markVisited(uint64_t id) {
     if (r.id == id) {
       ++r.visit_count;
       r.state = FrontierState::VISITED;
+      r.pursuit_deadline_t = -1.0;
       return;
     }
   }
@@ -253,8 +273,27 @@ void FrontierManager::markInvalidated(uint64_t id) {
   for (auto& r : records_) {
     if (r.id == id) {
       r.state = FrontierState::INVALIDATED;
+      r.pursuit_deadline_t = -1.0;
       return;
     }
+  }
+}
+
+void FrontierManager::markSelected(uint64_t id, const Eigen::Vector2d& robot_xy,
+                                   double t_now) {
+  if (params_.pursuit_timeout_factor <= 0.0) return;  // feature disabled
+  for (auto& r : records_) {
+    if (r.id != id) continue;
+    // Don't clobber a deadline that's already armed for this record — we keep
+    // ticking from first selection even if the select tick re-affirms the
+    // same goal later (e.g. after a re-match).
+    if (r.pursuit_deadline_t > 0.0) return;
+    const double dist = (r.centroid_xy - robot_xy).norm();
+    const double v_ref = std::max(1e-3, params_.pursuit_timeout_v_ref);
+    const double budget = std::max(params_.pursuit_timeout_min_sec,
+                                   dist / v_ref * params_.pursuit_timeout_factor);
+    r.pursuit_deadline_t = t_now + budget;
+    return;
   }
 }
 

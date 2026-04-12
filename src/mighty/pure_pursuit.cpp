@@ -13,6 +13,7 @@ PurePursuit::PurePursuit()
   this->declare_parameter("turn_in_place_threshold_deg", 60.0);  // degrees
   this->declare_parameter("slow_down_threshold_deg", 30.0);      // degrees
   this->declare_parameter("w_smoothing_alpha", 0.3);
+  this->declare_parameter("max_linear_accel", 1.0);
   this->declare_parameter("use_hardware", false);
   this->declare_parameter("map_frame_id", "map");
 
@@ -28,6 +29,7 @@ PurePursuit::PurePursuit()
       this->get_parameter("turn_in_place_threshold_deg").as_double() * M_PI / 180.0;
   slow_down_threshold_ = this->get_parameter("slow_down_threshold_deg").as_double() * M_PI / 180.0;
   w_smoothing_alpha_ = this->get_parameter("w_smoothing_alpha").as_double();
+  max_linear_accel_ = this->get_parameter("max_linear_accel").as_double();
   use_hardware_ = this->get_parameter("use_hardware").as_bool();
   map_frame_id_ = this->get_parameter("map_frame_id").as_string();
 
@@ -133,6 +135,7 @@ void PurePursuit::controlCallback() {
     twist.angular.z = 0.0;
     pub_cmd_vel_->publish(twist);
     prev_w_command_ = 0.0;
+    prev_v_command_ = 0.0;
     return;
   }
 
@@ -218,6 +221,7 @@ void PurePursuit::controlCallback() {
     twist.linear.x = 0.0;
     twist.angular.z = w_turn;
     pub_cmd_vel_->publish(twist);
+    prev_v_command_ = 0.0;
     return;
   }
 
@@ -267,6 +271,16 @@ void PurePursuit::controlCallback() {
   // ---- Smooth angular velocity to reduce jitter ----
   w_command = w_smoothing_alpha_ * prev_w_command_ + (1.0 - w_smoothing_alpha_) * w_command;
   prev_w_command_ = w_command;
+
+  // ---- Slew-rate limit linear velocity ----
+  // Bounds the per-tick change in linear.x to max_linear_accel_ / control_rate_.
+  // Without this, the very first cmd_vel after auto-mode engages can jump straight
+  // to v_ref (which the planner has already ramped up), causing the rover to lurch.
+  if (max_linear_accel_ > 0.0) {
+    const double max_dv = max_linear_accel_ / control_rate_;
+    v_command = std::clamp(v_command, prev_v_command_ - max_dv, prev_v_command_ + max_dv);
+  }
+  prev_v_command_ = v_command;
 
   // Publish cmd_vel
   geometry_msgs::msg::Twist twist;

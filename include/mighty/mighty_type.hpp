@@ -351,6 +351,11 @@ struct parameters {
   int    expl_verify_radius_cells{2};
   int    expl_max_frontiers{1000};
   int    expl_unreachable_consec_thresh{5};
+  // Pursuit timeout — auto-invalidate a frontier we've been chasing too long.
+  // Budget = max(min_sec, dist / v_ref * factor). Set factor <= 0 to disable.
+  double expl_pursuit_timeout_factor{10.0};
+  double expl_pursuit_timeout_v_ref{0.5};
+  double expl_pursuit_timeout_min_sec{10.0};
   // Persistent visited bitmap (suppresses re-detection of revisited frontiers)
   double expl_visited_map_center_x{0.0};
   double expl_visited_map_center_y{0.0};

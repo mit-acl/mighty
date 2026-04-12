@@ -39,6 +39,10 @@ struct FrontierRecord {
   double          cached_utility = 0.0;
   Eigen::Vector2d aabb_min      = Eigen::Vector2d::Zero();
   Eigen::Vector2d aabb_max      = Eigen::Vector2d::Zero();
+  // Pursuit deadline: absolute time (seconds) after which this record is
+  // auto-invalidated if still ACTIVE/DORMANT. <=0 means "not being pursued".
+  // Set by markSelected(), cleared on INVALIDATED/VISITED transition.
+  double          pursuit_deadline_t = -1.0;
 };
 
 struct FrontierManagerParams {
@@ -64,6 +68,17 @@ struct FrontierManagerParams {
   double sensor_radius_m = 5.0;
 
   double goal_select_threshold = -1.0e9;  // -inf: always pick something
+
+  // Pursuit timeout. When a frontier is selected as the current exploration
+  // goal, it is given a deadline of
+  //     max(pursuit_timeout_min_sec,
+  //         dist / pursuit_timeout_v_ref * pursuit_timeout_factor)
+  // seconds. If the deadline elapses while the record is still ACTIVE or
+  // DORMANT, it is auto-INVALIDATED and the selector moves on. Set
+  // pursuit_timeout_factor <= 0 to disable the feature entirely.
+  double pursuit_timeout_factor  = 10.0;
+  double pursuit_timeout_v_ref   = 0.5;   // reference velocity (m/s)
+  double pursuit_timeout_min_sec = 10.0;  // floor, regardless of distance
 };
 
 class FrontierManager {
@@ -96,6 +111,12 @@ class FrontierManager {
 
   void markVisited(uint64_t id);
   void markInvalidated(uint64_t id);
+
+  /** @brief Mark a frontier as the current pursuit goal and arm its timeout.
+   *  Called by the exploration select tick right after picking a frontier.
+   *  No-op if pursuit_timeout_factor <= 0.
+   */
+  void markSelected(uint64_t id, const Eigen::Vector2d& robot_xy, double t_now);
 
   const FrontierRecord* find(uint64_t id) const;
   const std::vector<FrontierRecord>& records() const { return records_; }

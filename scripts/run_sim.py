@@ -262,7 +262,7 @@ def generate_multiagent_ground_yaml(setup_bash: Path, agents: list, radius: floa
             'shell_command': [
                 'sleep 10',
                 f'ros2 launch global_mapper_ros global_mapper_node.launch.py use_gazebo:=true '
-                f'use_obstacle_tracker:=false param_file:=global_mapper_ground_robot.yaml quad:={ns}'
+                f'use_obstacle_tracker:=false param_file:=sim_ground_robot.yaml quad:={ns}'
             ]
         })
 
@@ -325,7 +325,7 @@ def generate_dyn_test_yaml(setup_bash: Path, ros_domain_id: int = 7) -> str:
             'shell_command': [
                 'sleep 10',
                 'ros2 launch global_mapper_ros global_mapper_node.launch.py use_gazebo:=true '
-                'use_obstacle_tracker:=true param_file:=global_mapper.yaml'
+                'use_obstacle_tracker:=true param_file:=sim_uav.yaml'
             ]
         },
         # Onboard agent NX01 — stationary, no goal sent
@@ -381,7 +381,7 @@ def generate_dyn_test_ground_yaml(setup_bash: Path, ros_domain_id: int = 7) -> s
             'shell_command': [
                 'sleep 10',
                 'ros2 launch global_mapper_ros global_mapper_node.launch.py use_gazebo:=true '
-                'use_obstacle_tracker:=false param_file:=global_mapper_ground_robot.yaml'
+                'use_obstacle_tracker:=false param_file:=sim_ground_robot.yaml'
             ]
         },
         # Onboard agent NX01 — ground robot, no goal sent
@@ -441,7 +441,7 @@ def generate_dyn_test_ground_mpc_yaml(setup_bash: Path, ros_domain_id: int = 7) 
             'shell_command': [
                 'sleep 10',
                 'ros2 launch global_mapper_ros global_mapper_node.launch.py use_gazebo:=true '
-                'use_obstacle_tracker:=true param_file:=global_mapper_ground_robot.yaml'
+                'use_obstacle_tracker:=true param_file:=sim_ground_robot.yaml'
             ]
         },
         # Onboard agent NX01 — ground robot with MPC enabled (no pure pursuit)
@@ -516,7 +516,7 @@ def generate_gazebo_yaml(setup_bash: Path, goal: tuple, sim_env: str,
                 'sleep 3',
                 f'ros2 launch global_mapper_ros global_mapper_node.launch.py use_gazebo:=true '
                 f'use_obstacle_tracker:=false '
-                f'param_file:={"global_mapper_ground_robot.yaml" if use_ground_robot else "global_mapper.yaml"}'
+                f'param_file:={"sim_ground_robot.yaml" if use_ground_robot else "sim_uav.yaml"}'
             ]
         },
         # Onboard agent NX01
