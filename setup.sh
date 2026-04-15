@@ -5,20 +5,26 @@ set -e
 # Run this once to install all dependencies, clone repos, and build everything
 # Combines system setup, dependency installation, and workspace building
 #
-# Usage: ./setup.sh [-j N]
-#   -j N  Number of parallel jobs for building (default: all CPUs)
+# Usage: ./setup.sh [-j N] [--jetson]
+#   -j N      Number of parallel jobs for building (default: all CPUs)
+#   --jetson  Skip packages unavailable on Jetson (ARM64), e.g. Gazebo
 
 # Parse arguments
 NUM_JOBS=$(nproc)
+JETSON=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         -j|--jobs)
             NUM_JOBS="$2"
             shift 2
             ;;
+        --jetson)
+            JETSON=true
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: ./setup.sh [-j N]"
+            echo "Usage: ./setup.sh [-j N] [--jetson]"
             exit 1
             ;;
     esac
@@ -28,6 +34,9 @@ echo "============================================="
 echo "MIGHTY Complete Setup Script"
 echo "============================================="
 echo "Using $NUM_JOBS parallel jobs for building"
+if $JETSON; then
+    echo "Jetson mode: skipping Gazebo and other x86-only packages"
+fi
 echo ""
 
 # Prompt for sudo password once at the beginning and keep it cached
@@ -123,22 +132,30 @@ echo ""
 echo "============================================="
 echo "STEP 4: Installing ROS Dependencies"
 echo "============================================="
-sudo apt-get install -y \
-    ros-${ROS_DISTRO}-gazebo-* \
-    ros-${ROS_DISTRO}-pcl-conversions \
-    ros-${ROS_DISTRO}-example-interfaces \
-    ros-${ROS_DISTRO}-pcl-ros \
-    ros-${ROS_DISTRO}-rviz2 \
-    ros-${ROS_DISTRO}-rqt-gui \
-    ros-${ROS_DISTRO}-rqt-gui-py \
-    ros-${ROS_DISTRO}-tf2-tools \
-    ros-${ROS_DISTRO}-tf-transformations \
-    ros-${ROS_DISTRO}-turtlesim \
-    ros-${ROS_DISTRO}-rqt* \
-    ros-${ROS_DISTRO}-rviz-common \
-    nlohmann-json3-dev \
-    libpcl-dev \
+ROS_DEPS=(
+    ros-${ROS_DISTRO}-pcl-conversions
+    ros-${ROS_DISTRO}-example-interfaces
+    ros-${ROS_DISTRO}-pcl-ros
+    ros-${ROS_DISTRO}-rviz2
+    ros-${ROS_DISTRO}-rqt-gui
+    ros-${ROS_DISTRO}-rqt-gui-py
+    ros-${ROS_DISTRO}-tf2-tools
+    ros-${ROS_DISTRO}-tf-transformations
+    ros-${ROS_DISTRO}-turtlesim
+    ros-${ROS_DISTRO}-rqt*
+    ros-${ROS_DISTRO}-rviz-common
+    nlohmann-json3-dev
+    libpcl-dev
     build-essential
+)
+
+if ! $JETSON; then
+    ROS_DEPS+=( ros-${ROS_DISTRO}-gazebo-* )
+else
+    echo "Jetson mode: skipping Gazebo packages (not available on ARM64)"
+fi
+
+sudo apt-get install -y "${ROS_DEPS[@]}"
 
 # ============================================
 # STEP 5: Create Workspaces and Import Repositories
@@ -282,7 +299,7 @@ if ! grep -q "MIGHTY Setup" ~/.bashrc; then
     echo "export LD_LIBRARY_PATH=$LIVOX_WS/install/livox_ros_driver2/lib:\$LD_LIBRARY_PATH:/usr/local/lib:/usr/local/include" >> ~/.bashrc
     echo "export LD_LIBRARY_PATH=/opt/ros/humble/lib:\$LD_LIBRARY_PATH" >> ~/.bashrc
     echo "export LD_LIBRARY_PATH=$DECOMP_WS/install/decomp_ros_msgs/lib:\$LD_LIBRARY_PATH" >> ~/.bashrc
-    echo "export LD_LIBRARY_PATH=/opt/ros/humble/lib/x86_64-linux-gnu:\$LD_LIBRARY_PATH" >> ~/.bashrc
+    echo "export LD_LIBRARY_PATH=/opt/ros/humble/lib/$(dpkg --print-architecture | sed 's/amd64/x86_64-linux-gnu/' | sed 's/arm64/aarch64-linux-gnu/'):\$LD_LIBRARY_PATH" >> ~/.bashrc
     echo "" >> ~/.bashrc
     echo "# Source MIGHTY workspaces" >> ~/.bashrc
     echo "source $DECOMP_WS/install/setup.bash" >> ~/.bashrc
