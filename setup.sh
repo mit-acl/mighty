@@ -290,9 +290,13 @@ if $JETSON; then
             gazebo_ros_pkgs
             realsense_gazebo_plugin
             ros2_livox_simulation
+        --executor sequential
     )
     CMAKE_ARGS+=(-DBUILD_SIMULATION=OFF)
-    echo "Jetson mode: skipping Gazebo simulation packages"
+    # Limit compiler parallelism to avoid OOM on memory-constrained Jetson boards
+    export CMAKE_BUILD_PARALLEL_LEVEL=1
+    export MAKEFLAGS="-j1"
+    echo "Jetson mode: skipping Gazebo simulation packages, building sequentially to save RAM"
 fi
 
 colcon build "${COLCON_BUILD_ARGS[@]}" --cmake-args "${CMAKE_ARGS[@]}"
