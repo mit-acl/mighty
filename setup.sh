@@ -30,6 +30,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Auto-detect Jetson if not explicitly set
+if ! $JETSON && [ -f /etc/nv_tegra_release ]; then
+    echo "Detected NVIDIA Jetson platform, enabling --jetson mode automatically."
+    JETSON=true
+fi
+
 echo "============================================="
 echo "MIGHTY Complete Setup Script"
 echo "============================================="
@@ -283,7 +289,7 @@ if $JETSON; then
             gazebo_plugins
             gazebo_ros_pkgs
             realsense_gazebo_plugin
-            livox_laser_simulation_ros2
+            ros2_livox_simulation
     )
     CMAKE_ARGS+=(-DBUILD_SIMULATION=OFF)
     echo "Jetson mode: skipping Gazebo simulation packages"
