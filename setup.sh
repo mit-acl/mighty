@@ -272,7 +272,24 @@ source "$DECOMP_WS/install/setup.bash"
 export CMAKE_PREFIX_PATH="$LIVOX_WS/install/livox_ros_driver2:$DECOMP_WS/install/decomp_util:$CMAKE_PREFIX_PATH"
 export LD_LIBRARY_PATH="$LIVOX_WS/install/livox_ros_driver2/lib:$LD_LIBRARY_PATH"
 
-colcon build --parallel-workers "$NUM_JOBS" --cmake-args -DCMAKE_BUILD_TYPE=Release
+CMAKE_ARGS=(-DCMAKE_BUILD_TYPE=Release)
+COLCON_BUILD_ARGS=(--parallel-workers "$NUM_JOBS")
+
+if $JETSON; then
+    COLCON_BUILD_ARGS+=(
+        --packages-ignore
+            gazebo_dev
+            gazebo_ros
+            gazebo_plugins
+            gazebo_ros_pkgs
+            realsense_gazebo_plugin
+            livox_laser_simulation_ros2
+    )
+    CMAKE_ARGS+=(-DBUILD_SIMULATION=OFF)
+    echo "Jetson mode: skipping Gazebo simulation packages"
+fi
+
+colcon build "${COLCON_BUILD_ARGS[@]}" --cmake-args "${CMAKE_ARGS[@]}"
 
 # ============================================
 # STEP 9: Setup Bash Configuration
