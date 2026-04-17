@@ -48,13 +48,14 @@ The full video is available at [https://youtu.be/Pvb-VPUdLvg](https://youtu.be/P
 
 ## Installation
 
-MIGHTY has been tested on Ubuntu 22.04 with ROS 2 Humble. Three installation methods are available:
+MIGHTY has been tested on Ubuntu 22.04 with ROS 2 Humble. Four installation methods are available:
 
 | Method | Platform | Notes |
 |--------|----------|-------|
 | [Docker (Linux)](#docker-installation-linux) | Linux | Uses Docker Engine (apt install, **not** Docker Desktop) |
 | [Docker (Mac)](#docker-installation-mac) | macOS (Apple Silicon / Intel) | Uses Docker Desktop; Xpra for browser-based visualization |
 | [Native (Linux)](#native-installation-linux) | Ubuntu 22.04 | Best for development and hardware deployment |
+| [Jetson](#jetson-setup) | NVIDIA Jetson (Orin Nano, etc.) | ARM64 build; skips Gazebo, limits parallelism for low RAM |
 
 ---
 
@@ -293,6 +294,86 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/
   --gazebo-gui        Enable Gazebo GUI
   --dry-run           Print generated YAML without launching
   ```
+</details>
+
+---
+
+### Jetson Setup
+
+For NVIDIA Jetson boards (Orin Nano, Orin NX, AGX Orin, etc.) running JetPack with Ubuntu 22.04.
+
+Gazebo Classic is not available on ARM64, so the setup script automatically detects the Jetson platform and skips simulation-only packages. The planner and all hardware nodes build normally.
+
+**1. Add Swap Space (Recommended)**
+
+Jetson boards have limited RAM (e.g., 8 GB on Orin Nano). Compilation of large C++ files can trigger the OOM killer without extra swap:
+
+```bash
+sudo fallocate -l 8G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# Make it persistent across reboots
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+**2. Clone and Run Setup**
+
+```bash
+mkdir -p ~/code
+cd ~/code
+git clone https://github.com/mit-acl/mighty.git mighty_ws/src/mighty
+cd mighty_ws/src/mighty
+./setup.sh
+```
+
+The script auto-detects the Jetson via `/etc/nv_tegra_release` and will:
+- Skip Gazebo packages (`gazebo_dev`, `gazebo_ros`, `gazebo_plugins`, `realsense_gazebo_plugin`, `ros2_livox_simulation`)
+- Build with `-DBUILD_SIMULATION=OFF` (disables Gazebo-linked targets in the `mighty` package)
+- Limit compiler parallelism (`-j1`) to avoid OOM on memory-constrained boards
+- Use the correct `aarch64-linux-gnu` library path
+
+You can also pass `--jetson` explicitly or combine with `-j`:
+
+```bash
+./setup.sh --jetson -j 2  # if you have enough RAM for 2 parallel compile jobs
+```
+
+**3. Test the Planner (without Gazebo)**
+
+`fake_sim` is always built, even on Jetson. It provides simulated odometry and a lightweight environment without Gazebo so you can verify the planner works:
+
+```bash
+source ~/.bashrc
+cd ~/code/mighty_ws
+python3 src/mighty/scripts/run_sim.py --mode interactive --setup-bash ~/code/mighty_ws/install/setup.bash
+```
+
+Use RViz2's **"2D Goal Pose"** tool to send goals and confirm the planner is running correctly.
+
+<details>
+  <summary><b>What is skipped on Jetson</b></summary>
+
+  The following packages are excluded from the build:
+
+  | Package | Reason |
+  |---------|--------|
+  | `gazebo_dev` | Requires `libgazebo11-dev` (x86 only) |
+  | `gazebo_ros` | Depends on `gazebo_dev` |
+  | `gazebo_plugins` | Depends on `gazebo_dev` |
+  | `gazebo_ros_pkgs` | Meta-package for all Gazebo ROS packages |
+  | `realsense_gazebo_plugin` | Gazebo plugin for RealSense simulation |
+  | `ros2_livox_simulation` | Gazebo plugin for Livox LiDAR simulation |
+
+  Within the `mighty` package, these simulation-only targets are also disabled:
+  - `move_model` (Gazebo model mover plugin)
+  - `imu_plugin` (Gazebo IMU sensor plugin)
+  - `convert_velodyne_to_ros_time` (Gazebo timestamp converter)
+  - `dynamic_forest_node` (simulated dynamic obstacles)
+
+  All hardware nodes (`mighty`, `fake_sim`, `pure_pursuit`, `trajectory_tracker`, `convert_odom_to_state`, `convert_vicon_to_state`) build normally.
+
 </details>
 
 ---

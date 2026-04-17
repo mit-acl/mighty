@@ -1382,6 +1382,7 @@ void MIGHTY_NODE::stateCallback(const dynus_interfaces::msg::State::SharedPtr ms
       mighty_ptr_->updateState(current_state);
     }
     RCLCPP_INFO(this->get_logger(), "State initialized");
+    exploration_start_pos_ = Eigen::Vector3d(msg->pos.x, msg->pos.y, msg->pos.z);
     state_initialized_ = true;
     timer_goal_->reset();
   }
@@ -3248,19 +3249,16 @@ void MIGHTY_NODE::exploreSelectCallback() {
   if (!next) {
     if (exploration_active_) {
       RCLCPP_INFO(this->get_logger(),
-                  "Exploration: nothing left to explore — halting at current pose");
-      // Replace the previously-issued frontier goal with a "stay here" goal so
-      // MIGHTY converges to a stop instead of continuing to drive toward the
-      // already-consumed last frontier. Without this, the planner keeps
-      // executing the in-flight trajectory all the way to the original point.
-      geometry_msgs::msg::PoseStamped here;
-      here.header.frame_id    = par_.map_frame_id;
-      here.header.stamp       = this->now();
-      here.pose.position.x    = cur.pos.x();
-      here.pose.position.y    = cur.pos.y();
-      here.pose.position.z    = par_.expl_default_goal_z;
-      here.pose.orientation.w = 1.0;
-      terminalGoalCallbackImpl(here, /*from_user=*/false);
+                  "Exploration: nothing left to explore — returning to start at (%.2f, %.2f, %.2f)",
+                  exploration_start_pos_.x(), exploration_start_pos_.y(), exploration_start_pos_.z());
+      geometry_msgs::msg::PoseStamped home;
+      home.header.frame_id    = par_.map_frame_id;
+      home.header.stamp       = this->now();
+      home.pose.position.x    = exploration_start_pos_.x();
+      home.pose.position.y    = exploration_start_pos_.y();
+      home.pose.position.z    = par_.expl_default_goal_z;
+      home.pose.orientation.w = 1.0;
+      terminalGoalCallbackImpl(home, /*from_user=*/false);
     }
     exploration_active_ = false;
     return;

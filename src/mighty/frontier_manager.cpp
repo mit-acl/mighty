@@ -40,8 +40,12 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
     for (size_t j = 0; j < records_.size(); ++j) {
       if (existing_matched[j]) continue;
       const auto& rec = records_[j];
-      if (rec.state == FrontierState::VISITED ||
-          rec.state == FrontierState::INVALIDATED) {
+      // INVALIDATED records (wall-huggers etc.) stay skipped — we want fresh
+      // clusters near them to be re-evaluated, not re-bound to a bad record.
+      // VISITED records DO participate in matching so that fresh clusters at
+      // an already-visited location get absorbed into the existing record
+      // instead of spawning a brand-new ACTIVE ghost every dwell cycle.
+      if (rec.state == FrontierState::INVALIDATED) {
         continue;
       }
       const double d = (fresh[i].centroid - rec.centroid_xy).norm();
@@ -62,12 +66,17 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
     const auto& c = fresh[i];
     if (match_for_fresh[i] >= 0) {
       auto& r = records_[match_for_fresh[i]];
-      r.centroid_xy   = alpha * c.centroid + (1.0 - alpha) * r.centroid_xy;
-      r.size_cells    = c.size_cells;
-      r.aabb_min      = c.aabb_min;
-      r.aabb_max      = c.aabb_max;
-      r.last_seen_t   = t_now;
-      r.state         = FrontierState::ACTIVE;
+      r.last_seen_t = t_now;
+      // Don't revive a VISITED record or overwrite its centroid/size —
+      // absorbing the fresh cluster is enough to keep it from spawning a
+      // duplicate. Its VISITED state is preserved.
+      if (r.state != FrontierState::VISITED) {
+        r.centroid_xy = alpha * c.centroid + (1.0 - alpha) * r.centroid_xy;
+        r.size_cells  = c.size_cells;
+        r.aabb_min    = c.aabb_min;
+        r.aabb_max    = c.aabb_max;
+        r.state       = FrontierState::ACTIVE;
+      }
     } else {
       FrontierRecord r;
       r.id           = next_id_++;

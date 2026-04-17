@@ -286,6 +286,7 @@ class MIGHTY_NODE : public rclcpp::Node {
   bool     manual_goal_active_     = false;  // user issued the current goal
   uint64_t current_explore_id_     = 0;
   int      unreachable_consec_count_ = 0;
+  Eigen::Vector3d exploration_start_pos_{0.0, 0.0, 0.0};
   rclcpp::TimerBase::SharedPtr timer_explore_select_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_frontiers_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_explore_current_goal_;

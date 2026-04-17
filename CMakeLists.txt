@@ -19,6 +19,16 @@ option(BUILD_SIMULATION "Build Gazebo simulation targets" ON)
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
+
+# NOTE: find_package(gazebo) must be called before PCL and other packages.
+# Otherwise jsoncpp-namespaced-targets.cmake (pulled in via
+# ignition-fuel_tools) fails with "JsonCpp::JsonCpp target already exists"
+# because another package has already created the target.
+if(BUILD_SIMULATION)
+  find_package(gazebo REQUIRED)
+  find_package(gazebo_ros REQUIRED)
+endif()
+
 find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(rclcpp_components REQUIRED)
@@ -41,12 +51,7 @@ find_package(tf2_eigen REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(nlohmann_json REQUIRED)
-
 find_package(gazebo_msgs REQUIRED)
-if(BUILD_SIMULATION)
-  find_package(gazebo REQUIRED)
-  find_package(gazebo_ros REQUIRED)
-endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
 
