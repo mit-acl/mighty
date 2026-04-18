@@ -49,6 +49,8 @@ class FrontierManager;
 class VisitedMap;
 struct FrontierRecord;
 
+#include "mighty/peer_tracker.hpp"
+
 #include "ament_index_cpp/get_package_share_directory.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -291,6 +293,15 @@ class MIGHTY_NODE : public rclcpp::Node {
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_frontiers_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_explore_current_goal_;
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_visited_map_;
+  // MinPos peer tracking (multi-robot frontier allocation)
+  PeerTracker peer_tracker_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_peer_pose_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_peer_pose_;
+  double last_peer_pose_publish_t_ = 0.0;
+  // Visited map sharing (global topic, all agents pub+sub)
+  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_peer_visited_map_;
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr sub_peer_visited_map_;
+  double last_peer_visited_publish_t_ = 0.0;
   // Wall-clock seconds of the last successful publishVisitedMap() call.
   // Used to throttle the (potentially large) tristate-grid publish to ~1 Hz
   // — RViz only needs occasional updates because the persistent map only

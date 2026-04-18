@@ -19,6 +19,7 @@
 
 #include "mighty/frontier_detector.hpp"
 #include "mighty/occ_grid_2d.hpp"
+#include "mighty/peer_tracker.hpp"
 
 enum class FrontierState {
   ACTIVE,        // currently observable inside the local map
@@ -43,6 +44,9 @@ struct FrontierRecord {
   // auto-invalidated if still ACTIVE/DORMANT. <=0 means "not being pursued".
   // Set by markSelected(), cleared on INVALIDATED/VISITED transition.
   double          pursuit_deadline_t = -1.0;
+  // Total pursuit budget (seconds) allocated by markSelected(). Stored so
+  // callers can display elapsed / total (e.g. "5.0s / 30.0s" in RViz).
+  double          pursuit_budget_sec = 0.0;
 };
 
 struct FrontierManagerParams {
@@ -108,6 +112,15 @@ class FrontierManager {
   std::optional<FrontierRecord> selectNextGoal(
       const Eigen::Vector3d& robot_pose,
       const OccGrid2D& current_grid) const;
+
+  /** @brief MinPos variant: pick the frontier where this robot has the lowest
+   *  rank (fewest peers closer to it). When @p peers is empty, degenerates to
+   *  nearest-frontier with utility tiebreak — identical to single-robot.
+   */
+  std::optional<FrontierRecord> selectNextGoalMinPos(
+      const Eigen::Vector3d& robot_pose,
+      const OccGrid2D& current_grid,
+      const std::vector<PeerPose>& peers) const;
 
   void markVisited(uint64_t id);
   void markInvalidated(uint64_t id);

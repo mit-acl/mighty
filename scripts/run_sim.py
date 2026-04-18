@@ -113,11 +113,11 @@ def find_rviz_config() -> Path:
     return script_path.parent.parent / 'rviz' / 'mighty.rviz'
 
 
-def generate_multiagent_positions(num_agents: int, radius: float = 10.0, z: float = 1.0, prefix: str = 'NX'):
+def generate_multiagent_positions(num_agents: int, radius: float = 10.0, z: float = 1.0, prefix: str = 'NX', angle_offset: float = 0.0):
     """Generate agent positions in a circle formation."""
     agents = []
     for i in range(num_agents):
-        angle = 2 * math.pi * i / num_agents
+        angle = 2 * math.pi * i / num_agents + angle_offset
         x = radius * math.cos(angle)
         y = radius * math.sin(angle)
         # Yaw points toward center (opposite of position angle)
@@ -284,6 +284,179 @@ def generate_multiagent_ground_yaml(setup_bash: Path, agents: list, radius: floa
             'sleep 25',
             f'ros2 launch mighty goal_monitor.launch.py num_agents:={num_agents} '
             f'radius:={radius} agent_prefix:=NX goal_tolerance:=1.0 use_ground_robot:=true'
+        ]
+    })
+
+    yaml_content = {
+        'session_name': 'mighty_sim',
+        'windows': [{
+            'window_name': 'main',
+            'layout': 'tiled',
+            'shell_command_before': [
+                f'''if [ -z "$SETUP_BASH" ] || [ ! -f "$SETUP_BASH" ]; then
+  echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
+  exit 1
+fi
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+. "$SETUP_BASH"''',
+                f'export ROS_DOMAIN_ID={ros_domain_id}'
+            ],
+            'panes': panes
+        }]
+    }
+
+    return yaml.dump(yaml_content, default_flow_style=False, sort_keys=False)
+
+
+def generate_exploration_multiagent_ground_yaml(
+        setup_bash: Path, agents: list, ros_domain_id: int = 20,
+        rviz_config: Path = None, sim_env: str = 'fake_sim',
+        env: str = 'ACL_office') -> str:
+    """Generate YAML for multi-agent ground robot exploration.
+
+    Each agent runs:  onboard_mighty (ground robot, exploration enabled)
+                    + global_mapper  (2D occ/ESDF for frontier detection)
+                    + convert_odom_to_state (Gazebo only)
+    No goal monitor — frontier-based exploration is self-driven.
+    MinPos + visited-map sharing coordinate the agents.
+    """
+    panes = []
+    use_gazebo = (sim_env == 'gazebo')
+
+    # Base station
+    if use_gazebo:
+        panes.append({
+            'shell_command': [
+                'source /usr/share/gazebo/setup.bash',
+                f'ros2 launch mighty base_mighty.launch.py '
+                f'use_gazebo_gui:=false use_rviz:=true env:={env} use_ground_robot:=true'
+            ]
+        })
+    else:
+        sim_cmd = 'ros2 launch mighty simulator.launch.py'
+        if rviz_config:
+            sim_cmd += f' rviz_config:={rviz_config}'
+        panes.append({
+            'shell_command': [sim_cmd]
+        })
+
+    # Per-agent nodes
+    for i, agent in enumerate(agents):
+        ns = agent['namespace']
+        delay = 10 + i * 2  # stagger startup to avoid resource spikes
+
+        # Gazebo: odom-to-state converter (Gazebo publishes odom, mighty needs state)
+        if use_gazebo:
+            panes.append({
+                'shell_command': [
+                    f'sleep {delay}',
+                    f'ros2 run mighty convert_odom_to_state '
+                    f'--ros-args -r __ns:=/{ns} -r odom:=odom -r state:=state'
+                ]
+            })
+
+        # ACL mapper (provides occ_2d, esdf_2d for frontier detection)
+        gazebo_flag = ' use_gazebo:=true' if use_gazebo else ' hardware:=false'
+        panes.append({
+            'shell_command': [
+                f'sleep {delay}',
+                f'ros2 launch global_mapper_ros global_mapper_node.launch.py'
+                f'{gazebo_flag} ground_robot:=true '
+                f'param_file:=sim_ground_robot.yaml quad:={ns}'
+            ]
+        })
+
+        # Mighty planner (ground robot, exploration + MinPos enabled via config)
+        panes.append({
+            'shell_command': [
+                f'sleep {delay + 2}',
+                f"ros2 launch mighty onboard_mighty.launch.py namespace:={ns} "
+                f"x:={agent['x']} y:={agent['y']} z:={agent['z']} yaw:={agent['yaw']} "
+                f"sim_env:={sim_env} use_ground_robot:=true "
+                f"num_agents:={len(agents)}"
+            ]
+        })
+
+    yaml_content = {
+        'session_name': 'mighty_sim',
+        'windows': [{
+            'window_name': 'main',
+            'layout': 'tiled',
+            'shell_command_before': [
+                f'''if [ -z "$SETUP_BASH" ] || [ ! -f "$SETUP_BASH" ]; then
+  echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
+  exit 1
+fi
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+. "$SETUP_BASH"''',
+                f'export ROS_DOMAIN_ID={ros_domain_id}'
+            ],
+            'panes': panes
+        }]
+    }
+
+    return yaml.dump(yaml_content, default_flow_style=False, sort_keys=False)
+
+
+def generate_swap_multiagent_ground_yaml(
+        setup_bash: Path, agents: list, radius: float, angle_offset: float,
+        ros_domain_id: int = 20, env: str = 'ACL_office') -> str:
+    """Generate YAML for multi-agent ground robot position swapping in Gazebo.
+
+    Each agent swaps with its diametrically opposite peer on a circle.
+    No exploration — uses goal_monitor for continuous swap behavior.
+    """
+    panes = []
+
+    # Base station: Gazebo world + RViz
+    panes.append({
+        'shell_command': [
+            'source /usr/share/gazebo/setup.bash',
+            f'ros2 launch mighty base_mighty.launch.py '
+            f'use_gazebo_gui:=false use_rviz:=true env:={env} use_ground_robot:=true'
+        ]
+    })
+
+    # Per-agent: odom converter + ACL mapper + mighty
+    for i, agent in enumerate(agents):
+        ns = agent['namespace']
+        delay = 10 + i * 2
+
+        panes.append({
+            'shell_command': [
+                f'sleep {delay}',
+                f'ros2 run mighty convert_odom_to_state '
+                f'--ros-args -r __ns:=/{ns} -r odom:=odom -r state:=state'
+            ]
+        })
+
+        panes.append({
+            'shell_command': [
+                f'sleep {delay}',
+                f'ros2 launch global_mapper_ros global_mapper_node.launch.py '
+                f'use_gazebo:=true use_obstacle_tracker:=false '
+                f'param_file:=sim_ground_robot.yaml quad:={ns}'
+            ]
+        })
+
+        panes.append({
+            'shell_command': [
+                f'sleep {delay + 2}',
+                f"ros2 launch mighty onboard_mighty.launch.py namespace:={ns} "
+                f"x:={agent['x']} y:={agent['y']} z:={agent['z']} yaw:={agent['yaw']} "
+                f"sim_env:=gazebo use_ground_robot:=true "
+                f"num_agents:={len(agents)}"
+            ]
+        })
+
+    # Goal monitor for position swapping
+    num_agents = len(agents)
+    panes.append({
+        'shell_command': [
+            'sleep 25',
+            f'ros2 launch mighty goal_monitor.launch.py num_agents:={num_agents} '
+            f'radius:={radius} angle_offset:={angle_offset} '
+            f'agent_prefix:=NX goal_tolerance:=1.0 use_ground_robot:=true'
         ]
     })
 
@@ -568,9 +741,9 @@ def main():
 
     parser.add_argument(
         '--mode', '-m',
-        choices=['multiagent', 'multiagent-ground', 'gazebo', 'interactive', 'dyn-test', 'dyn-test-ground', 'dyn-test-ground-mpc'],
+        choices=['multiagent', 'multiagent-ground', 'exploration-multiagent-ground', 'swap-multiagent-ground', 'gazebo', 'interactive', 'dyn-test', 'dyn-test-ground', 'dyn-test-ground-mpc'],
         required=True,
-        help='Simulation mode: multiagent, gazebo, interactive, dyn-test (UAV + dyn obstacle), or dyn-test-ground (ground robot + dyn obstacle)'
+        help='Simulation mode: multiagent, exploration-multiagent-ground, swap-multiagent-ground, gazebo, interactive, dyn-test, dyn-test-ground'
     )
 
     parser.add_argument(
@@ -697,6 +870,44 @@ def main():
         yaml_content = generate_interactive_yaml(setup_bash, args.ros_domain_id, rviz_config=rviz_config)
         print(f"[INFO] Mode: Interactive single-agent simulation (sim_env=fake_sim)")
         print(f"[INFO] Agent NX01 at (0, 0, 1.0) — use '2D Goal Pose' in RViz to send goals")
+    elif args.mode == 'exploration-multiagent-ground':
+        num = args.num_agents if args.num_agents != 10 else 3
+        # Arrange agents in a line along x-axis, centered at origin, 3m spacing
+        spacing = 3.0
+        agents = []
+        for i in range(num):
+            x = -spacing * (num - 1) / 2.0 + spacing * i
+            agents.append({
+                'namespace': f'NX{i+1:02d}',
+                'x': round(x, 3),
+                'y': 0.0,
+                'z': 0.0,
+                'yaw': 0.0,
+            })
+        # Default to Gazebo + ACL_office; --env overrides the world
+        sim_env = 'gazebo'
+        env = args.env if args.env != 'hard_forest' else 'ACL_office'
+        yaml_content = generate_exploration_multiagent_ground_yaml(
+            setup_bash, agents, args.ros_domain_id, rviz_config=rviz_config,
+            sim_env=sim_env, env=env)
+        print(f"[INFO] Mode: Multi-agent ground robot exploration (Gazebo + MinPos) with {num} agents")
+        print(f"[INFO] Environment: {env}")
+        for a in agents:
+            print(f"[INFO]   {a['namespace']}: ({a['x']}, {a['y']}, {a['z']}) yaw={a['yaw']}")
+        print(f"[INFO] Exploration is self-driven — no goal needed")
+    elif args.mode == 'swap-multiagent-ground':
+        num = args.num_agents if args.num_agents != 10 else 4
+        radius = math.sqrt(32)  # corners of 8x8 square → radius = sqrt(4²+4²)
+        angle_offset = math.pi / 4  # 45° so agents land on (4,4), (-4,4), (-4,-4), (4,-4)
+        agents = generate_multiagent_positions(num, radius, z=0.0, angle_offset=angle_offset)
+        env = args.env if args.env != 'hard_forest' else 'ACL_office'
+        yaml_content = generate_swap_multiagent_ground_yaml(
+            setup_bash, agents, radius, angle_offset, args.ros_domain_id, env=env)
+        print(f"[INFO] Mode: Multi-agent ground robot position swap (Gazebo) with {num} agents")
+        print(f"[INFO] Environment: {env}")
+        for a in agents:
+            print(f"[INFO]   {a['namespace']}: ({a['x']}, {a['y']}, {a['z']}) yaw={a['yaw']}")
+        print(f"[INFO] Agents swap to diametrically opposite positions")
     elif args.mode == 'multiagent-ground':
         num = args.num_agents if args.num_agents != 10 else 4
         radius = args.radius if args.radius != 10.0 else 12.0

@@ -16,16 +16,17 @@ from std_msgs.msg import Header
 import math
 
 
-def circle_position(agent_index, num_agents, radius, z=1.0):
+def circle_position(agent_index, num_agents, radius, z=1.0, angle_offset=0.0):
     """Compute own and opposite positions on a circle for swap goals.
 
-    Agent i sits at angle = 2*pi*(i-1)/N on a circle of the given radius;
-    its swap target is the diametrically opposite point (angle + pi).
+    Agent i sits at angle = 2*pi*(i-1)/N + angle_offset on a circle of the
+    given radius; its swap target is the diametrically opposite point
+    (angle + pi).
 
     Returns:
         (own_x, own_y, z, opp_x, opp_y, z)
     """
-    angle = 2.0 * math.pi * (agent_index - 1) / num_agents
+    angle = 2.0 * math.pi * (agent_index - 1) / num_agents + angle_offset
     own_x = round(radius * math.cos(angle), 3)
     own_y = round(radius * math.sin(angle), 3)
     opp_x = round(radius * math.cos(angle + math.pi), 3)
@@ -56,6 +57,8 @@ class GoalMonitorNode(Node):
         num_agents = self.get_parameter('num_agents').value
         self.declare_parameter('radius', 10.0)
         radius = self.get_parameter('radius').value
+        self.declare_parameter('angle_offset', 0.0)
+        angle_offset = self.get_parameter('angle_offset').value
         self.distance_check_frequency = 1.0
         self.current_goal_index = 0
 
@@ -80,7 +83,7 @@ class GoalMonitorNode(Node):
         # Simulation: circle formation swap
         elif self.namespace.startswith('NX'):
             agent_index = int(self.namespace[2:])  # NX01 -> 1
-            own_x, own_y, _, opp_x, opp_y, _ = circle_position(agent_index, num_agents, radius, z=z)
+            own_x, own_y, _, opp_x, opp_y, _ = circle_position(agent_index, num_agents, radius, z=z, angle_offset=angle_offset)
             self.goal_points = [[opp_x, opp_y, z], [own_x, own_y, z]]
             self.get_logger().info(
                 f"Circle swap goals (N={num_agents}, R={radius}): "
@@ -88,7 +91,7 @@ class GoalMonitorNode(Node):
 
         elif self.namespace.startswith('RR'):
             agent_index = int(self.namespace[2:])  # RR01 -> 1
-            own_x, own_y, _, opp_x, opp_y, _ = circle_position(agent_index, num_agents, radius, z=z)
+            own_x, own_y, _, opp_x, opp_y, _ = circle_position(agent_index, num_agents, radius, z=z, angle_offset=angle_offset)
             self.goal_points = [[opp_x, opp_y, z], [own_x, own_y, z]]
             self.get_logger().info(
                 f"Circle swap goals (N={num_agents}, R={radius}): "

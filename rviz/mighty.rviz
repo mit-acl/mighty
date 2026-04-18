@@ -850,6 +850,2006 @@ Visualization Manager:
           Name: Others
       Enabled: true
       Name: NX01
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/hgp_path_marker
+              Value: true
+            - Alpha: 0.009999999776482582
+              BoundColor: 38; 162; 105
+              Class: decomp_rviz_plugins/PolyhedronArray
+              Enabled: true
+              MeshColor: 143; 240; 164
+              Name: NX04 SFC Whole
+              Scale: 0.009999999776482582
+              State: Both
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/poly_whole
+              Value: true
+              VsColor: 0; 255; 0
+              VsScale: 1
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX04 Frontiers
+              Namespaces:
+                {}
+              Topic:
+                Depth: 10
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/exploration/frontiers
+              Value: true
+            - Alpha: 0.699999988079071
+              Class: rviz_default_plugins/Map
+              Color Scheme: map
+              Draw Behind: false
+              Enabled: true
+              Name: NX04 Visited Map
+              Topic:
+                Depth: 1
+                Durability Policy: Transient Local
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/exploration/visited_map
+              Update Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/exploration/visited_map_updates
+              Use Timestamp: false
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX04 Traj
+              Namespaces:
+                state_vec: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/traj_committed_colored
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX04 Actual Trajectory
+              Namespaces:
+                actual_traj_01: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/actual_traj
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: NX04 Subopt Trajs
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/traj_subopt_colored
+              Value: false
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: NX04 Hover Avoidance
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/hover_avoidance_viz
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 38; 162; 105
+              Enabled: true
+              History Length: 1
+              Name: NX04 Point Term G
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/point_G_term
+              Value: true
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 28; 113; 216
+              Enabled: false
+              History Length: 1
+              Name: NX04 Point G
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/point_G
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 38; 162; 105
+              Enabled: false
+              History Length: 1
+              Name: NX04 Point E
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/point_E
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 204; 41; 204
+              Enabled: false
+              History Length: 1
+              Name: NX04 Point A
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/point_A
+              Value: false
+          Enabled: true
+          Name: Planning
+        - Class: rviz_common/Group
+          Displays:
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 9.794157028198242
+                Min Value: 0.0001780986785888672
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 38; 162; 105
+              Color Transformer: FlatColor
+              Decay Time: 9999
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX04 D435 PointCloud
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 1
+              Size (m): 0.10000000149011612
+              Style: Points
+              Topic:
+                Depth: 1
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX04/d435/depth/color/points
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 0.10000000149011612
+              Autocompute Intensity Bounds: false
+              Autocompute Value Bounds:
+                Max Value: 344.9466247558594
+                Min Value: 1.7602663040161133
+                Value: true
+              Axis: Z
+              Channel Name: z
+              Class: rviz_default_plugins/PointCloud2
+              Color: 46; 194; 126
+              Color Transformer: Intensity
+              Decay Time: 9999
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX04 Lidar PointCloud
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 1.5
+              Size (m): 0.10000000149011612
+              Style: Points
+              Topic:
+                Depth: 1
+                Durability Policy: Volatile
+                Filter size: 30
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX04/mid360_PointCloud2
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 255; 255
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX04 ACL Map Free
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX04/free_grid
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 153; 193; 241
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX04 ACL Map Unknown
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX04/unknown_grid
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 246; 97; 81
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: true
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX04 ACL Map Occupied
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX04/occupancy_grid
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: true
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 38; 162; 105
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX04 ACL Map Dynamic
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/dynamic_grid
+              Use Fixed Frame: true
+              Use rainbow: false
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 87; 227; 137
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: true
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX04 Sensor PCL
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: NX04/sensor_point_cloud
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: true
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 255; 255
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 1
+              Min Color: 0; 0; 0
+              Min Intensity: 5.160481669008732e-05
+              Name: NX04 Heat Cloud
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/heat_cloud
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+          Enabled: true
+          Name: Mapping
+        - Class: rviz_common/Group
+          Displays:
+            - Alpha: 0.699999988079071
+              Class: rviz_default_plugins/Map
+              Color Scheme: map
+              Draw Behind: true
+              Enabled: true
+              Name: NX04 2D Occ from ACL Mapper
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/occ_2d_topic
+              Update Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/occ_2d_topic_updates
+              Use Timestamp: false
+              Value: true
+            - Alpha: 0.800000011920929
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 170; 0
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX04 2D Occupied Grid
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 5
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/ground_2d_occupied
+              Use Fixed Frame: true
+              Use rainbow: false
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 255; 255
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 5
+              Min Color: 0; 0; 0
+              Min Intensity: 0.055728036910295486
+              Name: NX04 2D Ground Heat
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/ground_2d_heat
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 0.699999988079071
+              Class: rviz_default_plugins/Map
+              Color Scheme: costmap
+              Draw Behind: true
+              Enabled: true
+              Name: NX04 2D ESDF
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/esdf_2d_topic
+              Update Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/esdf_2d_topic_updates
+              Use Timestamp: false
+              Value: true
+          Enabled: true
+          Name: Ground 2D
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: NX04 Vel Text
+              Namespaces:
+                velocity: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/vel_text
+              Value: true
+            - Class: rviz_default_plugins/Marker
+              Enabled: false
+              Name: NX04 FOV
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/fov
+              Value: false
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: NX04 Drone marker
+              Namespaces:
+                mesh_/NX04: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/drone_marker
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX04 tracked obstacles
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/tracked_obstacles
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX04 Cluster Bbox
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/cluster_bounding_boxes
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX04 Dyn Obst Unc Sphere
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/uncertainty_spheres
+              Value: true
+            - Class: rviz_default_plugins/Image
+              Enabled: true
+              Max Value: 1
+              Median window: 5
+              Min Value: 0
+              Name: NX04 Front Camera
+              Normalize Range: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/d435/color/image_raw
+              Value: true
+          Enabled: true
+          Name: Others
+      Enabled: true
+      Name: NX04
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX02 Original Global Path
+              Namespaces:
+                global_path_dots: true
+                global_path_line: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/original_hgp_path_marker
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX02 HGP path
+              Namespaces:
+                global_path_dots: true
+                global_path_line: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/hgp_path_marker
+              Value: true
+            - Alpha: 0.009999999776482582
+              BoundColor: 38; 162; 105
+              Class: decomp_rviz_plugins/PolyhedronArray
+              Enabled: true
+              MeshColor: 143; 240; 164
+              Name: NX02 SFC Whole
+              Scale: 0.009999999776482582
+              State: Both
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/poly_whole
+              Value: true
+              VsColor: 0; 255; 0
+              VsScale: 1
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX02 Frontiers
+              Namespaces:
+                {}
+              Topic:
+                Depth: 10
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/exploration/frontiers
+              Value: true
+            - Alpha: 0.699999988079071
+              Class: rviz_default_plugins/Map
+              Color Scheme: map
+              Draw Behind: false
+              Enabled: true
+              Name: NX02 Visited Map
+              Topic:
+                Depth: 1
+                Durability Policy: Transient Local
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/exploration/visited_map
+              Update Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/exploration/visited_map_updates
+              Use Timestamp: false
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX02 Traj
+              Namespaces:
+                state_vec: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/traj_committed_colored
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX02 Actual Trajectory
+              Namespaces:
+                actual_traj_01: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/actual_traj
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: NX02 Subopt Trajs
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/traj_subopt_colored
+              Value: false
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: NX02 Hover Avoidance
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/hover_avoidance_viz
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 38; 162; 105
+              Enabled: true
+              History Length: 1
+              Name: NX02 Point Term G
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/point_G_term
+              Value: true
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 28; 113; 216
+              Enabled: false
+              History Length: 1
+              Name: NX02 Point G
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/point_G
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 38; 162; 105
+              Enabled: false
+              History Length: 1
+              Name: NX02 Point E
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/point_E
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 204; 41; 204
+              Enabled: false
+              History Length: 1
+              Name: NX02 Point A
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/point_A
+              Value: false
+          Enabled: true
+          Name: Planning
+        - Class: rviz_common/Group
+          Displays:
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 9.794157028198242
+                Min Value: 0.0001780986785888672
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 38; 162; 105
+              Color Transformer: FlatColor
+              Decay Time: 9999
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX02 D435 PointCloud
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 1
+              Size (m): 0.10000000149011612
+              Style: Points
+              Topic:
+                Depth: 1
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX02/d435/depth/color/points
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 0.10000000149011612
+              Autocompute Intensity Bounds: false
+              Autocompute Value Bounds:
+                Max Value: 344.9466247558594
+                Min Value: 1.7602663040161133
+                Value: true
+              Axis: Z
+              Channel Name: z
+              Class: rviz_default_plugins/PointCloud2
+              Color: 46; 194; 126
+              Color Transformer: Intensity
+              Decay Time: 9999
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX02 Lidar PointCloud
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 1.5
+              Size (m): 0.10000000149011612
+              Style: Points
+              Topic:
+                Depth: 1
+                Durability Policy: Volatile
+                Filter size: 30
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX02/mid360_PointCloud2
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 255; 255
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX02 ACL Map Free
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX02/free_grid
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 153; 193; 241
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX02 ACL Map Unknown
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX02/unknown_grid
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 246; 97; 81
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: true
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX02 ACL Map Occupied
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX02/occupancy_grid
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: true
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 38; 162; 105
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX02 ACL Map Dynamic
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/dynamic_grid
+              Use Fixed Frame: true
+              Use rainbow: false
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 87; 227; 137
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: true
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX02 Sensor PCL
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: NX02/sensor_point_cloud
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: true
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 255; 255
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 1
+              Min Color: 0; 0; 0
+              Min Intensity: 5.160481669008732e-05
+              Name: NX02 Heat Cloud
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/heat_cloud
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+          Enabled: true
+          Name: Mapping
+        - Class: rviz_common/Group
+          Displays:
+            - Alpha: 0.699999988079071
+              Class: rviz_default_plugins/Map
+              Color Scheme: map
+              Draw Behind: true
+              Enabled: true
+              Name: NX02 2D Occ from ACL Mapper
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/occ_2d_topic
+              Update Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/occ_2d_topic_updates
+              Use Timestamp: false
+              Value: true
+            - Alpha: 0.800000011920929
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 170; 0
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX02 2D Occupied Grid
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 5
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/ground_2d_occupied
+              Use Fixed Frame: true
+              Use rainbow: false
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 255; 255
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 5
+              Min Color: 0; 0; 0
+              Min Intensity: 0.055728036910295486
+              Name: NX02 2D Ground Heat
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/ground_2d_heat
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 0.699999988079071
+              Class: rviz_default_plugins/Map
+              Color Scheme: costmap
+              Draw Behind: true
+              Enabled: true
+              Name: NX02 2D ESDF
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/esdf_2d_topic
+              Update Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/esdf_2d_topic_updates
+              Use Timestamp: false
+              Value: true
+          Enabled: true
+          Name: Ground 2D
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: NX02 Vel Text
+              Namespaces:
+                velocity: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/vel_text
+              Value: true
+            - Class: rviz_default_plugins/Marker
+              Enabled: false
+              Name: NX02 FOV
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/fov
+              Value: false
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: NX02 Drone marker
+              Namespaces:
+                mesh_/NX02: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/drone_marker
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX02 tracked obstacles
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/tracked_obstacles
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX02 Cluster Bbox
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/cluster_bounding_boxes
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX02 Dyn Obst Unc Sphere
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/uncertainty_spheres
+              Value: true
+            - Class: rviz_default_plugins/Image
+              Enabled: true
+              Max Value: 1
+              Median window: 5
+              Min Value: 0
+              Name: NX02 Front Camera
+              Normalize Range: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX02/d435/color/image_raw
+              Value: true
+          Enabled: true
+          Name: Others
+      Enabled: true
+      Name: NX02
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX03 Original Global Path
+              Namespaces:
+                global_path_dots: true
+                global_path_line: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/original_hgp_path_marker
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX03 HGP path
+              Namespaces:
+                global_path_dots: true
+                global_path_line: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/hgp_path_marker
+              Value: true
+            - Alpha: 0.009999999776482582
+              BoundColor: 38; 162; 105
+              Class: decomp_rviz_plugins/PolyhedronArray
+              Enabled: true
+              MeshColor: 143; 240; 164
+              Name: NX03 SFC Whole
+              Scale: 0.009999999776482582
+              State: Both
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/poly_whole
+              Value: true
+              VsColor: 0; 255; 0
+              VsScale: 1
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX03 Frontiers
+              Namespaces:
+                {}
+              Topic:
+                Depth: 10
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/exploration/frontiers
+              Value: true
+            - Alpha: 0.699999988079071
+              Class: rviz_default_plugins/Map
+              Color Scheme: map
+              Draw Behind: false
+              Enabled: true
+              Name: NX03 Visited Map
+              Topic:
+                Depth: 1
+                Durability Policy: Transient Local
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/exploration/visited_map
+              Update Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/exploration/visited_map_updates
+              Use Timestamp: false
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX03 Traj
+              Namespaces:
+                state_vec: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/traj_committed_colored
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX03 Actual Trajectory
+              Namespaces:
+                actual_traj_01: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/actual_traj
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: NX03 Subopt Trajs
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/traj_subopt_colored
+              Value: false
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: NX03 Hover Avoidance
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/hover_avoidance_viz
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 38; 162; 105
+              Enabled: true
+              History Length: 1
+              Name: NX03 Point Term G
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/point_G_term
+              Value: true
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 28; 113; 216
+              Enabled: false
+              History Length: 1
+              Name: NX03 Point G
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/point_G
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 38; 162; 105
+              Enabled: false
+              History Length: 1
+              Name: NX03 Point E
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/point_E
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/PointStamped
+              Color: 204; 41; 204
+              Enabled: false
+              History Length: 1
+              Name: NX03 Point A
+              Radius: 0.5
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/point_A
+              Value: false
+          Enabled: true
+          Name: Planning
+        - Class: rviz_common/Group
+          Displays:
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 9.794157028198242
+                Min Value: 0.0001780986785888672
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 38; 162; 105
+              Color Transformer: FlatColor
+              Decay Time: 9999
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX03 D435 PointCloud
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 1
+              Size (m): 0.10000000149011612
+              Style: Points
+              Topic:
+                Depth: 1
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX03/d435/depth/color/points
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 0.10000000149011612
+              Autocompute Intensity Bounds: false
+              Autocompute Value Bounds:
+                Max Value: 344.9466247558594
+                Min Value: 1.7602663040161133
+                Value: true
+              Axis: Z
+              Channel Name: z
+              Class: rviz_default_plugins/PointCloud2
+              Color: 46; 194; 126
+              Color Transformer: Intensity
+              Decay Time: 9999
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX03 Lidar PointCloud
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 1.5
+              Size (m): 0.10000000149011612
+              Style: Points
+              Topic:
+                Depth: 1
+                Durability Policy: Volatile
+                Filter size: 30
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX03/mid360_PointCloud2
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 255; 255
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX03 ACL Map Free
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX03/free_grid
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 153; 193; 241
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX03 ACL Map Unknown
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX03/unknown_grid
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 246; 97; 81
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: true
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX03 ACL Map Occupied
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /NX03/occupancy_grid
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: true
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 38; 162; 105
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX03 ACL Map Dynamic
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/dynamic_grid
+              Use Fixed Frame: true
+              Use rainbow: false
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 87; 227; 137
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: true
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX03 Sensor PCL
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: NX03/sensor_point_cloud
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: true
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 255; 255
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 1
+              Min Color: 0; 0; 0
+              Min Intensity: 5.160481669008732e-05
+              Name: NX03 Heat Cloud
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/heat_cloud
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+          Enabled: true
+          Name: Mapping
+        - Class: rviz_common/Group
+          Displays:
+            - Alpha: 0.699999988079071
+              Class: rviz_default_plugins/Map
+              Color Scheme: map
+              Draw Behind: true
+              Enabled: true
+              Name: NX03 2D Occ from ACL Mapper
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/occ_2d_topic
+              Update Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/occ_2d_topic_updates
+              Use Timestamp: false
+              Value: true
+            - Alpha: 0.800000011920929
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 170; 0
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: NX03 2D Occupied Grid
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 5
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/ground_2d_occupied
+              Use Fixed Frame: true
+              Use rainbow: false
+              Value: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: intensity
+              Class: rviz_default_plugins/PointCloud2
+              Color: 255; 255; 255
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 5
+              Min Color: 0; 0; 0
+              Min Intensity: 0.055728036910295486
+              Name: NX03 2D Ground Heat
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.10000000149011612
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/ground_2d_heat
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 0.699999988079071
+              Class: rviz_default_plugins/Map
+              Color Scheme: costmap
+              Draw Behind: true
+              Enabled: true
+              Name: NX03 2D ESDF
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/esdf_2d_topic
+              Update Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/esdf_2d_topic_updates
+              Use Timestamp: false
+              Value: true
+          Enabled: true
+          Name: Ground 2D
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: NX03 Vel Text
+              Namespaces:
+                velocity: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/vel_text
+              Value: true
+            - Class: rviz_default_plugins/Marker
+              Enabled: false
+              Name: NX03 FOV
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/fov
+              Value: false
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: NX03 Drone marker
+              Namespaces:
+                mesh_/NX03: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/drone_marker
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX03 tracked obstacles
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/tracked_obstacles
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX03 Cluster Bbox
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/cluster_bounding_boxes
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX03 Dyn Obst Unc Sphere
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/uncertainty_spheres
+              Value: true
+            - Class: rviz_default_plugins/Image
+              Enabled: true
+              Max Value: 1
+              Median window: 5
+              Min Value: 0
+              Name: NX03 Front Camera
+              Normalize Range: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX03/d435/color/image_raw
+              Value: true
+          Enabled: true
+          Name: Others
+      Enabled: true
+      Name: NX03
+
   Enabled: true
   Global Options:
     Background Color: 222; 221; 218

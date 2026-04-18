@@ -370,6 +370,10 @@ struct parameters {
   // of one-frame UNKNOWN flicker. Static-environment only — re-introduces
   // stale OCCUPIED for moving obstacles that have since left.
   bool   expl_fuse_persistent_into_local{true};
+  // MinPos multi-robot exploration
+  bool   expl_use_minpos{false};              // enable rank-based peer-aware allocation
+  double expl_peer_timeout_sec{5.0};          // drop peer after this silence (seconds)
+  double expl_peer_publish_rate_hz{5.0};      // throttle for pose broadcast (Hz)
   // Visualization
   bool   expl_publish_markers{true};
 };

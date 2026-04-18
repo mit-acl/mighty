@@ -373,6 +373,50 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
       pub_visited_map_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(
           "exploration/visited_map", rclcpp::QoS(1).transient_local());
 
+      // MinPos peer pose sharing (global topic, all agents pub+sub)
+      if (par_.expl_use_minpos) {
+        auto peer_qos = rclcpp::QoS(10).reliable();
+        pub_peer_pose_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
+            "/exploration/peer_poses", peer_qos);
+        sub_peer_pose_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+            "/exploration/peer_poses", peer_qos,
+            [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+              // Filter out own messages
+              if (msg->header.frame_id == ns_) return;
+              peer_tracker_.updatePeer(
+                  msg->header.frame_id,
+                  msg->pose.position.x,
+                  msg->pose.position.y,
+                  rclcpp::Time(msg->header.stamp).seconds());
+            },
+            options_re_1);
+        RCLCPP_INFO(this->get_logger(),
+                    "Exploration MinPos: enabled, peer_timeout=%.1fs, publish_rate=%.1fHz",
+                    par_.expl_peer_timeout_sec, par_.expl_peer_publish_rate_hz);
+      }
+
+      // Visited-map sharing: broadcast our persistent map so peers can skip
+      // frontiers in areas we've already explored. Subscriber on cb_group_map_
+      // so mergeFrom() is serialized with occ2DCallback / frontier detection.
+      if (par_.expl_use_minpos) {
+        pub_peer_visited_map_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(
+            "/exploration/visited_maps", rclcpp::QoS(1).reliable());
+        sub_peer_visited_map_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
+            "/exploration/visited_maps", rclcpp::QoS(1).reliable(),
+            [this](const nav_msgs::msg::OccupancyGrid::SharedPtr msg) {
+              if (msg->header.frame_id == ns_ || !visited_map_) return;
+              visited_map_->mergeFrom(
+                  msg->data.data(),
+                  static_cast<int>(msg->info.width),
+                  static_cast<int>(msg->info.height),
+                  msg->info.origin.position.x,
+                  msg->info.origin.position.y,
+                  msg->info.resolution);
+            },
+            options_map);
+        RCLCPP_INFO(this->get_logger(), "Exploration MinPos: visited-map sharing enabled");
+      }
+
       const double rate_hz = std::max(0.1, par_.expl_select_rate_hz);
       const auto period = std::chrono::duration<double>(1.0 / rate_hz);
       timer_explore_select_ = this->create_wall_timer(
@@ -697,6 +741,10 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.visited_map.publish", true);
   this->declare_parameter("exploration.visited_map.fuse_into_local", true);
   this->declare_parameter("exploration.visualization.publish_markers", true);
+  // MinPos multi-robot frontier allocation
+  this->declare_parameter("exploration.minpos.enabled", false);
+  this->declare_parameter("exploration.minpos.peer_timeout_sec", 5.0);
+  this->declare_parameter("exploration.minpos.peer_publish_rate_hz", 5.0);
 }
 
 // ----------------------------------------------------------------------------
@@ -1054,6 +1102,9 @@ void MIGHTY_NODE::setParameters() {
   par_.expl_fuse_persistent_into_local =
       this->get_parameter("exploration.visited_map.fuse_into_local").as_bool();
   par_.expl_publish_markers      = this->get_parameter("exploration.visualization.publish_markers").as_bool();
+  par_.expl_use_minpos           = this->get_parameter("exploration.minpos.enabled").as_bool();
+  par_.expl_peer_timeout_sec     = this->get_parameter("exploration.minpos.peer_timeout_sec").as_double();
+  par_.expl_peer_publish_rate_hz = this->get_parameter("exploration.minpos.peer_publish_rate_hz").as_double();
 }
 
 // ----------------------------------------------------------------------------
@@ -1396,6 +1447,22 @@ void MIGHTY_NODE::stateCallback(const dynus_interfaces::msg::State::SharedPtr ms
     if (t_now_actual - last_actual_traj_publish_t_ >= 0.05) {
       publishActualTraj();
       last_actual_traj_publish_t_ = t_now_actual;
+    }
+  }
+
+  // MinPos: broadcast own position to peers (throttled)
+  if (pub_peer_pose_ && par_.expl_peer_publish_rate_hz > 0.0) {
+    const double t_now_peer = this->now().seconds();
+    const double period = 1.0 / par_.expl_peer_publish_rate_hz;
+    if (t_now_peer - last_peer_pose_publish_t_ >= period) {
+      geometry_msgs::msg::PoseStamped pose_msg;
+      pose_msg.header.stamp = this->now();
+      pose_msg.header.frame_id = ns_;
+      pose_msg.pose.position.x = msg->pos.x;
+      pose_msg.pose.position.y = msg->pos.y;
+      pose_msg.pose.position.z = msg->pos.z;
+      pub_peer_pose_->publish(pose_msg);
+      last_peer_pose_publish_t_ = t_now_peer;
     }
   }
 }
@@ -3189,6 +3256,27 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
       }
     }
 
+    // Broadcast our visited map to peers so they can skip already-explored
+    // frontiers. Same 1 Hz throttle as the local RViz publish.
+    if (pub_peer_visited_map_ && visited_map_ && !visited_map_->empty()) {
+      const double t_now = this->now().seconds();
+      if (t_now - last_peer_visited_publish_t_ >= 1.0) {
+        nav_msgs::msg::OccupancyGrid msg;
+        msg.header.frame_id = ns_;
+        msg.header.stamp    = this->now();
+        msg.info.resolution = static_cast<float>(visited_map_->resolution());
+        msg.info.width      = static_cast<unsigned>(visited_map_->width());
+        msg.info.height     = static_cast<unsigned>(visited_map_->height());
+        msg.info.origin.position.x = visited_map_->originX();
+        msg.info.origin.position.y = visited_map_->originY();
+        msg.info.origin.orientation.w = 1.0;
+        const auto& v = visited_map_->data();
+        msg.data.assign(v.begin(), v.end());
+        pub_peer_visited_map_->publish(msg);
+        last_peer_visited_publish_t_ = t_now;
+      }
+    }
+
     // Throttled diagnostic so it's obvious whether detection is finding
     // anything (and gives a hint about *why* if the answer is "no").
     {
@@ -3245,7 +3333,14 @@ void MIGHTY_NODE::exploreSelectCallback() {
   mighty_ptr_->getState(cur);
   Eigen::Vector3d robot_pose(cur.pos.x(), cur.pos.y(), cur.yaw);
 
-  auto next = frontier_manager_->selectNextGoal(robot_pose, *occ_grid_2d_);
+  std::optional<FrontierRecord> next;
+  if (par_.expl_use_minpos) {
+    auto peers = peer_tracker_.getActivePeers(
+        this->now().seconds(), par_.expl_peer_timeout_sec);
+    next = frontier_manager_->selectNextGoalMinPos(robot_pose, *occ_grid_2d_, peers);
+  } else {
+    next = frontier_manager_->selectNextGoal(robot_pose, *occ_grid_2d_);
+  }
   if (!next) {
     if (exploration_active_) {
       RCLCPP_INFO(this->get_logger(),
@@ -3382,9 +3477,18 @@ void MIGHTY_NODE::publishFrontierMarkers() {
     label.scale.z = 0.4;
     label.color   = makeColor(0.0, 0.0, 0.0, 1.0);
     {
-      char buf[32];
-      std::snprintf(buf, sizeof(buf), "id=%lu",
-                    static_cast<unsigned long>(r.id));
+      char buf[64];
+      if (r.pursuit_deadline_t > 0.0 && r.pursuit_budget_sec > 0.0) {
+        const double t_now = this->now().seconds();
+        const double elapsed = r.pursuit_budget_sec
+                             - std::max(0.0, r.pursuit_deadline_t - t_now);
+        std::snprintf(buf, sizeof(buf), "id=%lu\n%.1fs/%.1fs",
+                      static_cast<unsigned long>(r.id),
+                      elapsed, r.pursuit_budget_sec);
+      } else {
+        std::snprintf(buf, sizeof(buf), "id=%lu",
+                      static_cast<unsigned long>(r.id));
+      }
       label.text = buf;
     }
     arr.markers.push_back(label);

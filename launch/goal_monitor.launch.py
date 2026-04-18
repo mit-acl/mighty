@@ -43,6 +43,11 @@ def generate_launch_description():
         default_value='false',
         description='Ground robot mode (sets goal z to 0.2 instead of 1.0)'
     )
+    angle_offset_arg = DeclareLaunchArgument(
+        'angle_offset',
+        default_value='0.0',
+        description='Angular offset in radians for circle positions (e.g. 0.7854 for 45 deg)'
+    )
 
     def launch_setup(context):
         prefix = LaunchConfiguration('agent_prefix').perform(context)
@@ -51,6 +56,7 @@ def generate_launch_description():
         num_agents = int(LaunchConfiguration('num_agents').perform(context))
         radius = float(LaunchConfiguration('radius').perform(context))
         use_ground_robot = LaunchConfiguration('use_ground_robot').perform(context)
+        angle_offset = float(LaunchConfiguration('angle_offset').perform(context))
 
         namespaces = [f'{prefix}{i:02d}' for i in range(1, num_agents + 1)]
 
@@ -69,6 +75,7 @@ def generate_launch_description():
                         'use_ground_robot': use_ground_robot.lower() in ('true', '1'),
                         'num_agents': num_agents,
                         'radius': radius,
+                        'angle_offset': angle_offset,
                     }]
                 )
             )
@@ -81,5 +88,6 @@ def generate_launch_description():
         use_ground_robot_arg,
         num_agents_arg,
         radius_arg,
+        angle_offset_arg,
         OpaqueFunction(function=launch_setup),
     ])
