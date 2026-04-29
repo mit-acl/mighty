@@ -735,6 +735,7 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.visited_map.resolution_m", 0.15);
   this->declare_parameter("exploration.visited_map.publish", true);
   this->declare_parameter("exploration.visited_map.fuse_into_local", true);
+  this->declare_parameter("exploration.visited_map.detect_on_visited_map", true);
   this->declare_parameter("exploration.visualization.publish_markers", true);
   // MinPos multi-robot frontier allocation
   this->declare_parameter("exploration.minpos.enabled", false);
@@ -1095,6 +1096,8 @@ void MIGHTY_NODE::setParameters() {
   par_.expl_publish_visited_map    = this->get_parameter("exploration.visited_map.publish").as_bool();
   par_.expl_fuse_persistent_into_local =
       this->get_parameter("exploration.visited_map.fuse_into_local").as_bool();
+  par_.expl_detect_on_visited_map =
+      this->get_parameter("exploration.visited_map.detect_on_visited_map").as_bool();
   par_.expl_publish_markers      = this->get_parameter("exploration.visualization.publish_markers").as_bool();
   par_.expl_use_minpos           = this->get_parameter("exploration.minpos.enabled").as_bool();
   par_.expl_peer_timeout_sec     = this->get_parameter("exploration.minpos.peer_timeout_sec").as_double();
@@ -3192,8 +3195,25 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
     // sliding step.
     if (visited_map_) visited_map_->absorb(*occ_grid_2d_);
 
-    auto clusters = frontier_detector_->detect(*occ_grid_2d_, robot_xy,
-                                               visited_map_.get());
+    // Pick the grid the detector runs on. The persistent visited_map_ is the
+    // entire mission history, so frontiers at the boundary of explored area
+    // are always reachable via WFD even when the robot is far from them. The
+    // local sliding window is the legacy path; both paths feed the visited
+    // map as the suppression filter when on the local grid.
+    std::shared_ptr<const OccGrid2D> detect_grid;
+    if (par_.expl_detect_on_visited_map && visited_map_ && !visited_map_->empty()) {
+      detect_grid = OccGrid2D::fromTristate(
+          visited_map_->width(), visited_map_->height(),
+          visited_map_->resolution(),
+          visited_map_->originX(), visited_map_->originY(),
+          visited_map_->data());
+    } else {
+      detect_grid = occ_grid_2d_;
+    }
+    const VisitedMap* visited_filter =
+        par_.expl_detect_on_visited_map ? nullptr : visited_map_.get();
+    auto clusters = frontier_detector_->detect(*detect_grid, robot_xy,
+                                               visited_filter);
 
     // ESDF-based clearance filter: drop frontiers whose centroid is closer
     // than `expl_min_obstacle_distance_m` to the nearest obstacle. The ESDF

@@ -353,6 +353,7 @@ mighty_node:
         exploration.visited_map.resolution_m: 0.15               # [m]   match the local occ_2d resolution
         exploration.visited_map.publish: true                    # [-]   publish on /exploration/visited_map for RViz
         exploration.visited_map.fuse_into_local: true            # [-]   restore last-known FREE/OCCUPIED into UNKNOWN local cells on revisit
+        exploration.visited_map.detect_on_visited_map: true      # [-]   run frontier WFD on the persistent map (entire mission history) instead of the local sliding window
         exploration.visualization.publish_markers: true          # [-]   Publish /exploration/frontiers
 
         # --- Ground Robot Kinematics (ground robot only — ignored for UAV) ---

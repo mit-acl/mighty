@@ -369,6 +369,13 @@ struct parameters {
   // of one-frame UNKNOWN flicker. Static-environment only — re-introduces
   // stale OCCUPIED for moving obstacles that have since left.
   bool   expl_fuse_persistent_into_local{true};
+  // When true, run the frontier detector on the persistent visited_map_
+  // (entire mission history) instead of the freshly received local sliding
+  // window. Surfaces frontiers at the boundary of explored area no matter
+  // where the robot currently is — fixes "revisited corridor doesn't show
+  // its far-end frontier" symptom. Inherits the phantom-OCCUPIED caveat of
+  // the persistent map for dynamic environments.
+  bool   expl_detect_on_visited_map{true};
   // MinPos multi-robot exploration
   bool   expl_use_minpos{false};              // enable rank-based peer-aware allocation
   double expl_peer_timeout_sec{5.0};          // drop peer after this silence (seconds)

@@ -366,4 +366,5 @@ mighty_node:
         exploration.visited_map.resolution_m: 0.15
         exploration.visited_map.publish: true
         exploration.visited_map.fuse_into_local: false  # disabled to stop stale observations re-seeding phantom FREE inside closed rooms
+        exploration.visited_map.detect_on_visited_map: true  # run frontier WFD on the persistent map so revisited corridors still surface their far-end frontier
         exploration.visualization.publish_markers: true
