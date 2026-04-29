@@ -289,7 +289,6 @@ mighty_node:
 
         # --- Trajectory Publishing ---
         trajectory_downsample_points: 500               # [-] Number of points to downsample trajectory to
-        use_trajectory_tracker: false                   # [-] Use FF+FB trajectory tracker instead of pure pursuit
         mpc_path_spacing: 0.05                          # [m] Spacing between waypoints in MPC path
 
         # --- Debug ---
@@ -356,19 +355,10 @@ mighty_node:
         exploration.visited_map.fuse_into_local: true            # [-]   restore last-known FREE/OCCUPIED into UNKNOWN local cells on revisit
         exploration.visualization.publish_markers: true          # [-]   Publish /exploration/frontiers
 
-        # --- Ground Robot Kinematics & Controllers (ground robot only — ignored for UAV) ---
-        # Used by the pure-pursuit / trajectory-tracker nodes that only run when
-        # use_ground_robot:=true. Listed here for parameter discoverability.
+        # --- Ground Robot Kinematics (ground robot only — ignored for UAV) ---
         ground_robot_L_min: 0.2                         # [m] Lookahead distance for point A (planning start)
         ground_robot_v_max: 0.5                         # [m/s] Max linear velocity for ground robot
         ground_robot_w_max: 0.5                         # [rad/s] Max angular velocity
-        pure_pursuit_L_min: 0.2                         # [m] Min lookahead distance (higher = smoother)
-        pure_pursuit_k_v: 0.1                           # [s] Velocity-dependent lookahead factor (L = L_min + k_v * v)
-        pure_pursuit_stopping_radius: 0.1               # [m] Stop when within this distance of goal
-        pure_pursuit_adaptive_lookahead_distance: 2.0   # [m] Start reducing lookahead within this distance of goal
-        pure_pursuit_turn_in_place_threshold_deg: 20.0  # [deg] Heading error threshold for turn-in-place
-        pure_pursuit_slow_down_threshold_deg: 5.0       # [deg] Heading error threshold for speed reduction
-        pure_pursuit_w_smoothing_alpha: 0.2             # [-] Angular velocity smoothing (0 = none, 1 = full)
 
         # --- ESDF-Based Obstacle Avoidance (ground robot only — ignored for UAV) ---
         # The ESDF cost is gated on use_esdf_cost && vehicle_type=="ground_robot".

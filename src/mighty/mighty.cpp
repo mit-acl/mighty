@@ -1419,31 +1419,6 @@ void MIGHTY::getLastPlanState(state& state) {
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Sets the lookahead point from pure pursuit controller
- * @param const Eigen::Vector3d &point: Lookahead point
- */
-void MIGHTY::setLookaheadPoint(const Eigen::Vector3d& point) {
-  std::lock_guard<std::mutex> lock(mtx_lookahead_point_);
-  pure_pursuit_lookahead_point_ = point;
-  lookahead_point_received_ = true;
-}
-
-// ----------------------------------------------------------------------------
-
-/**
- * @brief Gets the lookahead point from pure pursuit controller
- * @param Eigen::Vector3d &point: Output lookahead point
- * @param bool &received: Output flag indicating if lookahead has been received
- */
-void MIGHTY::getLookaheadPoint(Eigen::Vector3d& point, bool& received) {
-  std::lock_guard<std::mutex> lock(mtx_lookahead_point_);
-  point = pure_pursuit_lookahead_point_;
-  received = lookahead_point_received_;
-}
-
-// ----------------------------------------------------------------------------
-
-/**
  * @brief Gets trajs_ (returns copy of shared_ptrs, not deep copy of trajectory data)
  * @return std::vector<std::shared_ptr<dynTraj>>: Copy of trajs_ vector
  */

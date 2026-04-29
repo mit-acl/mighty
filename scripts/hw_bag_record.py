@@ -61,11 +61,9 @@ def record_ros2_bag(bag_name, bag_path, agents, topics=None):
         "/tracked_obstacles",
         "/cluster_bounding_boxes",
         "/uncertainty_spheres",
-        # --- Control (pure pursuit / cmd_vel) ---
+        # --- Control (cmd_vel) ---
         "/cmd_vel",
         "/cmd_vel_auto",
-        "/lookahead_point",
-        "/lookahead_marker",
         # --- DLIO odometry ---
         "/dlio/odom_node/pose",
         "/dlio/odom_node/odom",

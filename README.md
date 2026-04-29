@@ -372,7 +372,7 @@ Use RViz2's **"2D Goal Pose"** tool to send goals and confirm the planner is run
   - `convert_velodyne_to_ros_time` (Gazebo timestamp converter)
   - `dynamic_forest_node` (simulated dynamic obstacles)
 
-  All hardware nodes (`mighty`, `fake_sim`, `pure_pursuit`, `trajectory_tracker`, `convert_odom_to_state`, `convert_vicon_to_state`) build normally.
+  All hardware nodes (`mighty`, `fake_sim`, `convert_odom_to_state`, `convert_vicon_to_state`) build normally.
 
 </details>
 

@@ -123,7 +123,6 @@ class MIGHTY_NODE : public rclcpp::Node {
   void swarmGoalCallback(const geometry_msgs::msg::PoseStamped& msg);
   // Frontier exploration goal-selection loop, runs at expl_select_rate_hz.
   void exploreSelectCallback();
-  void lookaheadPointCallback(const geometry_msgs::msg::PointStamped::SharedPtr msg);
   void mapCallback(const sensor_msgs::msg::PointCloud2::ConstPtr& pcl2ptr_map_ros,
                    const sensor_msgs::msg::PointCloud2::ConstPtr& pcl2ptr_unk_ros);
   void occupancyMapCallback(const sensor_msgs::msg::PointCloud2::ConstPtr& map_msg);
@@ -257,7 +256,6 @@ class MIGHTY_NODE : public rclcpp::Node {
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_terminal_goal_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_swarm_goal_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_fake_sim_occupancy_map_;
-  rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr sub_lookahead_point_;
 
   // Time synchronizer
   message_filters::Subscriber<sensor_msgs::msg::PointCloud2> occup_grid_sub_;

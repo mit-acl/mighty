@@ -179,7 +179,7 @@ def generate_multiagent_yaml(setup_bash: Path, agents: list, sim_env: str, ros_d
   echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
   exit 1
 fi
-unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
 . "$SETUP_BASH"''',
                 f'export ROS_DOMAIN_ID={ros_domain_id}'
             ],
@@ -220,7 +220,7 @@ def generate_interactive_yaml(setup_bash: Path, ros_domain_id: int = 20, rviz_co
   echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
   exit 1
 fi
-unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
 . "$SETUP_BASH"''',
                 f'export ROS_DOMAIN_ID={ros_domain_id}'
             ],
@@ -232,7 +232,7 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
 
 
 def generate_multiagent_ground_yaml(setup_bash: Path, agents: list, radius: float,
-                                    mpc_config: Path, ros_domain_id: int = 20) -> str:
+                                    ros_domain_id: int = 20) -> str:
     """Generate YAML for multi-agent ground robot simulation in Gazebo with MPC."""
     panes = []
 
@@ -272,7 +272,7 @@ def generate_multiagent_ground_yaml(setup_bash: Path, agents: list, radius: floa
                 'sleep 12',
                 f"ros2 launch mighty onboard_mighty.launch.py namespace:={ns} "
                 f"x:={agent['x']} y:={agent['y']} z:={agent['z']} yaw:={agent['yaw']} "
-                f"sim_env:=gazebo use_ground_robot:=true use_trajectory_tracker:=true "
+                f"sim_env:=gazebo use_ground_robot:=true "
                 f"num_agents:={len(agents)}"
             ]
         })
@@ -297,7 +297,7 @@ def generate_multiagent_ground_yaml(setup_bash: Path, agents: list, radius: floa
   echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
   exit 1
 fi
-unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
 . "$SETUP_BASH"''',
                 f'export ROS_DOMAIN_ID={ros_domain_id}'
             ],
@@ -387,7 +387,7 @@ def generate_exploration_multiagent_ground_yaml(
   echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
   exit 1
 fi
-unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
 . "$SETUP_BASH"''',
                 f'export ROS_DOMAIN_ID={ros_domain_id}'
             ],
@@ -470,7 +470,7 @@ def generate_swap_multiagent_ground_yaml(
   echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
   exit 1
 fi
-unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
 . "$SETUP_BASH"''',
                 f'export ROS_DOMAIN_ID={ros_domain_id}'
             ],
@@ -520,7 +520,7 @@ def generate_dyn_test_yaml(setup_bash: Path, ros_domain_id: int = 7) -> str:
   echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
   exit 1
 fi
-unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
 . "$SETUP_BASH"''',
                 f'export ROS_DOMAIN_ID={ros_domain_id}'
             ],
@@ -577,7 +577,7 @@ def generate_dyn_test_ground_yaml(setup_bash: Path, ros_domain_id: int = 7) -> s
   echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
   exit 1
 fi
-unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
 . "$SETUP_BASH"''',
                 f'export ROS_DOMAIN_ID={ros_domain_id}'
             ],
@@ -590,7 +590,6 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
 
 def generate_dyn_test_ground_mpc_yaml(setup_bash: Path, ros_domain_id: int = 7) -> str:
     """Generate YAML for ground robot + MPC + static obstacle test in Gazebo."""
-    mpc_config = find_workspace_root() / 'src' / 'mpc' / 'config' / 'mpc_sim.yaml'
     panes = [
         # Base station with Gazebo + 1 dynamic obstacle
         {
@@ -617,19 +616,12 @@ def generate_dyn_test_ground_mpc_yaml(setup_bash: Path, ros_domain_id: int = 7) 
                 'use_obstacle_tracker:=true param_file:=sim_ground_robot.yaml'
             ]
         },
-        # Onboard agent NX01 — ground robot with MPC enabled (no pure pursuit)
+        # Onboard agent NX01 — ground robot (onboard_mighty.launch.py spawns the MPC controller)
         {
             'shell_command': [
                 'sleep 10',
                 'ros2 launch mighty onboard_mighty.launch.py x:=0.0 y:=0.0 z:=0.0 yaw:=0.0 '
-                'sim_env:=gazebo use_ground_robot:=true use_trajectory_tracker:=true'
-            ]
-        },
-        # MPC controller (subscribes to SpeedyPath, publishes cmd_vel)
-        {
-            'shell_command': [
-                'sleep 15',
-                f'ros2 launch mpc mpc.launch.py namespace:=NX01 params_file:={mpc_config}'
+                'sim_env:=gazebo use_ground_robot:=true'
             ]
         },
     ]
@@ -644,7 +636,7 @@ def generate_dyn_test_ground_mpc_yaml(setup_bash: Path, ros_domain_id: int = 7) 
   echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
   exit 1
 fi
-unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
 . "$SETUP_BASH"''',
                 f'export ROS_DOMAIN_ID={ros_domain_id}'
             ],
@@ -721,7 +713,7 @@ def generate_gazebo_yaml(setup_bash: Path, goal: tuple, sim_env: str,
   echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
   exit 1
 fi
-unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
 . "$SETUP_BASH"''',
                 f'export ROS_DOMAIN_ID={ros_domain_id}'
             ],
@@ -912,9 +904,8 @@ def main():
         num = args.num_agents if args.num_agents != 10 else 4
         radius = args.radius if args.radius != 10.0 else 12.0
         agents = generate_multiagent_positions(num, radius, z=0.0, prefix='NX')
-        mpc_config = find_workspace_root() / 'src' / 'mpc' / 'config' / 'mpc_sim.yaml'
         yaml_content = generate_multiagent_ground_yaml(setup_bash, agents, radius,
-                                                       mpc_config, args.ros_domain_id)
+                                                       args.ros_domain_id)
         print(f"[INFO] Mode: Multi-agent ground robot (Gazebo + MPC) with {num} agents (radius={radius})")
         for a in agents:
             print(f"[INFO]   {a['namespace']}: ({a['x']}, {a['y']}, {a['z']}) yaw={a['yaw']}")

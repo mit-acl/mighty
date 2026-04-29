@@ -211,10 +211,6 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
                 par_.formation_self_offset[0], par_.formation_self_offset[1],
                 par_.formation_self_offset[2]);
   }
-  sub_lookahead_point_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
-      "lookahead_point", 10,
-      std::bind(&MIGHTY_NODE::lookaheadPointCallback, this, std::placeholders::_1));
-
   // Frame alignment subscriptions (inter-agent transforms)
   if (par_.use_frame_alignment) {
     for (int i = 1; i <= par_.num_agents; i++) {
@@ -455,7 +451,6 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("vehicle_type", "uav");
   this->declare_parameter("provide_goal_in_global_frame", false);
   this->declare_parameter("use_hardware", false);
-  this->declare_parameter("use_trajectory_tracker", false);
   this->declare_parameter("map_frame_id", "map");
   this->declare_parameter("use_frame_alignment", false);
   this->declare_parameter("num_agents", 10);
@@ -762,7 +757,6 @@ void MIGHTY_NODE::setParameters() {
   par_.vehicle_type = this->get_parameter("vehicle_type").as_string();
   par_.provide_goal_in_global_frame = this->get_parameter("provide_goal_in_global_frame").as_bool();
   par_.use_hardware = this->get_parameter("use_hardware").as_bool();
-  par_.use_trajectory_tracker = this->get_parameter("use_trajectory_tracker").as_bool();
   par_.map_frame_id = this->get_parameter("map_frame_id").as_string();
   par_.use_frame_alignment = this->get_parameter("use_frame_alignment").as_bool();
   par_.num_agents = this->get_parameter("num_agents").as_int();
@@ -1470,16 +1464,6 @@ void MIGHTY_NODE::stateCallback(const dynus_interfaces::msg::State::SharedPtr ms
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Callback function for lookahead point from pure pursuit controller
- */
-void MIGHTY_NODE::lookaheadPointCallback(const geometry_msgs::msg::PointStamped::SharedPtr msg) {
-  Eigen::Vector3d lookahead_point(msg->point.x, msg->point.y, msg->point.z);
-  mighty_ptr_->setLookaheadPoint(lookahead_point);
-}
-
-// ----------------------------------------------------------------------------
-
-/**
  * @brief Callback function for replanning
  */
 void MIGHTY_NODE::replanCallback() {
@@ -1575,6 +1559,11 @@ void MIGHTY_NODE::replanCallback() {
   // Publish trajectory for tracking (increments trajectory_id on replan)
   if (replanning_result) {
     publishTrajectory();
+  }
+
+  // Publish waypoint path for the MPC controller (ground robot only)
+  if (replanning_result && par_.vehicle_type == "ground_robot") {
+    publishMpcPath();
   }
 
   // Publish command-to-execution time (time from goal received to first trajectory)

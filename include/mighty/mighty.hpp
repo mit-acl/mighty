@@ -172,17 +172,6 @@ class MIGHTY {
    */
   void getLastPlanState(state& state);
 
-  /** @brief Set the pure pursuit lookahead point (thread-safe).
-   *  @param point Lookahead position from the pure pursuit controller.
-   */
-  void setLookaheadPoint(const Eigen::Vector3d& point);
-
-  /** @brief Get the pure pursuit lookahead point (thread-safe).
-   *  @param point Output lookahead position.
-   *  @param received Output flag indicating if a lookahead point has been received.
-   */
-  void getLookaheadPoint(Eigen::Vector3d& point, bool& received);
-
   /** @brief Remove expired dynamic obstacle trajectories.
    *  @param current_time Current time; trajectories older than this are removed.
    */
@@ -526,8 +515,6 @@ class MIGHTY {
   double prev_dyaw_ = 0.0;                          // Previous dyaw
   double dyaw_filtered_ = 0.0;                      // Filtered dyaw
   PieceWiseQuinticPol pwp_to_share_;                // Piecewise polynomial to share
-  Eigen::Vector3d pure_pursuit_lookahead_point_;    // Lookahead point from pure pursuit controller
-  bool lookahead_point_received_ = false;  // Flag to check if lookahead point has been received
 
   // Drone status
   int drone_status_ =
@@ -560,7 +547,6 @@ class MIGHTY {
   std::mutex mtx_solve_hgp_;             // Mutex for the solveHGP
   std::mutex mtx_global_path_;           // Mutex for the global_path_
   std::mutex mtx_original_global_path_;  // Mutex for the original_global_path_
-  std::mutex mtx_lookahead_point_;       // Mutex for the pure_pursuit_lookahead_point_
   std::mutex mtx_kdtree_map_;            // Mutex for the map_
   std::mutex mtx_kdtree_unk_;            // Mutex for the unknown map_
   pcl::PointCloud<pcl::PointXYZ>::ConstPtr pclptr_map_;

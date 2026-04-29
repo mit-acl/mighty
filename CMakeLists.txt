@@ -77,15 +77,6 @@ add_executable(mighty src/mighty/mighty_node.cpp src/mighty/mighty.cpp src/hgp/h
 target_link_libraries(mighty ${PCL_LIBRARIES})
 ament_target_dependencies(mighty rclcpp example_interfaces dynus_interfaces visualization_msgs Eigen3 decomp_ros_msgs sensor_msgs std_msgs nav_msgs decomp_rviz_plugins decomp_test_node tf2_geometry_msgs tf2 tf2_ros tf2_eigen std_srvs pcl_ros)
 
-# Add pure pursuit controller for ground robot
-add_executable(pure_pursuit src/mighty/pure_pursuit.cpp)
-target_link_libraries(pure_pursuit)
-ament_target_dependencies(pure_pursuit rclcpp dynus_interfaces geometry_msgs visualization_msgs)
-
-add_executable(trajectory_tracker src/mighty/trajectory_tracker.cpp)
-target_link_libraries(trajectory_tracker)
-ament_target_dependencies(trajectory_tracker rclcpp dynus_interfaces geometry_msgs visualization_msgs)
-
 # Add odom to state converter
 add_executable(convert_odom_to_state src/mighty/convert_odom_to_state.cpp)
 target_link_libraries(convert_odom_to_state)
@@ -146,8 +137,6 @@ DESTINATION share/${PROJECT_NAME}
 install(TARGETS
   mighty
   fake_sim
-  pure_pursuit
-  trajectory_tracker
   convert_odom_to_state
   convert_vicon_to_state
   DESTINATION lib/${PROJECT_NAME}

@@ -77,16 +77,6 @@ mighty_node:
         ground_robot_v_max: 0.5                         # [m/s] Max linear velocity for ground robot
         ground_robot_w_max: 0.5                         # [rad/s] Max angular velocity for smooth tracking
 
-        # --- Pure Pursuit Controller ---
-        pure_pursuit_L_min: 0.2                         # [m] Min lookahead distance (higher = smoother)
-        pure_pursuit_k_v: 0.1                           # [s] Velocity-dependent lookahead factor (L = L_min + k_v * v)
-        pure_pursuit_stopping_radius: 0.1               # [m] Stop when within this distance of goal
-        pure_pursuit_adaptive_lookahead_distance: 2.0   # [m] Start reducing lookahead within this distance of goal
-        pure_pursuit_turn_in_place_threshold_deg: 20.0  # [deg] Heading error threshold for turn-in-place
-        pure_pursuit_slow_down_threshold_deg: 5.0       # [deg] Heading error threshold for speed reduction
-        pure_pursuit_w_smoothing_alpha: 0.2             # [-] Angular velocity smoothing (0 = none, 1 = full)
-        pure_pursuit_max_linear_accel: 0.5              # [m/s^2] Slew-rate limit on cmd_vel linear.x (0 disables). Prevents lurch on auto-mode engage.
-
         # --- Dynamic Obstacles ---
         obst_max_vel: 0.3                               # [m/s] Expected max velocity of dynamic obstacles
 
@@ -314,7 +304,6 @@ mighty_node:
 
         # --- Trajectory Publishing ---
         trajectory_downsample_points: 500               # [-] Number of points to downsample trajectory to
-        use_trajectory_tracker: true                     # [-] Use FF+FB trajectory tracker instead of pure pursuit
         mpc_path_spacing: 0.2                           # [m] Spacing between waypoints in MPC path
 
         # --- Debug ---
