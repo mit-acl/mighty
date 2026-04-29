@@ -248,13 +248,17 @@ def generate_launch_description():
         mpc_params_filename = 'mpc.yaml' if use_hardware else 'mpc_sim.yaml'
         mpc_params_file = os.path.join(get_package_share_directory('mpc'), 'config', mpc_params_filename)
         mpc_cmd_vel_topic = 'cmd_vel_auto' if use_hardware else 'cmd_vel'
+        mpc_overrides = {'cmd_vel_topic': mpc_cmd_vel_topic}
+        # On HW with mocap, pose comes from the Vicon "world" topic (not DLIO)
+        if use_hardware and not use_onboard_localization:
+            mpc_overrides['pose_topic'] = 'world'
         mpc_node = Node(
             package='mpc',
             executable='mpc_node',
             name='mpc',
             namespace=namespace,
             output='screen',
-            parameters=[mpc_params_file, {'cmd_vel_topic': mpc_cmd_vel_topic}],
+            parameters=[mpc_params_file, mpc_overrides],
         )
 
         # Create a fake sim node

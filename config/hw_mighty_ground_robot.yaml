@@ -304,7 +304,7 @@ mighty_node:
 
         # --- Trajectory Publishing ---
         trajectory_downsample_points: 500               # [-] Number of points to downsample trajectory to
-        mpc_path_spacing: 0.2                           # [m] Spacing between waypoints in MPC path
+        mpc_path_spacing: 0.1                           # [m] Spacing between waypoints in MPC path
 
         # --- Debug ---
         global_planner_verbose: false                   # [-] Global planner debug output

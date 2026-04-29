@@ -42,7 +42,6 @@ from pathlib import Path
 MIGHTY_WS = Path('/home/swarm/code/mighty_ws')
 SETUP_BASH = MIGHTY_WS / 'install' / 'setup.bash'
 DECOMP_SETUP_BASH = Path('/home/swarm/code/decomp_ws/install/setup.bash')
-MPC_CONFIG = MIGHTY_WS / 'src' / 'mpc' / 'config' / 'mpc.yaml'
 
 
 def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
@@ -152,18 +151,8 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
                 mapper_cmd,
             ]
         },
-        # MPC Controller (mocap: override pose_topic from dlio/odom_node/pose to world)
-        # {
-        #     'shell_command': [
-        #         source_ws,
-        #         f'ros2 launch mpc mpc.launch.py namespace:={rover_name} hardware:=true params_file:={MPC_CONFIG}'
-        #         if odom_type != 'mocap' else
-        #         f'ros2 run mpc mpc_node --ros-args -r __ns:=/{rover_name}'
-        #         f' --params-file {MPC_CONFIG}'
-        #         f' -p cmd_vel_topic:=cmd_vel_auto'
-        #         f' -p pose_topic:=world',
-        #     ]
-        # },
+        # MPC controller is spawned by onboard_mighty.launch.py (hw + red_rover branch)
+        # using hw_mighty_ground_robot.yaml + mpc.yaml, publishing to cmd_vel_auto.
         # Goal Monitor
         # {
         #     'shell_command': [

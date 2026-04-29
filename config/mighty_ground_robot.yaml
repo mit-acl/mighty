@@ -42,7 +42,7 @@ mighty_node:
         sim_frame_offset_qw: 1.0                        # [-]
 
         # --- Vehicle Dynamic Limits ---
-        v_max: 0.5                                      # [m/s]   Max velocity
+        v_max: 1.0                                      # [m/s]   Max velocity
         a_max: 1.0                                      # [m/s^2] Max acceleration
         j_max: 2.0                                     # [m/s^3] Max jerk
         w_max: 1.0                                      # [rad/s] Max yaw rate (~4.0 for hardware)
