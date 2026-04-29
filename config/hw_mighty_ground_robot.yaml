@@ -334,9 +334,9 @@ mighty_node:
         exploration.detector.min_obstacle_distance_m: 0.5
         exploration.detector.robot_snap_radius_m: 1.0
         exploration.bounds.enabled: true
-        exploration.bounds.min_x: -5.0
-        exploration.bounds.max_x:  20.0
-        exploration.bounds.min_y: -15.0
+        exploration.bounds.min_x: -7.0
+        exploration.bounds.max_x:  19.0
+        exploration.bounds.min_y: -20.0
         exploration.bounds.max_y:  5.5
         exploration.utility.w_size: 1.0
         exploration.utility.w_dist: 2.0
