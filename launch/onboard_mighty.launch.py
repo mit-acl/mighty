@@ -242,6 +242,7 @@ def generate_launch_description():
             ],
             emulate_tty=True,
             output='screen',
+            arguments=['--ros-args', '--log-level', 'error'],
         )
 
         # MPC controller for ground robot (subscribes to mpc_waypoints, publishes cmd_vel)

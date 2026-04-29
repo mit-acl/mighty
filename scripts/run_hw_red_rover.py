@@ -11,15 +11,20 @@
 """
 Hardware Red Rover Launcher
 
-Launches the MIGHTY planner on a Red Rover ground robot with either DLIO or
-mocap localization.
+Launches the MIGHTY planner on a Red Rover ground robot with DLIO, mocap, or
+mocap-seeded-DLIO localization.
 
 Usage:
-    # DLIO localization (default)
+    # DLIO localization (starts at origin)
     python3 scripts/run_hw_red_rover.py
 
-    # Mocap localization
+    # Mocap localization (state from /world topic)
     python3 scripts/run_hw_red_rover.py --odom-type mocap
+
+    # DLIO seeded with mocap pose: DLIO subscribes to /<ns>/world once at
+    # startup and anchors its odom frame to that pose, so its outputs (and the
+    # downstream map) live in mocap world coords from the first scan.
+    python3 scripts/run_hw_red_rover.py --odom-type dlio_in_mocap
 
     # Mocap with diagonal goal type 2
     python3 scripts/run_hw_red_rover.py --odom-type mocap --goal-type 2
@@ -50,7 +55,9 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
     source_ws = f'source {SETUP_BASH}'
     timestamp = datetime.now().strftime('%Y%m%d%H%M')
 
-    # Mighty launch: mocap vs DLIO differ in use_onboard_localization and twist_topic
+    # Mighty launch: mocap vs DLIO differ in use_onboard_localization and twist_topic.
+    # `dlio_in_mocap` is a DLIO setup with one knob flipped (the DLIO seed),
+    # so the mighty side is identical to plain `dlio`.
     if odom_type == 'mocap':
         mighty_cmd = (
             f'ros2 launch mighty onboard_mighty.launch.py'
@@ -59,7 +66,7 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
             f' use_onboard_localization:=false robot_type:=red_rover'
             f' depth_camera_name:=d455 twist_topic:=mocap/twist'
         )
-    else:
+    else:  # 'dlio' or 'dlio_in_mocap'
         mighty_cmd = (
             f'ros2 launch mighty onboard_mighty.launch.py'
             f' x:=0.0 y:=0.0 z:=0.0 yaw:=0.0 namespace:={rover_name}'
@@ -68,7 +75,10 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
             f' depth_camera_name:=d455'
         )
 
-    # DLIO pane: replaced by static TFs when using mocap
+    # DLIO pane: replaced by static TFs when using mocap; in `dlio_in_mocap`
+    # mode DLIO runs as usual but is told to seed its initial pose from the
+    # mocap PoseStamped on `<ns>/world`, so its odom frame is anchored to the
+    # mocap world from the first scan.
     if odom_type == 'mocap':
         dlio_cmd = (
             f'ros2 run tf2_ros static_transform_publisher'
@@ -76,11 +86,17 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
             f' & ros2 run tf2_ros static_transform_publisher'
             f' --frame-id world --child-frame-id {rover_name}/map'
         )
+    elif odom_type == 'dlio_in_mocap':
+        dlio_cmd = (
+            f'ros2 launch direct_lidar_inertial_odometry dlio.launch.py'
+            f' namespace:={rover_name} initial_pose_topic:=world'
+        )
     else:
         dlio_cmd = f'ros2 launch direct_lidar_inertial_odometry dlio.launch.py namespace:={rover_name}'
 
-    # Global mapper: mocap uses pose_stamped on "world" topic, DLIO uses dlio/odom_node/pose.
-    # `ground_robot:=true` plus `hardware:=true` picks hw_ground_robot.yaml from the launch default.
+    # Global mapper: mocap uses pose_stamped on "world", DLIO (and dlio_in_mocap)
+    # use dlio/odom_node/pose. Same mapper config in both DLIO modes — the
+    # difference is solely whether DLIO's frame is anchored to mocap or to (0,0,0).
     if odom_type == 'mocap':
         mapper_cmd = (
             f'ros2 launch global_mapper_ros global_mapper_node.launch.py'
@@ -88,7 +104,7 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
             f' depth_pointcloud_topic:=livox/lidar'
             f' pose_topic:=world pose_type:=pose_stamped'
         )
-    else:
+    else:  # 'dlio' or 'dlio_in_mocap'
         mapper_cmd = (
             f'ros2 launch global_mapper_ros global_mapper_node.launch.py'
             f' hardware:=true ground_robot:=true quad:={rover_name}'
@@ -197,9 +213,11 @@ def main():
 
     parser.add_argument(
         '--odom-type', '-o',
-        choices=['dlio', 'mocap'],
+        choices=['dlio', 'mocap', 'dlio_in_mocap'],
         default='dlio',
-        help='Localization source (default: dlio)',
+        help='Localization source (default: dlio). dlio_in_mocap = DLIO seeds '
+             'its initial pose from one mocap PoseStamped on /<ns>/world, so '
+             'its odom frame is anchored to mocap world from the first scan.',
     )
 
     parser.add_argument(
