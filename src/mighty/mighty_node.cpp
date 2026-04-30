@@ -452,6 +452,7 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("provide_goal_in_global_frame", false);
   this->declare_parameter("use_hardware", false);
   this->declare_parameter("map_frame_id", "map");
+  this->declare_parameter("share_traj", true);
   this->declare_parameter("use_frame_alignment", false);
   this->declare_parameter("num_agents", 10);
   this->declare_parameter("sim_frame_offset_qx", 0.0);
@@ -759,6 +760,7 @@ void MIGHTY_NODE::setParameters() {
   par_.provide_goal_in_global_frame = this->get_parameter("provide_goal_in_global_frame").as_bool();
   par_.use_hardware = this->get_parameter("use_hardware").as_bool();
   par_.map_frame_id = this->get_parameter("map_frame_id").as_string();
+  par_.share_traj = this->get_parameter("share_traj").as_bool();
   par_.use_frame_alignment = this->get_parameter("use_frame_alignment").as_bool();
   par_.num_agents = this->get_parameter("num_agents").as_int();
   par_.sim_frame_offset_qx = this->get_parameter("sim_frame_offset_qx").as_double();
@@ -1120,6 +1122,7 @@ void MIGHTY_NODE::printParameters() {
   RCLCPP_INFO(this->get_logger(), "Provide Goal in Global Frame: %d",
               par_.provide_goal_in_global_frame);
   RCLCPP_INFO(this->get_logger(), "Use Hardware: %d", par_.use_hardware);
+  RCLCPP_INFO(this->get_logger(), "Share Traj: %d", par_.share_traj);
   RCLCPP_INFO(this->get_logger(), "Use Frame Alignment: %d", par_.use_frame_alignment);
   RCLCPP_INFO(this->get_logger(), "Num Agents: %d", par_.num_agents);
 
@@ -1308,8 +1311,11 @@ void MIGHTY_NODE::cleanUpOldTrajsCallback() {
  * @param msg Trajectory message
  */
 void MIGHTY_NODE::trajCallback(const dynus_interfaces::msg::DynTraj::SharedPtr msg) {
-  // Filter out its own traj
-  if (msg->id == id_) return;
+  // Filter out its own traj. Only drop on id match when the sender is an agent;
+  // the obstacle tracker reuses small ids (0,1,2,...) that can collide with our
+  // own namespace-derived id_ (e.g. RR04 -> id_=4), which would silently drop
+  // dynamic-obstacle predictions.
+  if (msg->is_agent && msg->id == id_) return;
 
   // Get current time
   double current_time = this->now().seconds();
@@ -1557,7 +1563,7 @@ void MIGHTY_NODE::replanCallback() {
   }
 
   // To share trajectory with other agents
-  if (replanning_result) publishOwnTraj();
+  if (replanning_result && par_.share_traj) publishOwnTraj();
 
   // Publish trajectory for tracking (increments trajectory_id on replan)
   if (replanning_result) {

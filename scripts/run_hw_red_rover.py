@@ -62,7 +62,7 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
         mighty_cmd = (
             f'ros2 launch mighty onboard_mighty.launch.py'
             f' x:=0.0 y:=0.0 z:=0.0 yaw:=0.0 namespace:={rover_name}'
-            f' use_hardware:=true use_obstacle_tracker:=false'
+            f' use_hardware:=true'
             f' use_onboard_localization:=false robot_type:=red_rover'
             f' depth_camera_name:=d455 twist_topic:=mocap/twist'
         )
@@ -70,7 +70,7 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
         mighty_cmd = (
             f'ros2 launch mighty onboard_mighty.launch.py'
             f' x:=0.0 y:=0.0 z:=0.0 yaw:=0.0 namespace:={rover_name}'
-            f' use_hardware:=true use_obstacle_tracker:=false'
+            f' use_hardware:=true'
             f' use_onboard_localization:=true robot_type:=red_rover'
             f' depth_camera_name:=d455'
         )
@@ -170,12 +170,12 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
         # MPC controller is spawned by onboard_mighty.launch.py (hw + red_rover branch)
         # using hw_mighty_ground_robot.yaml + mpc.yaml, publishing to cmd_vel_auto.
         # Goal Monitor
-        # {
-        #     'shell_command': [
-        #         source_ws,
-        #         goal_monitor_cmd,
-        #     ]
-        # },
+        {
+            'shell_command': [
+                source_ws,
+                goal_monitor_cmd,
+            ]
+        },
         # Bag recorder
         # {
         #     'shell_command': [

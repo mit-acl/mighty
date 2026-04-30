@@ -17,6 +17,7 @@ mighty_node:
         # Hardware-related parameters
         provide_goal_in_global_frame: true                     # [-] Provide goal in the global frame
         use_hardware: true                                     # [-] Use hardware
+        share_traj: true                                         # [-] Publish own planned traj on /trajs (off for solo runs to skip the swarm channel)
         use_frame_alignment: true                                # [-] Use inter-agent frame alignment
         num_agents: 10                                           # [-] Number of agents (for frame alignment subscriptions)
 

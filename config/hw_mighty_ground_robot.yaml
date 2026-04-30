@@ -34,7 +34,8 @@ mighty_node:
         visual_level: 2                                 # [-] Visualization level (0: none, 1: minimal, 2: full)
 
         # --- Multi-Agent / Frame Alignment ---
-        use_frame_alignment: false                       # [-] Use inter-agent frame alignment
+        share_traj: false                               # [-] Publish own planned traj on /trajs (off for solo HW runs to skip the swarm channel)
+        use_frame_alignment: false                      # [-] Use inter-agent frame alignment - if false, until we receive frame alignment, we drop the msg from that agent
         num_agents: 10                                  # [-] Number of agents (for frame alignment subscriptions)
         sim_frame_offset_qx: 0.0                        # [-] Simulated frame offset quaternion (for testing in fake_sim)
         sim_frame_offset_qy: 0.0                        # [-]
@@ -108,19 +109,19 @@ mighty_node:
 
         # --- Safety Corridors ---
         local_box_size: [1.0, 1.0, 0.5]                # [m] Local planning window (smaller = faster, larger = smoother)
-        traj_lifetime: 7.0                              # [s] Discard obstacle trajectories older than this
+        traj_lifetime: 1.0                              # [s] Discard obstacle trajectories older than this
 
         # --- Dynamic Obstacle Heat (soft costs) ---
         heat_alpha0: 0.1                                # [-] Weight for reachability blob (smaller for ground robot)
-        heat_alpha1: 1.5                                # [-] Weight for trajectory tube
-        heat_Hmax: 5.0                                  # [-] Maximum dynamic heat value
-        dyn_base_inflation_m: 0.7                       # [m] Base inflation for dynamic obstacle bboxes
+        heat_alpha1: 0.8                                # [-] Weight for trajectory tube
+        heat_Hmax: 10.0                                  # [-] Maximum dynamic heat value
+        dyn_base_inflation_m: 0.8                       # [m] Base inflation for dynamic obstacle bboxes
         dyn_heat_tube_radius_m: 1.5                     # [m] Heat corridor radius (tighter for ground robot)
 
         # --- Static Obstacle Heat (boundary halo) ---
         static_heat_alpha: 1.0                           # [-] Peak heat at obstacle boundary
         static_heat_Hmax: 1.0                           # [-] Maximum static heat value
-        static_heat_rmax_m: 0.5                         # [m] Maximum halo radius
+        static_heat_rmax_m: 1.0                         # [m] Maximum halo radius
 
         # --- Obstacle Tracking ---
         cluster_tolerance: 1.0                          # [m] Clustering distance for obstacle detection
@@ -151,7 +152,7 @@ mighty_node:
         free_goal_factor: 2.0                           # [-] Radius factor for goal freeing
         global_planner_heuristic_weight: 1.0             # [-] A* heuristic weight (higher = greedier)
         heat_weight: 5.0                                # [-] Overall heat map weight in A* cost
-        max_dist_vertexes: 0.5                          # [m] Max distance between path vertices
+        max_dist_vertexes: 1.0                          # [m] Max distance between path vertices
         w_unknown: 1.0                                  # [-] Cost weight for unknown cells
         w_align: 0.0                                    # [-] Cost weight for alignment with initial velocity
         decay_len_cells: 100.0                          # [-] Decay length for alignment cost
@@ -160,12 +161,12 @@ mighty_node:
         # --- Heat Map Internals ---
         use_heat_map: true                              # [-] Master toggle for heat map
         dynamic_heat_enabled: true                      # [-] Enable dynamic heat for ground robot
-        dynamic_as_occupied_current: true               # [-] Mark obstacle's current cell as hard-occupied
+        dynamic_as_occupied_current: false              # [-] Mark obstacle's current cell as hard-occupied (false = pure soft heat, lets heat fill the obstacle's current footprint instead of leaving a hard-blocked hole that swallows the heat tube)
         dynamic_as_occupied_future: false                # [-] Mark obstacle's future cells as hard-occupied
-        heat_p: 2                                       # [-] Reachability blob falloff power
-        heat_q: 2                                       # [-] Trajectory tube falloff power
-        heat_tau_ratio: 3.0                             # [-] Time decay ratio for heat
-        heat_gamma: 0.0                                 # [m/s] Tube radius growth rate
+        heat_p: 1                                       # [-] Reachability blob falloff power
+        heat_q: 1                                       # [-] Trajectory tube falloff power
+        heat_tau_ratio: 50.0                             # [-] Time decay ratio for heat
+        heat_gamma: 0.5                                 # [m/s] Tube radius growth rate
         heat_num_samples: 15                            # [-] Samples for heat computation
         static_heat_enabled: true                       # [-] Enable static obstacle heat
         static_heat_p: 2                                # [-] Static heat falloff power
@@ -197,7 +198,7 @@ mighty_node:
         # --- L-BFGS Solver Internals ---
         spline_degree: 3                                # [-] Hermite spline degree (3=cubic, 5=quintic)
         dc: 0.01                                        # [s] Interpolation timestep
-        pos_anchor_weight: 0.0                         # [-] Position anchor weight (penalizes deviation from HGP waypoints)
+        pos_anchor_weight: 5.0e+2                         # [-] Position anchor weight (penalizes deviation from HGP waypoints)
         dyn_constr_bodyrate_weight: 0.0                 # [-] Body rate constraint weight
         dyn_constr_tilt_weight: 0.0                     # [-] Tilt constraint weight
         dyn_constr_thrust_weight: 0.0                   # [-] Thrust constraint weight
@@ -325,7 +326,7 @@ mighty_node:
         # --- Frontier-Based Exploration ---
         # Hardware default: OFF. Flip exploration.enabled to true to autonomously
         # drive to frontiers detected on occ_2d_topic. See plan: snazzy-moseying-donut.md
-        exploration.enabled: true
+        exploration.enabled: false
         exploration.select_rate_hz: 1.0
         exploration.default_goal_z: 0.0
         exploration.detector.cluster_min_cells: 6

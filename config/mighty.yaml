@@ -34,6 +34,7 @@ mighty_node:
         visual_level: 2                                 # [-] Visualization level (0: none, 1: minimal, 2: full)
 
         # --- Multi-Agent / Frame Alignment ---
+        share_traj: true                                # [-] Publish own planned traj on /trajs (off for solo runs to skip the swarm channel)
         use_frame_alignment: false                      # [-] Use inter-agent frame alignment
         num_agents: 10                                  # [-] Number of agents (for frame alignment subscriptions)
         sim_frame_offset_qx: 0.0                        # [-] Simulated frame offset quaternion (for testing in fake_sim)
