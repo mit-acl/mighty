@@ -1436,7 +1436,6 @@ void MIGHTY_NODE::stateCallback(const dynus_interfaces::msg::State::SharedPtr ms
       mighty_ptr_->updateState(current_state);
     }
     RCLCPP_INFO(this->get_logger(), "State initialized");
-    exploration_start_pos_ = Eigen::Vector3d(msg->pos.x, msg->pos.y, msg->pos.z);
     state_initialized_ = true;
     timer_goal_->reset();
   }
@@ -1701,6 +1700,7 @@ void MIGHTY_NODE::terminalGoalCallbackImpl(const geometry_msgs::msg::PoseStamped
     manual_goal_active_ = true;
     // A manual goal preempts any in-progress exploration goal.
     exploration_active_ = false;
+    exploration_start_captured_ = false;
     unreachable_consec_count_ = 0;
   }
 
@@ -3358,6 +3358,13 @@ void MIGHTY_NODE::exploreSelectCallback() {
   }
   if (!next) {
     if (exploration_active_) {
+      std::cout << "[mighty] No frontiers left. Robot now at ("
+                << cur.pos.x() << ", " << cur.pos.y() << ", " << cur.pos.z()
+                << "). Returning to captured start ("
+                << exploration_start_pos_.x() << ", "
+                << exploration_start_pos_.y() << ", "
+                << exploration_start_pos_.z() << ")"
+                << std::endl;
       RCLCPP_INFO(this->get_logger(),
                   "Exploration: nothing left to explore — returning to start at (%.2f, %.2f, %.2f)",
                   exploration_start_pos_.x(), exploration_start_pos_.y(), exploration_start_pos_.z());
@@ -3371,6 +3378,12 @@ void MIGHTY_NODE::exploreSelectCallback() {
       terminalGoalCallbackImpl(home, /*from_user=*/false);
     }
     exploration_active_ = false;
+    // Note: exploration_start_captured_ is intentionally NOT reset here.
+    // While the robot is en route home, new frontiers may be discovered as the
+    // map updates, causing exploreSelectCallback to auto-restart. Resetting
+    // would let it re-capture the mid-transit pose as a new "start" and the
+    // final return-home would land there instead of the true session start.
+    // Only a manual user goal (true session boundary) resets the flag.
     return;
   }
 
@@ -3389,6 +3402,19 @@ void MIGHTY_NODE::exploreSelectCallback() {
               static_cast<int>(next->state), next->cached_utility);
 
   terminalGoalCallbackImpl(g, /*from_user=*/false);
+
+  if (!exploration_start_captured_) {
+    exploration_start_pos_ = Eigen::Vector3d(cur.pos.x(), cur.pos.y(), cur.pos.z());
+    exploration_start_captured_ = true;
+    std::cout << "[mighty] Exploration start captured at ("
+              << exploration_start_pos_.x() << ", "
+              << exploration_start_pos_.y() << ", "
+              << exploration_start_pos_.z() << ") — will return here when done"
+              << std::endl;
+    RCLCPP_INFO(this->get_logger(),
+                "Exploration: starting from (%.2f, %.2f, %.2f) — will return here when done",
+                exploration_start_pos_.x(), exploration_start_pos_.y(), exploration_start_pos_.z());
+  }
 
   current_explore_id_       = next->id;
   exploration_active_       = true;
