@@ -3348,6 +3348,24 @@ void MIGHTY_NODE::exploreSelectCallback() {
   mighty_ptr_->getState(cur);
   Eigen::Vector3d robot_pose(cur.pos.x(), cur.pos.y(), cur.yaw);
 
+  // Multi-agent timing guard: peer-shared maps can populate frontiers before
+  // this agent's own state has settled past the (0,0,0) default, causing the
+  // start capture below to grab origin instead of the real spawn pose. If we
+  // haven't captured yet AND the current pose is within 0.5m of origin, defer
+  // the whole tick. Once the start is captured, this guard is bypassed so the
+  // robot is free to navigate near origin during/after exploration.
+  if (!exploration_start_captured_) {
+    const double dist_to_origin =
+        std::sqrt(cur.pos.x() * cur.pos.x() + cur.pos.y() * cur.pos.y());
+    if (dist_to_origin < 0.5) {
+      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+        "Exploration deferred: robot pose (%.3f, %.3f) within 0.5m of origin — "
+        "waiting for state to settle before capturing start",
+        cur.pos.x(), cur.pos.y());
+      return;
+    }
+  }
+
   std::optional<FrontierRecord> next;
   if (par_.expl_use_minpos) {
     auto peers = peer_tracker_.getActivePeers(
