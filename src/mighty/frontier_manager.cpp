@@ -272,7 +272,8 @@ std::optional<FrontierRecord> FrontierManager::selectNextGoal(
 std::optional<FrontierRecord> FrontierManager::selectNextGoalMinPos(
     const Eigen::Vector3d& robot_pose,
     const OccGrid2D& current_grid,
-    const std::vector<PeerPose>& peers) const {
+    const std::vector<PeerPose>& peers,
+    double min_dist_to_peers_m) const {
   const Eigen::Vector2d robot_xy = robot_pose.head<2>();
 
   struct Candidate {
@@ -286,6 +287,18 @@ std::optional<FrontierRecord> FrontierManager::selectNextGoalMinPos(
     std::vector<Candidate> cands;
     for (size_t i = 0; i < records_.size(); ++i) {
       if (records_[i].state != want) continue;
+
+      if (min_dist_to_peers_m > 0.0) {
+        bool too_close = false;
+        for (const auto& p : peers) {
+          if ((p.position - records_[i].centroid_xy).norm() < min_dist_to_peers_m) {
+            too_close = true;
+            break;
+          }
+        }
+        if (too_close) continue;
+      }
+
       const double d_self = (robot_xy - records_[i].centroid_xy).norm();
       int rank = 0;
       for (const auto& p : peers) {

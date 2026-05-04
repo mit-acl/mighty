@@ -381,6 +381,7 @@ struct parameters {
   bool   expl_use_minpos{false};              // enable rank-based peer-aware allocation
   double expl_peer_timeout_sec{5.0};          // drop peer after this silence (seconds)
   double expl_peer_publish_rate_hz{5.0};      // throttle for pose broadcast (Hz)
+  double expl_min_frontier_dist_to_peers_m{0.0};  // reject frontier candidates within this radius of any active peer; 0 disables
   // Visualization
   bool   expl_publish_markers{true};
 };

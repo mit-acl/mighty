@@ -120,7 +120,8 @@ class FrontierManager {
   std::optional<FrontierRecord> selectNextGoalMinPos(
       const Eigen::Vector3d& robot_pose,
       const OccGrid2D& current_grid,
-      const std::vector<PeerPose>& peers) const;
+      const std::vector<PeerPose>& peers,
+      double min_dist_to_peers_m = 0.0) const;
 
   void markVisited(uint64_t id);
   void markInvalidated(uint64_t id);

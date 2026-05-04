@@ -742,6 +742,7 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.minpos.enabled", false);
   this->declare_parameter("exploration.minpos.peer_timeout_sec", 5.0);
   this->declare_parameter("exploration.minpos.peer_publish_rate_hz", 5.0);
+  this->declare_parameter("exploration.minpos.min_frontier_dist_to_peers_m", 0.0);
 }
 
 // ----------------------------------------------------------------------------
@@ -1104,6 +1105,8 @@ void MIGHTY_NODE::setParameters() {
   par_.expl_use_minpos           = this->get_parameter("exploration.minpos.enabled").as_bool();
   par_.expl_peer_timeout_sec     = this->get_parameter("exploration.minpos.peer_timeout_sec").as_double();
   par_.expl_peer_publish_rate_hz = this->get_parameter("exploration.minpos.peer_publish_rate_hz").as_double();
+  par_.expl_min_frontier_dist_to_peers_m =
+      this->get_parameter("exploration.minpos.min_frontier_dist_to_peers_m").as_double();
 }
 
 // ----------------------------------------------------------------------------
@@ -3370,7 +3373,9 @@ void MIGHTY_NODE::exploreSelectCallback() {
   if (par_.expl_use_minpos) {
     auto peers = peer_tracker_.getActivePeers(
         this->now().seconds(), par_.expl_peer_timeout_sec);
-    next = frontier_manager_->selectNextGoalMinPos(robot_pose, *occ_grid_2d_, peers);
+    next = frontier_manager_->selectNextGoalMinPos(
+        robot_pose, *occ_grid_2d_, peers,
+        par_.expl_min_frontier_dist_to_peers_m);
   } else {
     next = frontier_manager_->selectNextGoal(robot_pose, *occ_grid_2d_);
   }

@@ -864,8 +864,8 @@ def main():
         print(f"[INFO] Agent NX01 at (0, 0, 1.0) — use '2D Goal Pose' in RViz to send goals")
     elif args.mode == 'exploration-multiagent-ground':
         num = args.num_agents if args.num_agents != 10 else 3
-        # Arrange agents in a line along x-axis, centered at origin, 3m spacing
-        spacing = 3.0
+        # Arrange agents in a line along x-axis, centered at origin, 5m spacing
+        spacing = 5.0
         agents = []
         for i in range(num):
             x = -spacing * (num - 1) / 2.0 + spacing * i

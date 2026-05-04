@@ -105,7 +105,7 @@ mighty_node:
         dyn_constr_acc_weight: 1e+3                     # [-] Acceleration constraint violation weight
         dyn_constr_jerk_weight: 1e+3                    # [-] Jerk constraint violation weight
         planner_Co: 0.1                                 # [m] Collision clearance for static obstacles
-        planner_Cw: 1.3                                 # [m] Collision clearance for dynamic obstacles
+        planner_Cw: 3.0                                 # [m] Collision clearance for dynamic obstacles
 
         # --- Safety Corridors ---
         local_box_size: [1.0, 1.0, 0.5]                # [m] Local planning window (smaller = faster, larger = smoother)
@@ -116,7 +116,7 @@ mighty_node:
         heat_alpha1: 0.8                                # [-] Weight for trajectory tube
         heat_Hmax: 10.0                                  # [-] Maximum dynamic heat value
         dyn_base_inflation_m: 0.8                       # [m] Base inflation for dynamic obstacle bboxes
-        dyn_heat_tube_radius_m: 1.5                     # [m] Heat corridor radius (tighter for ground robot)
+        dyn_heat_tube_radius_m: 3.0                     # [m] Heat corridor radius (tighter for ground robot)
 
         # --- Static Obstacle Heat (boundary halo) ---
         static_heat_alpha: 1.0                           # [-] Peak heat at obstacle boundary
@@ -368,4 +368,11 @@ mighty_node:
         exploration.visited_map.publish: true
         exploration.visited_map.fuse_into_local: true  # disabled to stop stale observations re-seeding phantom FREE inside closed rooms
         exploration.visited_map.detect_on_visited_map: true  # run frontier WFD on the persistent map so revisited corridors still surface their far-end frontier
+        # MinPos multi-robot frontier allocation. Solo HW today (RR04 only) so
+        # this no-ops to nearest-frontier when no peers are heard. Flip to true
+        # before running multi-rover HW so peers de-duplicate their frontiers.
+        exploration.minpos.enabled: true                   # [-] enable rank-based peer-aware allocation
+        exploration.minpos.peer_timeout_sec: 5.0            # [s] drop peer after this silence
+        exploration.minpos.peer_publish_rate_hz: 5.0        # [Hz] pose broadcast throttle
+        exploration.minpos.min_frontier_dist_to_peers_m: 3.0 # [m] reject frontier candidates within this radius of any active peer (0 disables)
         exploration.visualization.publish_markers: true
