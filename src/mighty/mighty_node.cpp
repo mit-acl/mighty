@@ -72,6 +72,11 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
   // Qos policy settings
   rclcpp::QoS critical_qos(rclcpp::KeepLast(10));
   critical_qos.reliable().durability_volatile();
+  // Visualization: best-effort + depth 1. Markers/clouds for RViz only — losing
+  // a frame is fine, and reliable+depth-10 was filling Zenoh's TX queue and
+  // closing transports under multi-agent load.
+  rclcpp::QoS viz_qos(rclcpp::KeepLast(1));
+  viz_qos.best_effort().durability_volatile();
 
   // Initialize callback groups
   cb_groups_mu_.resize(9);
@@ -106,72 +111,67 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
 
   // Visulaization publishers
   pub_dynamic_map_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-      "dynamic_occupied_grid", 10);  // visual level 2 (no longer used)
+      "dynamic_occupied_grid", viz_qos);
   pub_static_map_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "static_map_marker", 10);  // visual level 2
+      "static_map_marker", viz_qos);
   pub_dynamic_map_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "dynamic_map_marker", 10);  // visual level 2
+      "dynamic_map_marker", viz_qos);
   pub_free_map_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "free_map_marker", 10);  // visual level 2
+      "free_map_marker", viz_qos);
   pub_unknown_map_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "unknown_map_marker", 10);  // visual level 2
+      "unknown_map_marker", viz_qos);
   pub_heat_cloud_ =
-      this->create_publisher<sensor_msgs::msg::PointCloud2>("heat_cloud", 10);  // visual level 2
+      this->create_publisher<sensor_msgs::msg::PointCloud2>("heat_cloud", viz_qos);
   pub_ground_2d_occ_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-      "ground_2d_occupied", 10);  // 2D ground obstacle map
+      "ground_2d_occupied", viz_qos);
   pub_ground_2d_heat_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-      "ground_2d_heat", 10);  // 2D terrain cost heat map
+      "ground_2d_heat", viz_qos);
   pub_free_map_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-      "free_grid", 10);  // visual level 2 (no longer used)
+      "free_grid", viz_qos);
   pub_unknown_map_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-      "unknown_grid", 10);  // visual level 2 (no longer used)
+      "unknown_grid", viz_qos);
   pub_hgp_path_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "hgp_path_marker", 10);  // visual level 1
+      "hgp_path_marker", viz_qos);
   pub_original_hgp_path_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "original_hgp_path_marker", 10);  // visual level 1
+      "original_hgp_path_marker", viz_qos);
   pub_free_hgp_path_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "free_hgp_path_marker", 10);  // visual level 1
+      "free_hgp_path_marker", viz_qos);
   pub_local_global_path_marker_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "local_global_path_marker", 10);  // visual level 1
+      "local_global_path_marker", viz_qos);
   pub_local_global_path_after_push_marker_ =
       this->create_publisher<visualization_msgs::msg::MarkerArray>(
-          "local_global_path_after_push_marker", 10);  // visual level 1
+          "local_global_path_after_push_marker", viz_qos);
   pub_poly_whole_ = this->create_publisher<decomp_ros_msgs::msg::PolyhedronArray>(
-      "poly_whole", 10);  // visual level 1
+      "poly_whole", viz_qos);
   pub_poly_safe_ = this->create_publisher<decomp_ros_msgs::msg::PolyhedronArray>(
-      "poly_safe", 10);  // visual level 1
+      "poly_safe", viz_qos);
   pub_traj_committed_colored_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "traj_committed_colored", 10);  // visual level 1
+      "traj_committed_colored", viz_qos);
   pub_traj_subopt_colored_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "traj_subopt_colored", 10);  // visual level 1
-  pub_setpoint_ = this->create_publisher<geometry_msgs::msg::PointStamped>("setpoint_vis",
-                                                                           10);  // visual level 1
+      "traj_subopt_colored", viz_qos);
+  pub_setpoint_ = this->create_publisher<geometry_msgs::msg::PointStamped>("setpoint_vis", viz_qos);
   pub_actual_traj_ =
-      this->create_publisher<visualization_msgs::msg::MarkerArray>("actual_traj", 10);  // visual level 1
-  pub_fov_ = this->create_publisher<visualization_msgs::msg::Marker>("fov", 10);   // visual level 1
-  pub_cp_ =
-      this->create_publisher<visualization_msgs::msg::MarkerArray>("cp", 10);  // visual level 1
+      this->create_publisher<visualization_msgs::msg::MarkerArray>("actual_traj", viz_qos);
+  pub_fov_ = this->create_publisher<visualization_msgs::msg::Marker>("fov", viz_qos);
+  pub_cp_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("cp", viz_qos);
   pub_static_push_points_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "static_push_points", 10);  // visual level 1
+      "static_push_points", viz_qos);
   pub_p_points_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-      "p_points", 10);  // visual level 1
-  pub_point_A_ =
-      this->create_publisher<geometry_msgs::msg::PointStamped>("point_A", 10);  // visual level 1
-  pub_point_G_ =
-      this->create_publisher<geometry_msgs::msg::PointStamped>("point_G", 10);  // visual level 1
-  pub_point_E_ =
-      this->create_publisher<geometry_msgs::msg::PointStamped>("point_E", 10);  // visual level 1
+      "p_points", viz_qos);
+  pub_point_A_ = this->create_publisher<geometry_msgs::msg::PointStamped>("point_A", viz_qos);
+  pub_point_G_ = this->create_publisher<geometry_msgs::msg::PointStamped>("point_G", viz_qos);
+  pub_point_E_ = this->create_publisher<geometry_msgs::msg::PointStamped>("point_E", viz_qos);
   pub_point_G_term_ = this->create_publisher<geometry_msgs::msg::PointStamped>(
-      "point_G_term", 10);  // visual level 1
+      "point_G_term", viz_qos);
   pub_current_state_ = this->create_publisher<geometry_msgs::msg::PointStamped>(
-      "point_current_state", 10);  // visual level 1
-  pub_vel_text_ = this->create_publisher<visualization_msgs::msg::Marker>("vel_text", 10);
+      "point_current_state", viz_qos);
+  pub_vel_text_ = this->create_publisher<visualization_msgs::msg::Marker>("vel_text", viz_qos);
   pub_traj_received_ = this->create_publisher<visualization_msgs::msg::Marker>(
-      "traj_received", 10);  // frame alignment debug
+      "traj_received", viz_qos);
   pub_traj_transformed_ = this->create_publisher<visualization_msgs::msg::Marker>(
-      "traj_transformed", 10);  // frame alignment debug // visual level 1
+      "traj_transformed", viz_qos);
   pub_corridor_yaw_target_ = this->create_publisher<visualization_msgs::msg::Marker>(
-      "corridor_yaw_target", 10);  // ground-robot corridor-hop TIP target arrow
+      "corridor_yaw_target", viz_qos);
 
   // Debug publishers
   pub_yaw_output_ = this->create_publisher<dynus_interfaces::msg::YawOutput>("yaw_output", 10);
@@ -3353,19 +3353,24 @@ void MIGHTY_NODE::exploreSelectCallback() {
 
   // Multi-agent timing guard: peer-shared maps can populate frontiers before
   // this agent's own state has settled past the (0,0,0) default, causing the
-  // start capture below to grab origin instead of the real spawn pose. If we
-  // haven't captured yet AND the current pose is within 0.5m of origin, defer
-  // the whole tick. Once the start is captured, this guard is bypassed so the
-  // robot is free to navigate near origin during/after exploration.
-  if (!exploration_start_captured_) {
-    const double dist_to_origin =
-        std::sqrt(cur.pos.x() * cur.pos.x() + cur.pos.y() * cur.pos.y());
-    if (dist_to_origin < 0.5) {
-      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-        "Exploration deferred: robot pose (%.3f, %.3f) within 0.5m of origin — "
-        "waiting for state to settle before capturing start",
-        cur.pos.x(), cur.pos.y());
-      return;
+  // start capture below to grab origin instead of the real spawn pose. Only
+  // applies when at least one peer has been heard — on solo hardware (e.g.
+  // RR04 DLIO) the rover legitimately starts at origin and the guard would
+  // otherwise deadlock the planner (goal never issued -> rover never moves
+  // -> guard never lifts).
+  if (!exploration_start_captured_ && par_.expl_use_minpos) {
+    const auto peers = peer_tracker_.getActivePeers(
+        this->now().seconds(), par_.expl_peer_timeout_sec);
+    if (!peers.empty()) {
+      const double dist_to_origin =
+          std::sqrt(cur.pos.x() * cur.pos.x() + cur.pos.y() * cur.pos.y());
+      if (dist_to_origin < 0.5) {
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+          "Exploration deferred: robot pose (%.3f, %.3f) within 0.5m of origin "
+          "with %zu peer(s) active — waiting for state to settle",
+          cur.pos.x(), cur.pos.y(), peers.size());
+        return;
+      }
     }
   }
 

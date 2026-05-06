@@ -18,8 +18,10 @@ PoseTwistToStateNode::PoseTwistToStateNode() : Node("pose_twist_to_state_node") 
   pose_twist_sync_->registerCallback(std::bind(&PoseTwistToStateNode::callback, this,
                                                std::placeholders::_1, std::placeholders::_2));
 
-  // Publisher setup
-  pub_state_ = this->create_publisher<dynus_interfaces::msg::State>("state", 10);
+  // Publisher setup — depth 1: only the latest state matters.
+  rclcpp::QoS state_qos(rclcpp::KeepLast(1));
+  state_qos.reliable().durability_volatile();
+  pub_state_ = this->create_publisher<dynus_interfaces::msg::State>("state", state_qos);
 }
 
 void PoseTwistToStateNode::callback(

@@ -49,7 +49,8 @@ SETUP_BASH = MIGHTY_WS / 'install' / 'setup.bash'
 DECOMP_SETUP_BASH = Path('/home/swarm/code/decomp_ws/install/setup.bash')
 
 
-def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
+def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
+                  two_d_only: bool = False) -> str:
     """Generate tmuxp YAML for hardware red rover."""
 
     source_ws = f'source {SETUP_BASH}'
@@ -90,9 +91,14 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
         dlio_cmd = (
             f'ros2 launch direct_lidar_inertial_odometry dlio.launch.py'
             f' namespace:={rover_name} initial_pose_topic:=world'
+            f' two_d_only:={"true" if two_d_only else "false"}'
         )
     else:
-        dlio_cmd = f'ros2 launch direct_lidar_inertial_odometry dlio.launch.py namespace:={rover_name}'
+        dlio_cmd = (
+            f'ros2 launch direct_lidar_inertial_odometry dlio.launch.py'
+            f' namespace:={rover_name}'
+            f' two_d_only:={"true" if two_d_only else "false"}'
+        )
 
     # Global mapper: mocap uses pose_stamped on "world", DLIO (and dlio_in_mocap)
     # use dlio/odom_node/pose. Same mapper config in both DLIO modes — the
@@ -103,6 +109,7 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
             f' hardware:=true ground_robot:=true quad:={rover_name}'
             f' depth_pointcloud_topic:=livox/lidar'
             f' pose_topic:=world pose_type:=pose_stamped'
+            f' use_obstacle_tracker:=false'
         )
     else:  # 'dlio' or 'dlio_in_mocap'
         mapper_cmd = (
@@ -110,6 +117,7 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
             f' hardware:=true ground_robot:=true quad:={rover_name}'
             f' depth_pointcloud_topic:=livox/lidar'
             f' pose_topic:=dlio/odom_node/pose'
+            f' use_obstacle_tracker:=false'
         )
 
     # Goal monitor: odom_type and goal_type are now baked in directly
@@ -170,12 +178,12 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int) -> str:
         # MPC controller is spawned by onboard_mighty.launch.py (hw + red_rover branch)
         # using hw_mighty_ground_robot.yaml + mpc.yaml, publishing to cmd_vel_auto.
         # Goal Monitor
-        {
-            'shell_command': [
-                source_ws,
-                goal_monitor_cmd,
-            ]
-        },
+        # {
+        #     'shell_command': [
+        #         source_ws,
+        #         goal_monitor_cmd,
+        #     ]
+        # },
         # Bag recorder
         # {
         #     'shell_command': [
@@ -229,6 +237,14 @@ def main():
     )
 
     parser.add_argument(
+        '--two-d-only',
+        action='store_true',
+        help='Tell DLIO to overwrite its published z with a constant (pinned to '
+             'the mocap seed z when --odom-type=dlio_in_mocap, else averaged '
+             'from the first samples). For flat 2D environments.',
+    )
+
+    parser.add_argument(
         '--dry-run',
         action='store_true',
         help='Print generated YAML without launching',
@@ -242,12 +258,15 @@ def main():
         print('[ERROR] ROVER_NAME not set. Check your .bashrc (VEHTYPE/VEHNUM).', file=sys.stderr)
         sys.exit(1)
 
-    yaml_content = generate_yaml(args.odom_type, rover_name, args.goal_type)
+    yaml_content = generate_yaml(args.odom_type, rover_name, args.goal_type,
+                                 two_d_only=args.two_d_only)
 
     print(f'[INFO] Odom type: {args.odom_type}')
     print(f'[INFO] Rover: {rover_name}')
     if args.odom_type == 'mocap':
         print(f'[INFO] Goal type: {args.goal_type}')
+    if args.two_d_only and args.odom_type != 'mocap':
+        print('[INFO] DLIO 2D-only output: ON (z pinned to constant)')
 
     if args.dry_run:
         print('\n[DRY RUN] Generated YAML:')

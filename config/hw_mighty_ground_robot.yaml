@@ -34,7 +34,7 @@ mighty_node:
         visual_level: 2                                 # [-] Visualization level (0: none, 1: minimal, 2: full)
 
         # --- Multi-Agent / Frame Alignment ---
-        share_traj: false                               # [-] Publish own planned traj on /trajs (off for solo HW runs to skip the swarm channel)
+        share_traj: true                               # [-] Publish own planned traj on /trajs (off for solo HW runs to skip the swarm channel)
         use_frame_alignment: false                      # [-] Use inter-agent frame alignment - if false, until we receive frame alignment, we drop the msg from that agent
         num_agents: 10                                  # [-] Number of agents (for frame alignment subscriptions)
         sim_frame_offset_qx: 0.0                        # [-] Simulated frame offset quaternion (for testing in fake_sim)
@@ -58,7 +58,7 @@ mighty_node:
         g: 9.81                                         # [m/s^2] Gravitational acceleration
 
         # --- Trajectory Segments ---
-        num_N: 7                                        # [-] Number of trajectory pieces for local optimization
+        num_N: 5                                        # [-] Number of trajectory pieces for local optimization
 
         # --- Map Bounds ---
         x_min: -1000.0                                  # [m] Map x lower bound
@@ -94,11 +94,11 @@ mighty_node:
         # --- Local Planning ---
         horizon: 10.0                                   # [m] Planning horizon
         goal_radius: 0.5                                # [m] Goal reached threshold
-        goal_seen_radius: 0.5                           # [m] Distance to stop replanning
+        goal_seen_radius: 2.0                           # [m] Distance to stop replanning
 
         # --- L-BFGS Optimization Weights ---
         dynamic_weight: 1e+3                            # [-] Dynamic obstacle avoidance weight
-        time_weight: 6e+2                               # [-] Time cost weight
+        time_weight: 1e+3                               # [-] Time cost weight
         stat_weight: 0.0                               # [-] Static obstacle weight
         jerk_weight: 1e+4                               # [-] Jerk smoothness weight
         dyn_constr_vel_weight: 1e+3                     # [-] Velocity constraint violation weight
@@ -112,7 +112,7 @@ mighty_node:
         traj_lifetime: 1.0                              # [s] Discard obstacle trajectories older than this
 
         # --- Dynamic Obstacle Heat (soft costs) ---
-        heat_alpha0: 0.1                                # [-] Weight for reachability blob (smaller for ground robot)
+        heat_alpha0: 0.5                                # [-] Weight for reachability blob (smaller for ground robot)
         heat_alpha1: 0.8                                # [-] Weight for trajectory tube
         heat_Hmax: 10.0                                  # [-] Maximum dynamic heat value
         dyn_base_inflation_m: 0.8                       # [m] Base inflation for dynamic obstacle bboxes
@@ -125,13 +125,13 @@ mighty_node:
 
         # --- Obstacle Tracking ---
         cluster_tolerance: 1.0                          # [m] Clustering distance for obstacle detection
-        prediction_horizon: 3.0                         # [s] How far ahead to predict obstacle motion
+        prediction_horizon: 4.0                         # [s] How far ahead to predict obstacle motion
         prediction_mask_distance: 1.0                    # [m] Drop predicted trajs if an agent traj is within this distance
         velocity_threshold: 0.8                         # [m/s] Speed threshold: below = static, above = dynamic
 
         # --- Map Window ---
-        initial_wdx: 15.0                               # [m] Initial map window width
-        initial_wdy: 15.0                               # [m] Initial map window depth
+        initial_wdx: 20.0                               # [m] Initial map window width
+        initial_wdy: 20.0                               # [m] Initial map window depth
         initial_wdz: 0.15                               # [m] Match map res — 2D ground-robot mode only needs a single z-layer
 
         # --- Sensor ---
@@ -152,7 +152,7 @@ mighty_node:
         free_goal_factor: 2.0                           # [-] Radius factor for goal freeing
         global_planner_heuristic_weight: 1.0             # [-] A* heuristic weight (higher = greedier)
         heat_weight: 5.0                                # [-] Overall heat map weight in A* cost
-        max_dist_vertexes: 1.0                          # [m] Max distance between path vertices
+        max_dist_vertexes: 0.5                          # [m] Max distance between path vertices
         w_unknown: 1.0                                  # [-] Cost weight for unknown cells
         w_align: 0.0                                    # [-] Cost weight for alignment with initial velocity
         decay_len_cells: 100.0                          # [-] Decay length for alignment cost
@@ -198,7 +198,7 @@ mighty_node:
         # --- L-BFGS Solver Internals ---
         spline_degree: 3                                # [-] Hermite spline degree (3=cubic, 5=quintic)
         dc: 0.01                                        # [s] Interpolation timestep
-        pos_anchor_weight: 5.0e+2                         # [-] Position anchor weight (penalizes deviation from HGP waypoints)
+        pos_anchor_weight: 1.0e+3                         # [-] Position anchor weight (penalizes deviation from HGP waypoints)
         dyn_constr_bodyrate_weight: 0.0                 # [-] Body rate constraint weight
         dyn_constr_tilt_weight: 0.0                     # [-] Tilt constraint weight
         dyn_constr_thrust_weight: 0.0                   # [-] Thrust constraint weight
@@ -279,7 +279,7 @@ mighty_node:
 
         # --- ESDF-Based Obstacle Avoidance (ground robot only) ---
         use_esdf_cost: true                             # [-] Enable ESDF distance cost in L-BFGS
-        esdf_weight: 1.0e+5                             # [-] ESDF cost weight in objective
+        esdf_weight: 1.0e+4                             # [-] ESDF cost weight in objective
         esdf_d_safe: 0.7                                # [m] Safety distance threshold
         esdf_truncation_distance: 15                    # [voxels] Must match mapper's distance_grid_2d.truncation_distance
 
@@ -326,18 +326,18 @@ mighty_node:
         # --- Frontier-Based Exploration ---
         # Hardware default: OFF. Flip exploration.enabled to true to autonomously
         # drive to frontiers detected on occ_2d_topic. See plan: snazzy-moseying-donut.md
-        exploration.enabled: false
+        exploration.enabled: true
         exploration.select_rate_hz: 1.0
         exploration.default_goal_z: 0.0
         exploration.detector.cluster_min_cells: 6
         exploration.detector.border_margin_cells: 2
         exploration.detector.obstacle_clearance_cells: 1
-        exploration.detector.min_obstacle_distance_m: 0.5
-        exploration.detector.robot_snap_radius_m: 1.0
+        exploration.detector.min_obstacle_distance_m: 0.1
+        exploration.detector.robot_snap_radius_m: 0.5
         exploration.bounds.enabled: true
-        exploration.bounds.min_x: -7.0
+        exploration.bounds.min_x: -5.0
         exploration.bounds.max_x:  19.0
-        exploration.bounds.min_y: -20.0
+        exploration.bounds.min_y: -17.0
         exploration.bounds.max_y:  5.5
         exploration.utility.w_size: 1.0
         exploration.utility.w_dist: 2.0
@@ -350,14 +350,14 @@ mighty_node:
         exploration.utility.goal_select_threshold: -1.0e9
         exploration.manager.merge_radius_m: 1.0
         exploration.manager.centroid_ema_alpha: 0.5
-        exploration.manager.visit_radius_m: 2.0
-        exploration.manager.visit_dwell_sec: 1.0
+        exploration.manager.visit_radius_m: 0.5
+        exploration.manager.visit_dwell_sec: 3.0
         exploration.manager.verify_radius_cells: 2
         exploration.manager.max_frontiers: 1000
         exploration.manager.unreachable_consec_thresh: 5
         # Pursuit timeout: auto-INVALIDATE a frontier we've been chasing longer
         # than max(min_sec, dist/v_ref*factor). Set factor <= 0 to disable.
-        exploration.manager.pursuit_timeout_factor: 2.0
+        exploration.manager.pursuit_timeout_factor: 3.0
         exploration.manager.pursuit_timeout_v_ref: 0.5
         exploration.manager.pursuit_timeout_min_sec: 10.0
         exploration.visited_map.center_x: 0.0

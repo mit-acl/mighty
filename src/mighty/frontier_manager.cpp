@@ -160,22 +160,26 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
   }
 
   // ---- Pursuit-timeout check ----
-  // Any record with an armed deadline that has elapsed gets INVALIDATED if
-  // it's still ACTIVE or DORMANT. Records already VISITED/INVALIDATED are
-  // left alone (their deadlines were cleared on transition anyway).
+  // Any record with an armed deadline that has elapsed is ERASED outright if
+  // it's still ACTIVE or DORMANT — once we've given up trying to reach it,
+  // we want it gone from the DB entirely so the agent doesn't waste another
+  // pursuit cycle on the same location. Records already VISITED/INVALIDATED
+  // just have their deadlines cleared (they were cleared on transition anyway).
   if (params_.pursuit_timeout_factor > 0.0) {
-    for (auto& r : records_) {
-      if (r.pursuit_deadline_t <= 0.0) continue;
+    for (size_t i = 0; i < records_.size();) {
+      auto& r = records_[i];
+      if (r.pursuit_deadline_t <= 0.0) { ++i; continue; }
       if (r.state != FrontierState::ACTIVE &&
           r.state != FrontierState::DORMANT) {
         r.pursuit_deadline_t = -1.0;
         r.pursuit_budget_sec = 0.0;
+        ++i;
         continue;
       }
       if (t_now >= r.pursuit_deadline_t) {
-        r.state = FrontierState::INVALIDATED;
-        r.pursuit_deadline_t = -1.0;
-        r.pursuit_budget_sec = 0.0;
+        records_.erase(records_.begin() + i);
+      } else {
+        ++i;
       }
     }
   }

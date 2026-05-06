@@ -66,7 +66,7 @@ class GoalMonitorNode(Node):
 
         # Hardware ground robot: fixed goal pairs based on odom_type
         if self.use_hardware and self.use_ground_robot:
-            if odom_type == 'mocap':
+            if odom_type == 'mocap' or odom_type == 'dlio_in_mocap':
                 if goal_type == 1:
                     self.goal_points = [[3.5, 3.5, z], [-3.5, -3.5, z]]
                 else:
@@ -75,7 +75,7 @@ class GoalMonitorNode(Node):
                     f"HW ground robot mocap goals (type {goal_type}): "
                     f"{self.goal_points[0]} <-> {self.goal_points[1]}")
             else:  # dlio
-                self.goal_points = [[0.0, 0.0, z], [8.0, 0.0, z]]
+                self.goal_points = [[0.0, 0.0, z], [16.0, 0.0, z]]
                 self.get_logger().info(
                     f"HW ground robot DLIO goals: "
                     f"{self.goal_points[0]} <-> {self.goal_points[1]}")

@@ -5,8 +5,11 @@ OdometryToStateNode::OdometryToStateNode() : Node("odometry_to_state_node") {
   odometry_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
       "odom", 10, std::bind(&OdometryToStateNode::callback, this, std::placeholders::_1));
 
-  // Publisher for dynus_interfaces/State
-  state_publisher_ = this->create_publisher<dynus_interfaces::msg::State>("state", 10);
+  // Publisher for dynus_interfaces/State — depth 1: only the latest state
+  // matters and a deeper queue lets back-pressure stack up under Zenoh.
+  rclcpp::QoS state_qos(rclcpp::KeepLast(1));
+  state_qos.reliable().durability_volatile();
+  state_publisher_ = this->create_publisher<dynus_interfaces::msg::State>("state", state_qos);
 }
 
 void OdometryToStateNode::callback(const nav_msgs::msg::Odometry::SharedPtr odom_msg) {
