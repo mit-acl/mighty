@@ -78,6 +78,29 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
         r.state       = FrontierState::ACTIVE;
       }
     } else {
+      // Suppress fresh clusters that fall inside the keep-out radius of a
+      // recently-INVALIDATED record. The matching loop above intentionally
+      // skipped INVALIDATED so we wouldn't revive a bad record; without this
+      // check we'd just spawn a brand-new ACTIVE ghost in the same place and
+      // the agent would re-pursue the goal it just gave up on.
+      if (params_.invalidation_keep_out_radius_m > 0.0) {
+        bool suppressed = false;
+        const double r2 = params_.invalidation_keep_out_radius_m
+                        * params_.invalidation_keep_out_radius_m;
+        for (const auto& rec : records_) {
+          if (rec.state != FrontierState::INVALIDATED) continue;
+          if (params_.invalidation_cooldown_sec > 0.0) {
+            if (rec.invalidated_at_t < 0.0) continue;
+            if (t_now - rec.invalidated_at_t
+                > params_.invalidation_cooldown_sec) continue;
+          }
+          if ((c.centroid - rec.centroid_xy).squaredNorm() < r2) {
+            suppressed = true;
+            break;
+          }
+        }
+        if (suppressed) continue;  // drop fresh cluster, don't spawn new record
+      }
       FrontierRecord r;
       r.id           = next_id_++;
       r.centroid_xy  = c.centroid;
@@ -114,6 +137,7 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
     current_grid.worldToGrid(r.centroid_xy.x(), r.centroid_xy.y(), ix, iy);
     if (current_grid.isOccupied(ix, iy)) {
       r.state = FrontierState::INVALIDATED;
+      r.invalidated_at_t = t_now;
       continue;
     }
     if (current_grid.isFree(ix, iy)) {
@@ -160,26 +184,27 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
   }
 
   // ---- Pursuit-timeout check ----
-  // Any record with an armed deadline that has elapsed is ERASED outright if
-  // it's still ACTIVE or DORMANT — once we've given up trying to reach it,
-  // we want it gone from the DB entirely so the agent doesn't waste another
-  // pursuit cycle on the same location. Records already VISITED/INVALIDATED
-  // just have their deadlines cleared (they were cleared on transition anyway).
+  // Any record with an armed deadline that has elapsed is INVALIDATED if it's
+  // still ACTIVE or DORMANT — once we've given up trying to reach it, the
+  // tombstone participates in the invalidation keep-out so the next detection
+  // cycle doesn't immediately spawn a fresh ACTIVE ghost at the same spot.
+  // Eviction (evictIfOverCap) prefers INVALIDATED → DORMANT → VISITED, so the
+  // DB stays bounded. Records already VISITED/INVALIDATED just have their
+  // deadlines cleared.
   if (params_.pursuit_timeout_factor > 0.0) {
-    for (size_t i = 0; i < records_.size();) {
-      auto& r = records_[i];
-      if (r.pursuit_deadline_t <= 0.0) { ++i; continue; }
+    for (auto& r : records_) {
+      if (r.pursuit_deadline_t <= 0.0) continue;
       if (r.state != FrontierState::ACTIVE &&
           r.state != FrontierState::DORMANT) {
         r.pursuit_deadline_t = -1.0;
         r.pursuit_budget_sec = 0.0;
-        ++i;
         continue;
       }
       if (t_now >= r.pursuit_deadline_t) {
-        records_.erase(records_.begin() + i);
-      } else {
-        ++i;
+        r.state = FrontierState::INVALIDATED;
+        r.invalidated_at_t = t_now;
+        r.pursuit_deadline_t = -1.0;
+        r.pursuit_budget_sec = 0.0;
       }
     }
   }
@@ -343,10 +368,11 @@ void FrontierManager::markVisited(uint64_t id) {
   }
 }
 
-void FrontierManager::markInvalidated(uint64_t id) {
+void FrontierManager::markInvalidated(uint64_t id, double t_now) {
   for (auto& r : records_) {
     if (r.id == id) {
       r.state = FrontierState::INVALIDATED;
+      r.invalidated_at_t = t_now;
       r.pursuit_deadline_t = -1.0;
       r.pursuit_budget_sec = 0.0;
       return;

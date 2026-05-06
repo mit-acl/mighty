@@ -365,6 +365,8 @@ mighty_node:
         exploration.manager.pursuit_timeout_factor: 3.0         # [-]   slack multiplier on straight-line travel time
         exploration.manager.pursuit_timeout_v_ref: 0.5           # [m/s] reference velocity for budget calc
         exploration.manager.pursuit_timeout_min_sec: 10.0        # [s]   floor regardless of distance
+        exploration.manager.invalidation_keep_out_radius_m: 1.5  # [m]   suppress fresh clusters within this radius of a recent INVALIDATED record
+        exploration.manager.invalidation_cooldown_sec: 30.0      # [s]   how long the keep-out lasts after invalidation (<=0 = permanent)
         # Persistent visited bitmap. Records every cell ever observed (FREE or
         # OCCUPIED) so the detector skips frontiers along the seam where the
         # sliding mapper window re-blanks revisited areas to UNKNOWN. Light

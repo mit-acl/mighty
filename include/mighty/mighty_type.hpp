@@ -356,6 +356,11 @@ struct parameters {
   double expl_pursuit_timeout_factor{10.0};
   double expl_pursuit_timeout_v_ref{0.5};
   double expl_pursuit_timeout_min_sec{10.0};
+  // Invalidation keep-out — drop fresh clusters that fall within radius_m of
+  // any INVALIDATED record whose invalidation is still inside the cooldown
+  // window. Set radius_m <= 0 to disable; cooldown_sec <= 0 = permanent.
+  double expl_invalidation_keep_out_radius_m{1.5};
+  double expl_invalidation_cooldown_sec{30.0};
   // Persistent visited bitmap (suppresses re-detection of revisited frontiers)
   double expl_visited_map_center_x{0.0};
   double expl_visited_map_center_y{0.0};

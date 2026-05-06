@@ -47,6 +47,11 @@ struct FrontierRecord {
   // Total pursuit budget (seconds) allocated by markSelected(). Stored so
   // callers can display elapsed / total (e.g. "5.0s / 30.0s" in RViz).
   double          pursuit_budget_sec = 0.0;
+  // Wall-clock time (seconds) when this record entered INVALIDATED. -1 if
+  // never invalidated. Used by update() to suppress fresh clusters from
+  // re-spawning a brand-new ACTIVE record right next to a frontier we just
+  // gave up on. See invalidation_keep_out_radius_m / cooldown_sec params.
+  double          invalidated_at_t = -1.0;
 };
 
 struct FrontierManagerParams {
@@ -83,6 +88,19 @@ struct FrontierManagerParams {
   double pursuit_timeout_factor  = 10.0;
   double pursuit_timeout_v_ref   = 0.5;   // reference velocity (m/s)
   double pursuit_timeout_min_sec = 10.0;  // floor, regardless of distance
+
+  // Spatial keep-out around INVALIDATED records. A fresh cluster whose
+  // centroid is within this radius of any INVALIDATED record (and inside
+  // the cooldown window) is dropped instead of spawning a new ACTIVE record
+  // — so HGP-unreachable / wall-hugger / pursuit-timeout decisions actually
+  // stick instead of being immediately undone by the next detection cycle.
+  // Set <= 0 to disable.
+  double invalidation_keep_out_radius_m = 1.5;
+  // Cooldown window (s). After this many seconds the keep-out lifts and the
+  // area can be re-explored. Set <= 0 for permanent suppression (until the
+  // record is evicted). Default 30s — enough that the agent picks a different
+  // frontier first, short enough that transient HGP failures don't blacklist.
+  double invalidation_cooldown_sec      = 30.0;
 };
 
 class FrontierManager {
@@ -124,7 +142,7 @@ class FrontierManager {
       double min_dist_to_peers_m = 0.0) const;
 
   void markVisited(uint64_t id);
-  void markInvalidated(uint64_t id);
+  void markInvalidated(uint64_t id, double t_now);
 
   /** @brief Mark a frontier as the current pursuit goal and arm its timeout.
    *  Called by the exploration select tick right after picking a frontier.

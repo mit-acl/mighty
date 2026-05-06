@@ -350,6 +350,8 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
       mp.pursuit_timeout_factor  = par_.expl_pursuit_timeout_factor;
       mp.pursuit_timeout_v_ref   = par_.expl_pursuit_timeout_v_ref;
       mp.pursuit_timeout_min_sec = par_.expl_pursuit_timeout_min_sec;
+      mp.invalidation_keep_out_radius_m = par_.expl_invalidation_keep_out_radius_m;
+      mp.invalidation_cooldown_sec      = par_.expl_invalidation_cooldown_sec;
       frontier_manager_ = std::make_unique<FrontierManager>(mp);
 
       // Persistent visited bitmap. Records every cell ever observed across
@@ -729,6 +731,8 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.manager.pursuit_timeout_factor", 10.0);
   this->declare_parameter("exploration.manager.pursuit_timeout_v_ref", 0.5);
   this->declare_parameter("exploration.manager.pursuit_timeout_min_sec", 10.0);
+  this->declare_parameter("exploration.manager.invalidation_keep_out_radius_m", 1.5);
+  this->declare_parameter("exploration.manager.invalidation_cooldown_sec", 30.0);
   this->declare_parameter("exploration.visited_map.center_x", 0.0);
   this->declare_parameter("exploration.visited_map.center_y", 0.0);
   this->declare_parameter("exploration.visited_map.width_m", 100.0);
@@ -1091,6 +1095,10 @@ void MIGHTY_NODE::setParameters() {
       this->get_parameter("exploration.manager.pursuit_timeout_v_ref").as_double();
   par_.expl_pursuit_timeout_min_sec =
       this->get_parameter("exploration.manager.pursuit_timeout_min_sec").as_double();
+  par_.expl_invalidation_keep_out_radius_m =
+      this->get_parameter("exploration.manager.invalidation_keep_out_radius_m").as_double();
+  par_.expl_invalidation_cooldown_sec =
+      this->get_parameter("exploration.manager.invalidation_cooldown_sec").as_double();
   par_.expl_visited_map_center_x   = this->get_parameter("exploration.visited_map.center_x").as_double();
   par_.expl_visited_map_center_y   = this->get_parameter("exploration.visited_map.center_y").as_double();
   par_.expl_visited_map_width_m    = this->get_parameter("exploration.visited_map.width_m").as_double();
@@ -1555,7 +1563,7 @@ void MIGHTY_NODE::replanCallback() {
                     "invalidating",
                     static_cast<unsigned long>(current_explore_id_),
                     unreachable_consec_count_);
-        frontier_manager_->markInvalidated(current_explore_id_);
+        frontier_manager_->markInvalidated(current_explore_id_, this->now().seconds());
         exploration_active_ = false;
         unreachable_consec_count_ = 0;
       }
@@ -3255,7 +3263,7 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
             r.state != FrontierState::DORMANT) continue;
         if (esdf_grid_->queryDistance(r.centroid_xy.x(),
                                       r.centroid_xy.y()) < thresh) {
-          frontier_manager_->markInvalidated(r.id);
+          frontier_manager_->markInvalidated(r.id, this->now().seconds());
         }
       }
     }
