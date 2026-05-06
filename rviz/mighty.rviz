@@ -850,6 +850,32 @@ Visualization Manager:
           Name: Others
       Enabled: true
       Name: NX01
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX04 Original Global Path
+              Namespaces:
+                global_path_dots: true
+                global_path_line: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX04/original_hgp_path_marker
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX04 HGP path
+              Namespaces:
+                global_path_dots: true
+                global_path_line: true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
                 Value: /NX04/hgp_path_marker

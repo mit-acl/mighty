@@ -3209,19 +3209,19 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
     // are always reachable via WFD even when the robot is far from them. The
     // local sliding window is the legacy path; both paths feed the visited
     // map as the suppression filter when on the local grid.
-    std::shared_ptr<const OccGrid2D> detect_grid;
     if (par_.expl_detect_on_visited_map && visited_map_ && !visited_map_->empty()) {
-      detect_grid = OccGrid2D::fromTristate(
+      current_detect_grid_ = OccGrid2D::fromTristate(
           visited_map_->width(), visited_map_->height(),
           visited_map_->resolution(),
           visited_map_->originX(), visited_map_->originY(),
           visited_map_->data());
     } else {
-      detect_grid = occ_grid_2d_;
+      current_detect_grid_ = occ_grid_2d_;
     }
+    const auto& detect_grid = *current_detect_grid_;
     const VisitedMap* visited_filter =
         par_.expl_detect_on_visited_map ? nullptr : visited_map_.get();
-    auto clusters = frontier_detector_->detect(*detect_grid, robot_xy,
+    auto clusters = frontier_detector_->detect(detect_grid, robot_xy,
                                                visited_filter);
 
     // ESDF-based clearance filter: drop frontiers whose centroid is closer
@@ -3241,7 +3241,7 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
           clusters.end());
     }
 
-    frontier_manager_->update(clusters, *occ_grid_2d_, robot_pose,
+    frontier_manager_->update(clusters, detect_grid, robot_pose,
                               this->now().seconds());
 
     // Also retroactively invalidate existing records that drifted too close
@@ -3334,6 +3334,7 @@ void MIGHTY_NODE::exploreSelectCallback() {
   if (!par_.expl_enabled) return;
   if (manual_goal_active_) return;
   if (!occ_grid_2d_ || !frontier_manager_) return;
+  if (!current_detect_grid_) return;
   if (!state_initialized_) return;
 
   // If we still have an in-progress exploration goal that hasn't been
@@ -3379,10 +3380,10 @@ void MIGHTY_NODE::exploreSelectCallback() {
     auto peers = peer_tracker_.getActivePeers(
         this->now().seconds(), par_.expl_peer_timeout_sec);
     next = frontier_manager_->selectNextGoalMinPos(
-        robot_pose, *occ_grid_2d_, peers,
+        robot_pose, *current_detect_grid_, peers,
         par_.expl_min_frontier_dist_to_peers_m);
   } else {
-    next = frontier_manager_->selectNextGoal(robot_pose, *occ_grid_2d_);
+    next = frontier_manager_->selectNextGoal(robot_pose, *current_detect_grid_);
   }
   if (!next) {
     if (exploration_active_) {

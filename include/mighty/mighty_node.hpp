@@ -282,6 +282,13 @@ class MIGHTY_NODE : public rclcpp::Node {
   // along the seam where the sliding mapper window re-blanks revisited
   // areas to UNKNOWN. Owned and updated here, queried by frontier_detector_.
   std::unique_ptr<VisitedMap>       visited_map_;
+  // Most recent grid the detector ran on. Aliases occ_grid_2d_ when
+  // expl_detect_on_visited_map is false; otherwise it's a snapshot of the
+  // fused (own + peers) visited_map. The manager and goal-selection paths
+  // must read state from the same grid the detector saw, otherwise frontiers
+  // cleared by peers stay stuck ACTIVE because the local sliding window
+  // still shows UNKNOWN there.
+  std::shared_ptr<const OccGrid2D>  current_detect_grid_;
   bool     exploration_active_     = false;  // we issued the current goal
   bool     manual_goal_active_     = false;  // user issued the current goal
   uint64_t current_explore_id_     = 0;

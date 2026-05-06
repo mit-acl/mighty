@@ -864,7 +864,10 @@ def main():
         print(f"[INFO] Agent NX01 at (0, 0, 1.0) — use '2D Goal Pose' in RViz to send goals")
     elif args.mode == 'exploration-multiagent-ground':
         num = args.num_agents if args.num_agents != 10 else 3
-        # Arrange agents in a line along x-axis, centered at origin, 5m spacing
+        # Arrange agents in a line at y=2, x-axis spaced 5m apart. The y offset
+        # keeps every agent off (0,0,0) so the multi-agent origin guard in
+        # exploreSelectCallback (which defers exploration when within 0.5m of
+        # origin while peers are active) doesn't deadlock the middle agent.
         spacing = 5.0
         agents = []
         for i in range(num):
@@ -872,7 +875,7 @@ def main():
             agents.append({
                 'namespace': f'NX{i+1:02d}',
                 'x': round(x, 3),
-                'y': 0.0,
+                'y': 2.0,
                 'z': 0.0,
                 'yaw': 0.0,
             })
