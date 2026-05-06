@@ -92,14 +92,14 @@ mighty_node:
         max_expand: 1000000                               # [-] Max A* node expansions
 
         # --- Local Planning ---
-        horizon: 10.0                                   # [m] Planning horizon
+        horizon: 25.0                                   # [m] Planning horizon
         goal_radius: 0.5                                # [m] Goal reached threshold
         goal_seen_radius: 2.0                           # [m] Distance to stop replanning
 
         # --- L-BFGS Optimization Weights ---
-        dynamic_weight: 1e+3                            # [-] Dynamic obstacle avoidance weight
+        dynamic_weight: 1e+1                            # [-] Dynamic obstacle avoidance weight
         time_weight: 1e+3                               # [-] Time cost weight
-        stat_weight: 0.0                               # [-] Static obstacle weight
+        stat_weight: 0.0                                # [-] Static obstacle weight
         jerk_weight: 1e+4                               # [-] Jerk smoothness weight
         dyn_constr_vel_weight: 1e+3                     # [-] Velocity constraint violation weight
         dyn_constr_acc_weight: 1e+3                     # [-] Acceleration constraint violation weight
@@ -130,8 +130,8 @@ mighty_node:
         velocity_threshold: 0.8                         # [m/s] Speed threshold: below = static, above = dynamic
 
         # --- Map Window ---
-        initial_wdx: 20.0                               # [m] Initial map window width
-        initial_wdy: 20.0                               # [m] Initial map window depth
+        initial_wdx: 25.0                               # [m] Initial map window width
+        initial_wdy: 25.0                               # [m] Initial map window depth
         initial_wdz: 0.15                               # [m] Match map res — 2D ground-robot mode only needs a single z-layer
 
         # --- Sensor ---
@@ -234,8 +234,8 @@ mighty_node:
         # --- Map Internals ---
         map_buffer: 0.0                                 # [m] Buffer for goal & A point
         center_shift_factor: 0.5                        # [-] Map center shift factor
-        min_wdx: 15.0                                   # [m] Min map window width
-        min_wdy: 15.0                                   # [m] Min map window depth
+        min_wdx: 25.0                                   # [m] Min map window width
+        min_wdy: 25.0                                   # [m] Min map window depth
         min_wdz: 0.15                                   # [m] Match map res — 2D ground-robot mode only needs a single z-layer
 
         # --- Communication Delay ---
@@ -279,7 +279,7 @@ mighty_node:
 
         # --- ESDF-Based Obstacle Avoidance (ground robot only) ---
         use_esdf_cost: true                             # [-] Enable ESDF distance cost in L-BFGS
-        esdf_weight: 1.0e+4                             # [-] ESDF cost weight in objective
+        esdf_weight: 5.0e+4                             # [-] ESDF cost weight in objective
         esdf_d_safe: 0.7                                # [m] Safety distance threshold
         esdf_truncation_distance: 15                    # [voxels] Must match mapper's distance_grid_2d.truncation_distance
 
@@ -329,18 +329,18 @@ mighty_node:
         exploration.enabled: true
         exploration.select_rate_hz: 1.0
         exploration.default_goal_z: 0.0
-        exploration.detector.cluster_min_cells: 6
+        exploration.detector.cluster_min_cells: 15
         exploration.detector.border_margin_cells: 2
         exploration.detector.obstacle_clearance_cells: 1
         exploration.detector.min_obstacle_distance_m: 0.1
         exploration.detector.robot_snap_radius_m: 0.5
         exploration.bounds.enabled: true
-        exploration.bounds.min_x: -5.0
+        exploration.bounds.min_x: -6.0
         exploration.bounds.max_x:  19.0
-        exploration.bounds.min_y: -17.0
-        exploration.bounds.max_y:  5.5
+        exploration.bounds.min_y: -17.5
+        exploration.bounds.max_y:  0.0
         exploration.utility.w_size: 1.0
-        exploration.utility.w_dist: 2.0
+        exploration.utility.w_dist: 20.0
         exploration.utility.w_info: 1.0
         exploration.utility.w_revisit: 0.5
         exploration.utility.w_heading: 0.3
