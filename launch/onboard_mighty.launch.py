@@ -334,7 +334,7 @@ def generate_launch_description():
                 if robot_type == QUADROTOR:
                     nodes_to_start.append(hw_odom_to_state_node)
                 elif robot_type in [STAR_ROBOT, RED_ROVER]:
-                    nodes_to_start.extend([hw_odom_to_state_node, static_tf_node, mpc_node])
+                    nodes_to_start.extend([hw_odom_to_state_node, mpc_node]) #static_tf_node
             else:
                 nodes_to_start.append(pose_twist_to_state_node)  # Vicon
                 if robot_type in [STAR_ROBOT, RED_ROVER]:

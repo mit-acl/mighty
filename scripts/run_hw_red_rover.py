@@ -168,6 +168,14 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
                 f'ros2 run tf2_ros static_transform_publisher 0 0 0 0 0.3490659 0 {rover_name}/base_link {rover_name}/lidar',
             ]
         },
+        # Static TF (odom to map)
+        {
+            'shell_command': [
+                source_ws,
+                'sleep 5',
+                f'ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 {rover_name}/map {rover_name}/odom',
+            ]
+        },
         # Global Mapper
         {
             'shell_command': [
