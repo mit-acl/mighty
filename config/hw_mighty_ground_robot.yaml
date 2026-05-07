@@ -58,7 +58,7 @@ mighty_node:
         g: 9.81                                         # [m/s^2] Gravitational acceleration
 
         # --- Trajectory Segments ---
-        num_N: 5                                        # [-] Number of trajectory pieces for local optimization
+        num_N: 7                                        # [-] Number of trajectory pieces for local optimization
 
         # --- Map Bounds ---
         x_min: -1000.0                                  # [m] Map x lower bound
@@ -93,7 +93,7 @@ mighty_node:
 
         # --- Local Planning ---
         horizon: 30.0                                   # [m] Planning horizon
-        goal_radius: 0.5                                # [m] Goal reached threshold
+        goal_radius: 1.0                                # [m] Goal reached threshold
         goal_seen_radius: 2.0                           # [m] Distance to stop replanning
 
         # --- L-BFGS Optimization Weights ---
@@ -336,7 +336,7 @@ mighty_node:
         exploration.detector.robot_snap_radius_m: 0.5
         exploration.bounds.enabled: true
         exploration.bounds.min_x: -6.0
-        exploration.bounds.max_x:  19.0
+        exploration.bounds.max_x:  18.0
         exploration.bounds.min_y: -17.5
         exploration.bounds.max_y:  0.0
         exploration.utility.w_size: 1.0
