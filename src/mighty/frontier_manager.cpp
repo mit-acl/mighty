@@ -25,7 +25,8 @@ bool FrontierManager::isInsideMap(const FrontierRecord& r,
 void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
                              const OccGrid2D& current_grid,
                              const Eigen::Vector3d& robot_pose,
-                             double t_now) {
+                             double t_now,
+                             const std::vector<PeerPose>& peers) {
   const Eigen::Vector2d robot_xy = robot_pose.head<2>();
   const double dt = (last_update_t_ > 0.0) ? std::max(0.0, t_now - last_update_t_)
                                            : 0.0;
@@ -180,6 +181,29 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
       // Reset dwell when the robot leaves the visit radius — visits must be
       // contiguous, not the sum of brief drive-bys.
       r.dwell_time_sec = 0.0;
+    }
+  }
+
+  // ---- Peer-presence visit suppression ----
+  // If any active peer's pose is within peer_visit_radius_m of a record's
+  // centroid, treat the record as VISITED. Sticky — once flipped, the record
+  // stays VISITED for the rest of the run (or until eviction). This catches
+  // peers that have already explored an area we still see as a frontier
+  // (e.g. when peer-shared visited_maps don't propagate cleanly under
+  // frame drift). No dwell — peer pose history is implicit in the FrontierRecord
+  // state, so a single sample where a peer is in radius is enough.
+  if (params_.peer_visit_radius_m > 0.0 && !peers.empty()) {
+    const double r2 = params_.peer_visit_radius_m * params_.peer_visit_radius_m;
+    for (auto& r : records_) {
+      if (r.state != FrontierState::ACTIVE &&
+          r.state != FrontierState::DORMANT) continue;
+      for (const auto& p : peers) {
+        if ((p.position - r.centroid_xy).squaredNorm() < r2) {
+          r.state = FrontierState::VISITED;
+          ++r.visit_count;
+          break;
+        }
+      }
     }
   }
 

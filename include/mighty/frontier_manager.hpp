@@ -101,6 +101,14 @@ struct FrontierManagerParams {
   // record is evicted). Default 30s — enough that the agent picks a different
   // frontier first, short enough that transient HGP failures don't blacklist.
   double invalidation_cooldown_sec      = 30.0;
+
+  // Peer-presence visit suppression: when an active peer's pose comes within
+  // peer_visit_radius_m of an ACTIVE/DORMANT frontier centroid, flip that
+  // record to VISITED immediately (sticky — the record stays VISITED for
+  // the rest of the run). Robust to map-sharing failure under frame drift
+  // because it relies only on per-peer poses (single-point sync), not on
+  // grid alignment. Set <= 0 to disable.
+  double peer_visit_radius_m            = 2.0;
 };
 
 class FrontierManager {
@@ -121,7 +129,8 @@ class FrontierManager {
   void update(const std::vector<FrontierCluster>& fresh,
               const OccGrid2D& current_grid,
               const Eigen::Vector3d& robot_pose,
-              double t_now);
+              double t_now,
+              const std::vector<PeerPose>& peers = {});
 
   /** @brief Pick the next exploration goal.
    *  Two-tier sort: ACTIVE first, then DORMANT. Skips VISITED/INVALIDATED.

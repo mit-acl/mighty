@@ -308,6 +308,11 @@ class MIGHTY_NODE : public rclcpp::Node {
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_peer_visited_map_;
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr sub_peer_visited_map_;
   double last_peer_visited_publish_t_ = 0.0;
+  // Global return-home trigger. A single Empty publish on /exploration/return_home
+  // makes every agent issue a goal back to its captured exploration_start_pos_
+  // and stop accepting new frontier goals (so it stays parked once arrived).
+  rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr sub_return_home_;
+  bool home_return_requested_ = false;
   // Wall-clock seconds of the last successful publishVisitedMap() call.
   // Used to throttle the (potentially large) tristate-grid publish to ~1 Hz
   // — RViz only needs occasional updates because the persistent map only

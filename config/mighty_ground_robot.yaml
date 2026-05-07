@@ -43,7 +43,7 @@ mighty_node:
         sim_frame_offset_qw: 1.0                        # [-]
 
         # --- Vehicle Dynamic Limits ---
-        v_max: 1.0                                      # [m/s]   Max velocity
+        v_max: 0.5                                      # [m/s]   Max velocity
         a_max: 1.0                                      # [m/s^2] Max acceleration
         j_max: 2.0                                     # [m/s^3] Max jerk
         w_max: 1.0                                      # [rad/s] Max yaw rate (~4.0 for hardware)
@@ -388,4 +388,5 @@ mighty_node:
         exploration.minpos.peer_timeout_sec: 5.0                  # [s]   drop peer after this silence
         exploration.minpos.peer_publish_rate_hz: 5.0              # [Hz]  pose broadcast throttle
         exploration.minpos.min_frontier_dist_to_peers_m: 3.0      # [m]   reject frontier candidates within this radius of any active peer (0 disables)
+        exploration.minpos.peer_visit_radius_m: 2.0               # [m]   sticky: mark frontier VISITED when any active peer is within this radius (robust to frame drift; 0 disables)
         exploration.visualization.publish_markers: true          # [-]   Publish /exploration/frontiers

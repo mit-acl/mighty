@@ -387,6 +387,7 @@ struct parameters {
   double expl_peer_timeout_sec{5.0};          // drop peer after this silence (seconds)
   double expl_peer_publish_rate_hz{5.0};      // throttle for pose broadcast (Hz)
   double expl_min_frontier_dist_to_peers_m{0.0};  // reject frontier candidates within this radius of any active peer; 0 disables
+  double expl_peer_visit_radius_m{2.0};       // mark frontier VISITED when any active peer is within this radius (sticky); 0 disables
   // Visualization
   bool   expl_publish_markers{true};
 };

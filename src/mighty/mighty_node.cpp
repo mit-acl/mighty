@@ -352,6 +352,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
       mp.pursuit_timeout_min_sec = par_.expl_pursuit_timeout_min_sec;
       mp.invalidation_keep_out_radius_m = par_.expl_invalidation_keep_out_radius_m;
       mp.invalidation_cooldown_sec      = par_.expl_invalidation_cooldown_sec;
+      mp.peer_visit_radius_m            = par_.expl_peer_visit_radius_m;
       frontier_manager_ = std::make_unique<FrontierManager>(mp);
 
       // Persistent visited bitmap. Records every cell ever observed across
@@ -414,6 +415,41 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
             options_map);
         RCLCPP_INFO(this->get_logger(), "Exploration MinPos: visited-map sharing enabled");
       }
+
+      // Global return-home trigger. One publish on /exploration/return_home
+      // makes every subscribing agent drop new frontier work and head back to
+      // its captured start position. Reliable QoS so a single shot reaches
+      // every agent. cb_group_map_ keeps it serialized with explore-select.
+      sub_return_home_ = this->create_subscription<std_msgs::msg::Empty>(
+          "/exploration/return_home", rclcpp::QoS(1).reliable(),
+          [this](const std_msgs::msg::Empty::SharedPtr) {
+            if (home_return_requested_) {
+              RCLCPP_INFO(this->get_logger(),
+                          "Return-home trigger received, but already returning home");
+              return;
+            }
+            if (!exploration_start_captured_) {
+              RCLCPP_WARN(this->get_logger(),
+                          "Return-home trigger received before exploration started — "
+                          "no start pose captured, ignoring");
+              return;
+            }
+            home_return_requested_ = true;
+            geometry_msgs::msg::PoseStamped home;
+            home.header.frame_id    = par_.map_frame_id;
+            home.header.stamp       = this->now();
+            home.pose.position.x    = exploration_start_pos_.x();
+            home.pose.position.y    = exploration_start_pos_.y();
+            home.pose.position.z    = par_.expl_default_goal_z;
+            home.pose.orientation.w = 1.0;
+            terminalGoalCallbackImpl(home, /*from_user=*/false);
+            exploration_active_  = false;
+            RCLCPP_INFO(this->get_logger(),
+                        "Return-home: heading to (%.2f, %.2f, %.2f)",
+                        exploration_start_pos_.x(), exploration_start_pos_.y(),
+                        par_.expl_default_goal_z);
+          },
+          options_map);
 
       const double rate_hz = std::max(0.1, par_.expl_select_rate_hz);
       const auto period = std::chrono::duration<double>(1.0 / rate_hz);
@@ -747,6 +783,7 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.minpos.peer_timeout_sec", 5.0);
   this->declare_parameter("exploration.minpos.peer_publish_rate_hz", 5.0);
   this->declare_parameter("exploration.minpos.min_frontier_dist_to_peers_m", 0.0);
+  this->declare_parameter("exploration.minpos.peer_visit_radius_m", 2.0);
 }
 
 // ----------------------------------------------------------------------------
@@ -1115,6 +1152,8 @@ void MIGHTY_NODE::setParameters() {
   par_.expl_peer_publish_rate_hz = this->get_parameter("exploration.minpos.peer_publish_rate_hz").as_double();
   par_.expl_min_frontier_dist_to_peers_m =
       this->get_parameter("exploration.minpos.min_frontier_dist_to_peers_m").as_double();
+  par_.expl_peer_visit_radius_m =
+      this->get_parameter("exploration.minpos.peer_visit_radius_m").as_double();
 }
 
 // ----------------------------------------------------------------------------
@@ -1713,6 +1752,8 @@ void MIGHTY_NODE::terminalGoalCallbackImpl(const geometry_msgs::msg::PoseStamped
     exploration_active_ = false;
     exploration_start_captured_ = false;
     unreachable_consec_count_ = 0;
+    // Operator override of a return-home — start a fresh session.
+    home_return_requested_ = false;
   }
 
   // Set the terminal goal
@@ -3249,8 +3290,12 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
           clusters.end());
     }
 
+    const auto active_peers = par_.expl_use_minpos
+        ? peer_tracker_.getActivePeers(this->now().seconds(),
+                                       par_.expl_peer_timeout_sec)
+        : std::vector<PeerPose>{};
     frontier_manager_->update(clusters, detect_grid, robot_pose,
-                              this->now().seconds());
+                              this->now().seconds(), active_peers);
 
     // Also retroactively invalidate existing records that drifted too close
     // to obstacles (e.g. via EMA centroid updates) or that were inserted
@@ -3341,6 +3386,10 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
 void MIGHTY_NODE::exploreSelectCallback() {
   if (!par_.expl_enabled) return;
   if (manual_goal_active_) return;
+  // Once a global return-home has been requested, stop issuing frontier goals
+  // so the agent commits to going home and doesn't get yanked back out by a
+  // newly-detected frontier mid-return.
+  if (home_return_requested_) return;
   if (!occ_grid_2d_ || !frontier_manager_) return;
   if (!current_detect_grid_) return;
   if (!state_initialized_) return;
@@ -3413,6 +3462,11 @@ void MIGHTY_NODE::exploreSelectCallback() {
       home.pose.position.z    = par_.expl_default_goal_z;
       home.pose.orientation.w = 1.0;
       terminalGoalCallbackImpl(home, /*from_user=*/false);
+      // Lock in the return-home: the gate at the top of exploreSelectCallback
+      // now short-circuits, so a peer's visited_map merge or a fresh frontier
+      // pop-up mid-transit can't yank the agent back out. Same flag the
+      // /exploration/return_home topic uses — single source of truth.
+      home_return_requested_ = true;
     }
     exploration_active_ = false;
     // Note: exploration_start_captured_ is intentionally NOT reset here.
