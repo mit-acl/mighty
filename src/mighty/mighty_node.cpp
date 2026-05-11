@@ -301,17 +301,22 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
         std::bind(&MIGHTY_NODE::occupancyMapCallback, this, std::placeholders::_1), options_map);
   }
 
-  // ESDF subscription (ground robot only)
+  // ESDF subscription (ground robot only). global_mapper_ros publishes these
+  // with BEST_EFFORT reliability — must match here or DDS silently drops
+  // delivery and the exploration pipeline never sees an occupancy grid.
   if (par_.use_esdf_cost && par_.vehicle_type == "ground_robot") {
+    // SensorDataQoS = BEST_EFFORT + VOLATILE + KEEP_LAST/5 — copies the whole
+    // profile, unlike QoSInitialization::from_rmw which only sets history+depth.
+    auto map_qos = rclcpp::SensorDataQoS();
     sub_esdf_2d_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
-        "esdf_2d_topic", 10,
+        "esdf_2d_topic", map_qos,
         std::bind(&MIGHTY_NODE::esdfCallback, this, std::placeholders::_1), options_map);
     RCLCPP_INFO(this->get_logger(), "ESDF: Subscribed to esdf_2d_topic (d_safe=%.1f m, weight=%.0f)",
                 par_.esdf_d_safe, par_.esdf_weight);
 
     // Also subscribe to binary 2D occupancy for A* planning
     sub_occ_2d_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
-        "occ_2d_topic", 10,
+        "occ_2d_topic", map_qos,
         std::bind(&MIGHTY_NODE::occ2DCallback, this, std::placeholders::_1), options_map);
     RCLCPP_INFO(this->get_logger(), "Occ2D: Subscribed to occ_2d_topic for ground robot A* planning");
 

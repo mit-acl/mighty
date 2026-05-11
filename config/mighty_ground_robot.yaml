@@ -58,7 +58,7 @@ mighty_node:
         g: 9.81                                         # [m/s^2] Gravitational acceleration
 
         # --- Trajectory Segments ---
-        num_N: 5                                        # [-] Number of trajectory pieces for local optimization
+        num_N: 7                                        # [-] Number of trajectory pieces for local optimization
 
         # --- Map Bounds ---
         x_min: -1000.0                                  # [m] Map x lower bound
@@ -92,20 +92,20 @@ mighty_node:
         max_expand: 1000000                               # [-] Max A* node expansions
 
         # --- Local Planning ---
-        horizon: 10.0                                   # [m] Planning horizon
+        horizon: 20.0                                   # [m] Planning horizon
         goal_radius: 0.5                                # [m] Goal reached threshold
         goal_seen_radius: 1.0                           # [m] Distance to stop replanning
 
         # --- L-BFGS Optimization Weights ---
         dynamic_weight: 1e+3                            # [-] Dynamic obstacle avoidance weight
-        time_weight: 8e+2                               # [-] Time cost weight
+        time_weight: 1e+3                               # [-] Time cost weight
         stat_weight: 0.0                               # [-] Static obstacle weight
-        jerk_weight: 1e+4                               # [-] Jerk smoothness weight
+        jerk_weight: 1e+3                               # [-] Jerk smoothness weight
         dyn_constr_vel_weight: 1e+3                     # [-] Velocity constraint violation weight
         dyn_constr_acc_weight: 1e+3                     # [-] Acceleration constraint violation weight
         dyn_constr_jerk_weight: 1e+3                    # [-] Jerk constraint violation weight
         planner_Co: 0.1                                 # [m] Collision clearance for static obstacles
-        planner_Cw: 3.0                                 # [m] Collision clearance for dynamic obstacles
+        planner_Cw: 1.0                                 # [m] Collision clearance for dynamic obstacles
 
         # --- Safety Corridors ---
         local_box_size: [1.0, 1.0, 0.5]                # [m] Local planning window (smaller = faster, larger = smoother)
@@ -279,7 +279,7 @@ mighty_node:
 
         # --- ESDF-Based Obstacle Avoidance (ground robot only) ---
         use_esdf_cost: true                             # [-] Enable ESDF distance cost in L-BFGS
-        esdf_weight: 1.0e+5                             # [-] ESDF cost weight in objective
+        esdf_weight: 5.0e+4                             # [-] ESDF cost weight in objective
         esdf_d_safe: 0.7                                # [m] Safety distance threshold
         esdf_truncation_distance: 15                    # [voxels] Must match mapper's distance_grid_2d.truncation_distance
 

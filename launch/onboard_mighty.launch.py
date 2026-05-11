@@ -250,6 +250,10 @@ def generate_launch_description():
         mpc_params_file = os.path.join(get_package_share_directory('mpc'), 'config', mpc_params_filename)
         mpc_cmd_vel_topic = 'cmd_vel_auto' if use_hardware else 'cmd_vel'
         mpc_overrides = {'cmd_vel_topic': mpc_cmd_vel_topic}
+        # In sim, fake_sim publishes a single global "map" frame (not per-agent).
+        # Prefix '/' tells mpc_node to treat the frame as absolute (skip namespace prefix).
+        if not use_hardware:
+            mpc_overrides['tracking_frame'] = '/' + map_frame_id
         # On HW with mocap, pose comes from the Vicon "world" topic (not DLIO)
         if use_hardware and not use_onboard_localization:
             mpc_overrides['pose_topic'] = 'world'

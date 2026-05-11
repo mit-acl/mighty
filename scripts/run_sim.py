@@ -733,9 +733,9 @@ def main():
 
     parser.add_argument(
         '--mode', '-m',
-        choices=['multiagent', 'multiagent-ground', 'exploration-multiagent-ground', 'swap-multiagent-ground', 'gazebo', 'interactive', 'dyn-test', 'dyn-test-ground', 'dyn-test-ground-mpc'],
+        choices=['multiagent', 'multiagent-ground', 'exploration-singleagent-ground', 'exploration-multiagent-ground', 'swap-multiagent-ground', 'gazebo', 'interactive', 'dyn-test', 'dyn-test-ground', 'dyn-test-ground-mpc'],
         required=True,
-        help='Simulation mode: multiagent, exploration-multiagent-ground, swap-multiagent-ground, gazebo, interactive, dyn-test, dyn-test-ground'
+        help='Simulation mode: multiagent, exploration-singleagent-ground, exploration-multiagent-ground, swap-multiagent-ground, gazebo, interactive, dyn-test, dyn-test-ground'
     )
 
     parser.add_argument(
@@ -862,6 +862,27 @@ def main():
         yaml_content = generate_interactive_yaml(setup_bash, args.ros_domain_id, rviz_config=rviz_config)
         print(f"[INFO] Mode: Interactive single-agent simulation (sim_env=fake_sim)")
         print(f"[INFO] Agent NX01 at (0, 0, 1.0) — use '2D Goal Pose' in RViz to send goals")
+    elif args.mode == 'exploration-singleagent-ground':
+        # Single ground robot, frontier-based exploration in Gazebo. Spawn at
+        # y=2 (off origin) so the same multi-agent origin guard in
+        # exploreSelectCallback doesn't apply — and num_agents=1 disables the
+        # peer-coupled paths anyway.
+        agents = [{
+            'namespace': 'NX01',
+            'x': 0.0,
+            'y': 2.0,
+            'z': 0.0,
+            'yaw': 0.0,
+        }]
+        sim_env = 'gazebo'
+        env = args.env if args.env != 'hard_forest' else 'ACL_office'
+        yaml_content = generate_exploration_multiagent_ground_yaml(
+            setup_bash, agents, args.ros_domain_id, rviz_config=rviz_config,
+            sim_env=sim_env, env=env)
+        print(f"[INFO] Mode: Single-agent ground robot exploration (Gazebo)")
+        print(f"[INFO] Environment: {env}")
+        print(f"[INFO]   {agents[0]['namespace']}: ({agents[0]['x']}, {agents[0]['y']}, {agents[0]['z']}) yaw={agents[0]['yaw']}")
+        print(f"[INFO] Exploration is self-driven — no goal needed")
     elif args.mode == 'exploration-multiagent-ground':
         num = args.num_agents if args.num_agents != 10 else 3
         # Arrange agents in a line at y=2, x-axis spaced 5m apart. The y offset
