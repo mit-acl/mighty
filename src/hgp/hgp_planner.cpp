@@ -380,7 +380,6 @@ bool HGPPlanner::plan(const Vecf<3>& start, const Vecf<3>& start_vel, const Vecf
         }
       }
       status_ = 1;
-      std::cout << bold << red << "Start is not free" << reset << std::endl;
       return false;
     }
   }

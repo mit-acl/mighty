@@ -390,6 +390,10 @@ struct parameters {
   double expl_peer_visit_radius_m{2.0};       // mark frontier VISITED when any active peer is within this radius (sticky); 0 disables
   // Visualization
   bool   expl_publish_markers{true};
+  // When true, skip publishing exploration goals from exploreSelectCallback so
+  // an external selector (e.g. a VLM node) can own term_goal. Frontier
+  // detection, scoring, and marker publication continue as normal.
+  bool   expl_external_selector{false};
 };
 
 struct BasisConverter {

@@ -25,6 +25,7 @@
 
 #include <dynus_interfaces/msg/dyn_traj.hpp>
 #include <dynus_interfaces/msg/dyn_traj_array.hpp>
+#include <dynus_interfaces/msg/frontier_list.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nav_msgs/msg/path.hpp>
@@ -185,6 +186,7 @@ class MIGHTY_NODE : public rclcpp::Node {
   void publishVelocityInText(const Eigen::Vector3d& position, double velocity);
   // Frontier exploration visualization
   void publishFrontierMarkers();
+  void publishFrontierData();
   void publishExplorationCurrentGoal(const FrontierRecord& r);
   void publishVisitedMap();
 
@@ -297,6 +299,7 @@ class MIGHTY_NODE : public rclcpp::Node {
   bool exploration_start_captured_ = false;  // sticky for the whole exploration session
   rclcpp::TimerBase::SharedPtr timer_explore_select_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_frontiers_;
+  rclcpp::Publisher<dynus_interfaces::msg::FrontierList>::SharedPtr pub_frontier_data_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_explore_current_goal_;
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_visited_map_;
   // MinPos peer tracking (multi-robot frontier allocation)

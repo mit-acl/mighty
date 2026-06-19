@@ -372,6 +372,8 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
 
       pub_frontiers_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
           "exploration/frontiers", 10);
+      pub_frontier_data_ = this->create_publisher<dynus_interfaces::msg::FrontierList>(
+          "exploration/frontiers_data", 10);
       pub_explore_current_goal_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
           "exploration/current_goal", 10);
       pub_visited_map_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(
@@ -789,6 +791,7 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.minpos.peer_publish_rate_hz", 5.0);
   this->declare_parameter("exploration.minpos.min_frontier_dist_to_peers_m", 0.0);
   this->declare_parameter("exploration.minpos.peer_visit_radius_m", 2.0);
+  this->declare_parameter("exploration.external_selector", false);
 }
 
 // ----------------------------------------------------------------------------
@@ -1159,6 +1162,8 @@ void MIGHTY_NODE::setParameters() {
       this->get_parameter("exploration.minpos.min_frontier_dist_to_peers_m").as_double();
   par_.expl_peer_visit_radius_m =
       this->get_parameter("exploration.minpos.peer_visit_radius_m").as_double();
+  par_.expl_external_selector =
+      this->get_parameter("exploration.external_selector").as_bool();
 }
 
 // ----------------------------------------------------------------------------
@@ -3372,6 +3377,7 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
     }
 
     if (par_.expl_publish_markers) publishFrontierMarkers();
+    publishFrontierData();
 
     // Drive the goal-selection loop immediately. This makes the robot start
     // moving as soon as the first frontier exists, rather than waiting for
@@ -3466,7 +3472,16 @@ void MIGHTY_NODE::exploreSelectCallback() {
       home.pose.position.y    = exploration_start_pos_.y();
       home.pose.position.z    = par_.expl_default_goal_z;
       home.pose.orientation.w = 1.0;
-      terminalGoalCallbackImpl(home, /*from_user=*/false);
+      if (par_.expl_external_selector) {
+        // External selector owns term_goal — surface the return-home suggestion
+        // through the same channel as frontier candidates so the external node
+        // can decide. We still flip home_return_requested_ to stop suggesting
+        // new frontiers from this loop.
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+          "Exploration: external_selector=true — not auto-issuing return-home goal");
+      } else {
+        terminalGoalCallbackImpl(home, /*from_user=*/false);
+      }
       // Lock in the return-home: the gate at the top of exploreSelectCallback
       // now short-circuits, so a peer's visited_map merge or a fresh frontier
       // pop-up mid-transit can't yank the agent back out. Same flag the
@@ -3496,6 +3511,14 @@ void MIGHTY_NODE::exploreSelectCallback() {
               static_cast<unsigned long>(next->id),
               next->centroid_xy.x(), next->centroid_xy.y(),
               static_cast<int>(next->state), next->cached_utility);
+
+  if (par_.expl_external_selector) {
+    // External selector owns term_goal. Skip the internal pursuit bookkeeping
+    // entirely so we don't lock onto a frontier the external node might not
+    // pick. Frontier markers and current_goal viz still publish elsewhere in
+    // this function's lifecycle hooks.
+    return;
+  }
 
   terminalGoalCallbackImpl(g, /*from_user=*/false);
 
@@ -3545,6 +3568,48 @@ std_msgs::msg::ColorRGBA colorForState(FrontierState s) {
 }
 
 }  // namespace
+
+/**
+ * @brief Publish a structured FrontierList for external consumers (e.g. the
+ *        VLM goal selector). Mirrors the records the visualization shows, but
+ *        with a stable schema and full per-frontier metadata. Only ACTIVE and
+ *        DORMANT records are included — terminal states stay in the DB but
+ *        aren't candidates for an external selector.
+ */
+void MIGHTY_NODE::publishFrontierData() {
+  if (!pub_frontier_data_ || !frontier_manager_) return;
+
+  dynus_interfaces::msg::FrontierList msg;
+  msg.header.frame_id = par_.map_frame_id;
+  msg.header.stamp    = this->now();
+
+  for (const auto& r : frontier_manager_->records()) {
+    if (r.state != FrontierState::ACTIVE && r.state != FrontierState::DORMANT) {
+      continue;
+    }
+    dynus_interfaces::msg::Frontier f;
+    f.id           = r.id;
+    f.state        = (r.state == FrontierState::ACTIVE)
+                       ? dynus_interfaces::msg::Frontier::STATE_ACTIVE
+                       : dynus_interfaces::msg::Frontier::STATE_DORMANT;
+    f.centroid.x   = r.centroid_xy.x();
+    f.centroid.y   = r.centroid_xy.y();
+    f.centroid.z   = par_.expl_default_goal_z;
+    f.size_cells   = static_cast<uint64_t>(std::max(0, r.size_cells));
+    const double cell_m = (occ_grid_2d_ ? occ_grid_2d_->resolution() : 0.0);
+    f.size_m2      = static_cast<double>(f.size_cells) * cell_m * cell_m;
+    f.aabb_min.x   = r.aabb_min.x();
+    f.aabb_min.y   = r.aabb_min.y();
+    f.aabb_max.x   = r.aabb_max.x();
+    f.aabb_max.y   = r.aabb_max.y();
+    f.cached_utility = r.cached_utility;
+    msg.frontiers.push_back(f);
+  }
+
+  pub_frontier_data_->publish(msg);
+}
+
+// ----------------------------------------------------------------------------
 
 /**
  * @brief Publish frontier visualization markers. We only show ACTIVE and

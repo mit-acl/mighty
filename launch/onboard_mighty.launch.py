@@ -43,11 +43,15 @@ def generate_launch_description():
     odom_topic_arg    = DeclareLaunchArgument('odom_topic', default_value='visual_slam/odom')
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='map')
     sim_env_arg = DeclareLaunchArgument('sim_env', default_value='', description='Simulation environment: gazebo or fake_sim (empty = use mighty.yaml default)')
+    config_file_arg = DeclareLaunchArgument('config_file', default_value='', description='Override planner config yaml (bare filename in mighty/config, or absolute path; empty = auto-select mighty.yaml / mighty_ground_robot.yaml)')
     use_ground_robot_arg = DeclareLaunchArgument('use_ground_robot', default_value='false', description='Enable ground robot mode (spawns p3at, uses cmd_vel control)')
     use_onboard_localization_arg = DeclareLaunchArgument('use_onboard_localization', default_value='false', description='Use onboard localization (DLIO) vs Vicon')
     depth_camera_name_arg = DeclareLaunchArgument('depth_camera_name', default_value='d435', description='Depth camera name for topic remapping')
     robot_type_arg = DeclareLaunchArgument('robot_type', default_value='quadrotor', description='Robot type: quadrotor, red_rover, star_robot')
     num_agents_arg = DeclareLaunchArgument('num_agents', default_value='10', description='Number of agents (for frame alignment subscriptions)')
+    external_selector_arg = DeclareLaunchArgument(
+        'external_selector', default_value='false',
+        description='Set exploration.external_selector=true so mighty_node yields term_goal control (used by --use-vlm)')
     map_frame_id_arg = DeclareLaunchArgument('map_frame_id', default_value='',
         description='Override map frame ID (empty = auto from use_hardware)')
     use_frame_alignment_arg = DeclareLaunchArgument('use_frame_alignment', default_value='',
@@ -111,8 +115,15 @@ def generate_launch_description():
         # The path to the urdf file - select based on robot type
         urdf_filename = 'p3at.urdf.xacro' if use_ground_robot else 'quadrotor.urdf.xacro'
         urdf_path=PathJoinSubstitution([FindPackageShare('mighty'), 'urdf', urdf_filename])
-        config_filename = 'mighty_ground_robot.yaml' if use_ground_robot else 'mighty.yaml'
-        parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', config_filename)
+        # Planner config: explicit override wins (bare filename resolved against
+        # mighty/config, or an absolute path used as-is); else auto-select by robot type.
+        config_file_override = LaunchConfiguration('config_file').perform(context)
+        if config_file_override:
+            parameters_path = config_file_override if os.path.isabs(config_file_override) \
+                else os.path.join(get_package_share_directory('mighty'), 'config', config_file_override)
+        else:
+            config_filename = 'mighty_ground_robot.yaml' if use_ground_robot else 'mighty.yaml'
+            parameters_path = os.path.join(get_package_share_directory('mighty'), 'config', config_filename)
 
         # Get the dict of parameters from the yaml file
         with open(parameters_path, 'r') as file:
@@ -150,6 +161,10 @@ def generate_launch_description():
         map_frame_id = map_frame_id_override if map_frame_id_override else (f'{namespace}/map' if use_hardware else 'map')
         parameters['map_frame_id'] = map_frame_id
         parameters['num_agents'] = num_agents
+
+        external_selector_str = LaunchConfiguration('external_selector').perform(context)
+        if external_selector_str:
+            parameters['exploration.external_selector'] = convert_str_to_bool(external_selector_str)
         if use_frame_alignment_str:
             parameters['use_frame_alignment'] = convert_str_to_bool(use_frame_alignment_str)
         if sim_frame_offset_qz_str:
@@ -245,26 +260,31 @@ def generate_launch_description():
             arguments=['--ros-args', '--log-level', 'error'],
         )
 
-        # MPC controller for ground robot (subscribes to mpc_waypoints, publishes cmd_vel)
-        mpc_params_filename = 'mpc.yaml' if use_hardware else 'mpc_sim.yaml'
-        mpc_params_file = os.path.join(get_package_share_directory('mpc'), 'config', mpc_params_filename)
-        mpc_cmd_vel_topic = 'cmd_vel_auto' if use_hardware else 'cmd_vel'
-        mpc_overrides = {'cmd_vel_topic': mpc_cmd_vel_topic}
-        # In sim, fake_sim publishes a single global "map" frame (not per-agent).
-        # Prefix '/' tells mpc_node to treat the frame as absolute (skip namespace prefix).
-        if not use_hardware:
-            mpc_overrides['tracking_frame'] = '/' + map_frame_id
-        # On HW with mocap, pose comes from the Vicon "world" topic (not DLIO)
-        if use_hardware and not use_onboard_localization:
-            mpc_overrides['pose_topic'] = 'world'
-        mpc_node = Node(
-            package='mpc',
-            executable='mpc_node',
-            name='mpc',
-            namespace=namespace,
-            output='screen',
-            parameters=[mpc_params_file, mpc_overrides],
-        )
+        # MPC controller for ground robot (subscribes to mpc_waypoints, publishes cmd_vel).
+        # Only ground robots (sim) or red_rover/star_robot (HW) use it. Guard the package
+        # lookup so UAV sims don't require the 'mpc' package to be installed (e.g. Docker).
+        need_mpc = (use_ground_robot and not use_hardware) or (use_hardware and robot_type in [RED_ROVER, STAR_ROBOT])
+        mpc_node = None
+        if need_mpc:
+            mpc_params_filename = 'mpc.yaml' if use_hardware else 'mpc_sim.yaml'
+            mpc_params_file = os.path.join(get_package_share_directory('mpc'), 'config', mpc_params_filename)
+            mpc_cmd_vel_topic = 'cmd_vel_auto' if use_hardware else 'cmd_vel'
+            mpc_overrides = {'cmd_vel_topic': mpc_cmd_vel_topic}
+            # In sim, fake_sim publishes a single global "map" frame (not per-agent).
+            # Prefix '/' tells mpc_node to treat the frame as absolute (skip namespace prefix).
+            if not use_hardware:
+                mpc_overrides['tracking_frame'] = '/' + map_frame_id
+            # On HW with mocap, pose comes from the Vicon "world" topic (not DLIO)
+            if use_hardware and not use_onboard_localization:
+                mpc_overrides['pose_topic'] = 'world'
+            mpc_node = Node(
+                package='mpc',
+                executable='mpc_node',
+                name='mpc',
+                namespace=namespace,
+                output='screen',
+                parameters=[mpc_params_file, mpc_overrides],
+            )
 
         # Create a fake sim node
         fake_sim_node = Node(
@@ -374,11 +394,13 @@ def generate_launch_description():
         map_size_z_arg,
         odometry_topic_arg,
         sim_env_arg,
+        config_file_arg,
         use_ground_robot_arg,
         use_onboard_localization_arg,
         depth_camera_name_arg,
         robot_type_arg,
         num_agents_arg,
+        external_selector_arg,
         map_frame_id_arg,
         use_frame_alignment_arg,
         sim_frame_offset_qz_arg,
