@@ -6,6 +6,10 @@ If you like this project, please consider starring ⭐ the repo!
 
 <video src="https://github.com/user-attachments/assets/a5127ce3-6662-4b5f-8ca6-2f84f38fddf8" width="100%" autoplay loop muted playsinline controls></video>
 
+**Multi-Agent Trajectory Planning** — multiple aerial agents arranged on a circle swap to diametrically opposite positions, avoiding one another in real time:
+
+<video src="https://github.com/user-attachments/assets/b41a41bc-9b8c-4138-9732-aeba8a095275" width="100%" autoplay loop muted playsinline controls></video>
+
 | **Trajectory** | **Forest** |
 | ------------------------- | ------------------------- |
 <a target="_blank" href="https://youtu.be/Pvb-VPUdLvg"><img src="./imgs/mighty_gifs_complex_benchmarks.gif" width="360" height="240" alt="Complex Benchmarks"></a> | <a target="_blank" href="https://youtu.be/Pvb-VPUdLvg"><img src="./imgs/mighty_gifs_hard_forest.gif" width="360" height="240" alt="Static Forest"></a> |
@@ -94,6 +98,12 @@ make build-no-cache
 # Single-agent interactive simulation (click goals in RViz2 with "2D Goal Pose")
 make run-interactive
 
+# Multi-agent aerial simulation (default: 10 agents swapping positions on a circle)
+make run-multiagent
+
+# Multi-agent with a custom number of agents
+make run-multiagent NUM_AGENTS=5
+
 # Single-agent Gazebo simulation
 make run-gazebo
 
@@ -120,7 +130,9 @@ In `run-interactive` mode, send goals from the RViz2 toolbar:
   | `make build` | Build the Docker image | - |
   | `make build-no-cache` | Build without cache (forces fresh build) | - |
   | `make run-interactive` | Run single agent with manual goal (RViz2 2D Goal Pose) | - |
+  | `make run-multiagent` | Run multi-agent aerial simulation (agents swap positions on a circle) | `NUM_AGENTS` (default: 10) |
   | `make run-gazebo` | Run single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z` (default: 305, 0, 3), `ENV` (default: hard_forest) |
+  | `make run-mac` | Run multi-agent aerial simulation on Mac (Xpra, browser at localhost:8080) | `NUM_AGENTS` (default: 10) |
   | `make run-mac-interactive` | Run single agent on Mac with manual goal (Xpra, browser at localhost:8080) | - |
   | `make run-mac-gazebo` | Run Gazebo on Mac (Xpra) | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
   | `make shell` | Open interactive shell for debugging | - |
@@ -183,6 +195,12 @@ All `run-mac*` targets use Xpra to stream GUI windows (RViz2, etc.) to your brow
 ```bash
 cd mighty/docker
 
+# Multi-agent aerial simulation (default: 10 agents swapping positions on a circle)
+make run-mac
+
+# Multi-agent with a custom number of agents
+make run-mac NUM_AGENTS=5
+
 # Single agent with manual goal control (use RViz2's "2D Goal Pose" tool)
 make run-mac-interactive
 
@@ -208,6 +226,7 @@ To send a goal manually (in `run-mac-interactive` mode):
 
   | Target | Description | Options |
   |--------|-------------|---------|
+  | `make run-mac` | Multi-agent aerial simulation (agents swap positions on a circle) | `NUM_AGENTS` (default: 10) |
   | `make run-mac-interactive` | Single agent with manual 2D Goal Pose | - |
   | `make run-mac-gazebo` | Single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
 
@@ -266,6 +285,12 @@ cd ~/code/mighty_ws
 # Single-agent interactive simulation (click goals in RViz2 with "2D Goal Pose")
 python3 src/mighty/scripts/run_sim.py --mode interactive --setup-bash ~/code/mighty_ws/install/setup.bash
 
+# Multi-agent aerial simulation (default: 10 agents swapping positions on a circle)
+python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/install/setup.bash
+
+# Multi-agent with a custom number of agents
+python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/install/setup.bash --num-agents 5
+
 # Single-agent Gazebo simulation
 python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash
 
@@ -283,8 +308,10 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/
   <summary><b>All Simulation Options</b></summary>
 
   ```
-  --mode, -m          Required. 'interactive' or 'gazebo'
+  --mode, -m          Required. 'interactive', 'multiagent', or 'gazebo'
   --setup-bash, -s    Required. Path to setup.bash
+  --num-agents, -n    Number of agents for multiagent mode (default: 10)
+  --radius            Circle radius for the multiagent formation (default: 10.0)
   --goal, -g          Goal position X Y Z for gazebo mode (default: 305 0 3)
   --start, -p         Start position X Y Z for gazebo mode (default: 0 0 3)
   --start-yaw         Start yaw in radians (default: 1.57)
