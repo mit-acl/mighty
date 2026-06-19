@@ -172,17 +172,6 @@ class MIGHTY {
    */
   void getLastPlanState(state& state);
 
-  /** @brief Set the pure pursuit lookahead point (thread-safe).
-   *  @param point Lookahead position from the pure pursuit controller.
-   */
-  void setLookaheadPoint(const Eigen::Vector3d& point);
-
-  /** @brief Get the pure pursuit lookahead point (thread-safe).
-   *  @param point Output lookahead position.
-   *  @param received Output flag indicating if a lookahead point has been received.
-   */
-  void getLookaheadPoint(Eigen::Vector3d& point, bool& received);
-
   /** @brief Remove expired dynamic obstacle trajectories.
    *  @param current_time Current time; trajectories older than this are removed.
    */
@@ -249,6 +238,21 @@ class MIGHTY {
    *  @param horizon Planning horizon distance.
    */
   void computeG(const state& A, const state& G_term, double horizon);
+
+  /** @brief Corridor-center subgoal hopping / bend pre-alignment (ground robot only).
+   *
+   *  Detects sharp bends on the RAW A* path @p raw_global_path using a
+   *  windowed direction average (robust to resample phase and A* diagonal
+   *  grid noise). At the first qualifying bend, computes a subgoal backed
+   *  off by corridor_backoff_m along the windowed incoming direction, sets
+   *  G.pos to that point and G.yaw to the windowed outgoing direction, and
+   *  replaces @p global_path with the raw path truncated + ending at the
+   *  backed-off subgoal so the L-BFGS solver plans only up to the subgoal.
+   *  Fall-through (no bend found) uses the path end as G.
+   */
+  void computeG_corridorHop(const state& A, const state& G_term,
+                            vec_Vecf<3>& global_path,
+                            const vec_Vecf<3>& raw_global_path);
 
   /** @brief Check if the robot has reached the terminal goal.
    *  @return True if the goal is reached.
@@ -511,12 +515,25 @@ class MIGHTY {
   double prev_dyaw_ = 0.0;                          // Previous dyaw
   double dyaw_filtered_ = 0.0;                      // Filtered dyaw
   PieceWiseQuinticPol pwp_to_share_;                // Piecewise polynomial to share
-  Eigen::Vector3d pure_pursuit_lookahead_point_;    // Lookahead point from pure pursuit controller
-  bool lookahead_point_received_ = false;  // Flag to check if lookahead point has been received
 
   // Drone status
   int drone_status_ =
       DroneStatus::GOAL_REACHED;  // status_ can be TRAVELING, GOAL_SEEN, GOAL_REACHED
+
+  // Corridor-hop turn-in-place override (ground robot only). When true, the
+  // YAWING branch in the yaw controller uses G_.yaw (the heading to the next
+  // subgoal) as the target instead of the default "direction from current
+  // pos toward G_term". Cleared on YAWING -> TRAVELING transition.
+  bool corridor_hop_yawing_ = false;
+
+  // Hysteresis for bend pre-alignment subgoal selection. Once a subgoal is
+  // chosen for a leg, we hold it across replans (even if the HGP path wiggles
+  // with sensor noise) until the robot arrives (goal_radius) or the held
+  // subgoal is no longer near any waypoint on the new path. Cleared on
+  // YAWING -> TRAVELING transition so the next leg re-picks.
+  bool held_subgoal_valid_ = false;
+  Eigen::Vector3d held_subgoal_pos_ = Eigen::Vector3d::Zero();
+  double held_subgoal_yaw_ = 0.0;
 
   // Mutex
   std::mutex mtx_plan_;                  // Mutex for the plan_
@@ -530,7 +547,6 @@ class MIGHTY {
   std::mutex mtx_solve_hgp_;             // Mutex for the solveHGP
   std::mutex mtx_global_path_;           // Mutex for the global_path_
   std::mutex mtx_original_global_path_;  // Mutex for the original_global_path_
-  std::mutex mtx_lookahead_point_;       // Mutex for the pure_pursuit_lookahead_point_
   std::mutex mtx_kdtree_map_;            // Mutex for the map_
   std::mutex mtx_kdtree_unk_;            // Mutex for the unknown map_
   pcl::PointCloud<pcl::PointXYZ>::ConstPtr pclptr_map_;

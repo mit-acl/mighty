@@ -135,12 +135,13 @@ class FakeSim : public rclcpp::Node {
     t_.header.frame_id = map_frame_id_;
     t_.child_frame_id = target_frame_;
 
-    // Publishers
+    // Publishers — state: depth 1 (latest-wins, prevents Zenoh TX queue growth).
+    // drone_marker: best-effort viz only.
     pub_state_ = this->create_publisher<dynus_interfaces::msg::State>(
-        "state", rclcpp::QoS(10).reliable().durability_volatile());
+        "state", rclcpp::QoS(rclcpp::KeepLast(1)).reliable().durability_volatile());
 
     pub_marker_drone_ = this->create_publisher<visualization_msgs::msg::Marker>(
-        "drone_marker", rclcpp::QoS(10).reliable().durability_volatile());
+        "drone_marker", rclcpp::QoS(rclcpp::KeepLast(1)).best_effort().durability_volatile());
 
     // Optional odometry publisher
     if (publish_odom_) {
@@ -406,8 +407,8 @@ class FakeSim : public rclcpp::Node {
       publishOdometry();
     }
 
-    // Publish drone marker
-    if (publish_marker_drone_) {
+    // Publish drone marker (UAV only — ground robot is rendered from URDF via RobotModel display)
+    if (publish_marker_drone_ && !use_ground_robot_) {
       pub_marker_drone_->publish(getDroneMarker());
     }
 

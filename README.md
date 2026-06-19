@@ -6,6 +6,10 @@ If you like this project, please consider starring ⭐ the repo!
 
 <video src="https://github.com/user-attachments/assets/a5127ce3-6662-4b5f-8ca6-2f84f38fddf8" width="100%" autoplay loop muted playsinline controls></video>
 
+**Multi-Agent Trajectory Planning** — multiple aerial agents arranged on a circle swap to diametrically opposite positions, avoiding one another in real time:
+
+<video src="https://github.com/user-attachments/assets/b41a41bc-9b8c-4138-9732-aeba8a095275" width="100%" autoplay loop muted playsinline controls></video>
+
 | **Trajectory** | **Forest** |
 | ------------------------- | ------------------------- |
 <a target="_blank" href="https://youtu.be/Pvb-VPUdLvg"><img src="./imgs/mighty_gifs_complex_benchmarks.gif" width="360" height="240" alt="Complex Benchmarks"></a> | <a target="_blank" href="https://youtu.be/Pvb-VPUdLvg"><img src="./imgs/mighty_gifs_hard_forest.gif" width="360" height="240" alt="Static Forest"></a> |
@@ -48,13 +52,14 @@ The full video is available at [https://youtu.be/Pvb-VPUdLvg](https://youtu.be/P
 
 ## Installation
 
-MIGHTY has been tested on Ubuntu 22.04 with ROS 2 Humble. Three installation methods are available:
+MIGHTY has been tested on Ubuntu 22.04 with ROS 2 Humble. Four installation methods are available:
 
 | Method | Platform | Notes |
 |--------|----------|-------|
 | [Docker (Linux)](#docker-installation-linux) | Linux | Uses Docker Engine (apt install, **not** Docker Desktop) |
 | [Docker (Mac)](#docker-installation-mac) | macOS (Apple Silicon / Intel) | Uses Docker Desktop; Xpra for browser-based visualization |
 | [Native (Linux)](#native-installation-linux) | Ubuntu 22.04 | Best for development and hardware deployment |
+| [Jetson](#jetson-setup) | NVIDIA Jetson (Orin Nano, etc.) | ARM64 build; skips Gazebo, limits parallelism for low RAM |
 
 ---
 
@@ -93,6 +98,12 @@ make build-no-cache
 # Single-agent interactive simulation (click goals in RViz2 with "2D Goal Pose")
 make run-interactive
 
+# Multi-agent aerial simulation (default: 10 agents swapping positions on a circle)
+make run-multiagent
+
+# Multi-agent with a custom number of agents
+make run-multiagent NUM_AGENTS=5
+
 # Single-agent Gazebo simulation
 make run-gazebo
 
@@ -119,7 +130,9 @@ In `run-interactive` mode, send goals from the RViz2 toolbar:
   | `make build` | Build the Docker image | - |
   | `make build-no-cache` | Build without cache (forces fresh build) | - |
   | `make run-interactive` | Run single agent with manual goal (RViz2 2D Goal Pose) | - |
+  | `make run-multiagent` | Run multi-agent aerial simulation (agents swap positions on a circle) | `NUM_AGENTS` (default: 10) |
   | `make run-gazebo` | Run single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z` (default: 305, 0, 3), `ENV` (default: hard_forest) |
+  | `make run-mac` | Run multi-agent aerial simulation on Mac (Xpra, browser at localhost:8080) | `NUM_AGENTS` (default: 10) |
   | `make run-mac-interactive` | Run single agent on Mac with manual goal (Xpra, browser at localhost:8080) | - |
   | `make run-mac-gazebo` | Run Gazebo on Mac (Xpra) | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
   | `make shell` | Open interactive shell for debugging | - |
@@ -182,6 +195,12 @@ All `run-mac*` targets use Xpra to stream GUI windows (RViz2, etc.) to your brow
 ```bash
 cd mighty/docker
 
+# Multi-agent aerial simulation (default: 10 agents swapping positions on a circle)
+make run-mac
+
+# Multi-agent with a custom number of agents
+make run-mac NUM_AGENTS=5
+
 # Single agent with manual goal control (use RViz2's "2D Goal Pose" tool)
 make run-mac-interactive
 
@@ -207,6 +226,7 @@ To send a goal manually (in `run-mac-interactive` mode):
 
   | Target | Description | Options |
   |--------|-------------|---------|
+  | `make run-mac` | Multi-agent aerial simulation (agents swap positions on a circle) | `NUM_AGENTS` (default: 10) |
   | `make run-mac-interactive` | Single agent with manual 2D Goal Pose | - |
   | `make run-mac-gazebo` | Single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
 
@@ -265,6 +285,12 @@ cd ~/code/mighty_ws
 # Single-agent interactive simulation (click goals in RViz2 with "2D Goal Pose")
 python3 src/mighty/scripts/run_sim.py --mode interactive --setup-bash ~/code/mighty_ws/install/setup.bash
 
+# Multi-agent aerial simulation (default: 10 agents swapping positions on a circle)
+python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/install/setup.bash
+
+# Multi-agent with a custom number of agents
+python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/install/setup.bash --num-agents 5
+
 # Single-agent Gazebo simulation
 python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash
 
@@ -282,8 +308,10 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/
   <summary><b>All Simulation Options</b></summary>
 
   ```
-  --mode, -m          Required. 'interactive' or 'gazebo'
+  --mode, -m          Required. 'interactive', 'multiagent', or 'gazebo'
   --setup-bash, -s    Required. Path to setup.bash
+  --num-agents, -n    Number of agents for multiagent mode (default: 10)
+  --radius            Circle radius for the multiagent formation (default: 10.0)
   --goal, -g          Goal position X Y Z for gazebo mode (default: 305 0 3)
   --start, -p         Start position X Y Z for gazebo mode (default: 0 0 3)
   --start-yaw         Start yaw in radians (default: 1.57)
@@ -293,6 +321,86 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/
   --gazebo-gui        Enable Gazebo GUI
   --dry-run           Print generated YAML without launching
   ```
+</details>
+
+---
+
+### Jetson Setup
+
+For NVIDIA Jetson boards (Orin Nano, Orin NX, AGX Orin, etc.) running JetPack with Ubuntu 22.04.
+
+Gazebo Classic is not available on ARM64, so the setup script automatically detects the Jetson platform and skips simulation-only packages. The planner and all hardware nodes build normally.
+
+**1. Add Swap Space (Recommended)**
+
+Jetson boards have limited RAM (e.g., 8 GB on Orin Nano). Compilation of large C++ files can trigger the OOM killer without extra swap:
+
+```bash
+sudo fallocate -l 8G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# Make it persistent across reboots
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+**2. Clone and Run Setup**
+
+```bash
+mkdir -p ~/code
+cd ~/code
+git clone https://github.com/mit-acl/mighty.git mighty_ws/src/mighty
+cd mighty_ws/src/mighty
+./setup.sh
+```
+
+The script auto-detects the Jetson via `/etc/nv_tegra_release` and will:
+- Skip Gazebo packages (`gazebo_dev`, `gazebo_ros`, `gazebo_plugins`, `realsense_gazebo_plugin`, `ros2_livox_simulation`)
+- Build with `-DBUILD_SIMULATION=OFF` (disables Gazebo-linked targets in the `mighty` package)
+- Limit compiler parallelism (`-j1`) to avoid OOM on memory-constrained boards
+- Use the correct `aarch64-linux-gnu` library path
+
+You can also pass `--jetson` explicitly or combine with `-j`:
+
+```bash
+./setup.sh --jetson -j 2  # if you have enough RAM for 2 parallel compile jobs
+```
+
+**3. Test the Planner (without Gazebo)**
+
+`fake_sim` is always built, even on Jetson. It provides simulated odometry and a lightweight environment without Gazebo so you can verify the planner works:
+
+```bash
+source ~/.bashrc
+cd ~/code/mighty_ws
+python3 src/mighty/scripts/run_sim.py --mode interactive --setup-bash ~/code/mighty_ws/install/setup.bash
+```
+
+Use RViz2's **"2D Goal Pose"** tool to send goals and confirm the planner is running correctly.
+
+<details>
+  <summary><b>What is skipped on Jetson</b></summary>
+
+  The following packages are excluded from the build:
+
+  | Package | Reason |
+  |---------|--------|
+  | `gazebo_dev` | Requires `libgazebo11-dev` (x86 only) |
+  | `gazebo_ros` | Depends on `gazebo_dev` |
+  | `gazebo_plugins` | Depends on `gazebo_dev` |
+  | `gazebo_ros_pkgs` | Meta-package for all Gazebo ROS packages |
+  | `realsense_gazebo_plugin` | Gazebo plugin for RealSense simulation |
+  | `ros2_livox_simulation` | Gazebo plugin for Livox LiDAR simulation |
+
+  Within the `mighty` package, these simulation-only targets are also disabled:
+  - `move_model` (Gazebo model mover plugin)
+  - `imu_plugin` (Gazebo IMU sensor plugin)
+  - `convert_velodyne_to_ros_time` (Gazebo timestamp converter)
+  - `dynamic_forest_node` (simulated dynamic obstacles)
+
+  All hardware nodes (`mighty`, `fake_sim`, `convert_odom_to_state`, `convert_vicon_to_state`) build normally.
+
 </details>
 
 ---

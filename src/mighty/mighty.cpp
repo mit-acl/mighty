@@ -149,6 +149,196 @@ void MIGHTY::computeG(const state& A, const state& G_term, double horizon) {
 
 // ----------------------------------------------------------------------------
 
+void MIGHTY::computeG_corridorHop(const state& A, const state& G_term,
+                                   vec_Vecf<3>& global_path,
+                                   const vec_Vecf<3>& raw_global_path) {
+  // Ground-robot-only "bend pre-alignment" subgoal selector.
+  //
+  // Detects sharp bends on the raw A* path using a windowed direction
+  // average. At the first qualifying bend, back off the subgoal from the
+  // corner cell by corridor_backoff_m along the windowed incoming direction
+  // and set G.yaw to the windowed outgoing direction. Replace global_path
+  // with raw_global_path[0..corner_idx] with the last point snapped to the
+  // backed-off subgoal so L-BFGS plans only up to the subgoal.
+  //
+  // Windowed detection is key: the resampled `global_path` can blend a
+  // single 90° cell across two waypoints, giving detected angles as low as
+  // ~45° for a real right-angle corner. Running the detector on the raw
+  // path with a ~0.8 m window averages out A* diagonal grid noise while
+  // preserving the true bend angle.
+  //
+  // Hysteresis: once a subgoal is selected for a leg, cache it in
+  // held_subgoal_* and keep reusing it across replans. Cleared on arrival
+  // or on YAWING -> TRAVELING transition.
+  if (global_path.size() < 2) return;
+
+  // ----- Held-subgoal short circuit (hysteresis) -----
+  if (held_subgoal_valid_) {
+    const double dx = A.pos.x() - held_subgoal_pos_.x();
+    const double dy = A.pos.y() - held_subgoal_pos_.y();
+    const double dist_to_held = std::sqrt(dx * dx + dy * dy);
+    if (dist_to_held > par_.goal_radius) {
+      // Still en route to the held subgoal. Hold G; truncate global_path
+      // at the waypoint nearest the held subgoal so L-BFGS stops there.
+      state local_G;
+      local_G.pos = held_subgoal_pos_;
+      local_G.yaw = held_subgoal_yaw_;
+      setG(local_G);
+
+      size_t nearest_idx = global_path.size() - 1;
+      double best_d2 = std::numeric_limits<double>::max();
+      for (size_t i = 0; i < global_path.size(); ++i) {
+        const double ddx = global_path[i].x() - held_subgoal_pos_.x();
+        const double ddy = global_path[i].y() - held_subgoal_pos_.y();
+        const double d2 = ddx * ddx + ddy * ddy;
+        if (d2 < best_d2) {
+          best_d2 = d2;
+          nearest_idx = i;
+        }
+      }
+      if (std::sqrt(best_d2) <= 2.0 * par_.corridor_backoff_m) {
+        global_path[nearest_idx] = held_subgoal_pos_;
+        global_path.resize(nearest_idx + 1);
+        return;
+      }
+      held_subgoal_valid_ = false;  // stale, fall through to re-pick
+    } else {
+      // Arrived — let needReplan's TIP trigger fire. Hold G until YAWING
+      // exits and clears this flag.
+      state local_G;
+      local_G.pos = held_subgoal_pos_;
+      local_G.yaw = held_subgoal_yaw_;
+      setG(local_G);
+      return;
+    }
+  }
+
+  // ----- Windowed bend detection on the raw A* path -----
+  // Need at least a few cells to compute directions.
+  const vec_Vecf<3>& raw = raw_global_path.size() >= 3 ? raw_global_path : global_path;
+  if (raw.size() < 3) {
+    // Degenerate — fall through to end-of-path.
+    state local_G;
+    local_G.pos = global_path.back();
+    Eigen::Vector3d dir = G_term.pos - local_G.pos;
+    local_G.yaw = (dir.norm() > 1e-6) ? std::atan2(dir.y(), dir.x()) : 0.0;
+    held_subgoal_valid_ = false;
+    setG(local_G);
+    return;
+  }
+
+  const double cos_thresh =
+      std::cos(par_.corridor_corner_angle_deg * M_PI / 180.0);
+  const double window = par_.corridor_detection_window_m;
+  const double min_leg_sq = par_.corridor_min_leg_m * par_.corridor_min_leg_m;
+  const double backoff = par_.corridor_backoff_m;
+
+  // Helper: compute the arclength distance between two indices along raw path.
+  auto arclen_xy = [&](size_t lo, size_t hi) -> double {
+    double d = 0.0;
+    for (size_t k = lo; k + 1 <= hi; ++k) {
+      const double ddx = raw[k + 1].x() - raw[k].x();
+      const double ddy = raw[k + 1].y() - raw[k].y();
+      d += std::sqrt(ddx * ddx + ddy * ddy);
+    }
+    return d;
+  };
+
+  size_t pick_idx = 0;
+  bool found = false;
+  Eigen::Vector2d incoming_unit(1.0, 0.0);
+  Eigen::Vector2d outgoing_unit(1.0, 0.0);
+
+  for (size_t i = 1; i + 1 < raw.size(); ++i) {
+    // Walk back from i until cumulative arclength >= window.
+    size_t i_back = i;
+    double d_back = 0.0;
+    while (i_back > 0 && d_back < window) {
+      const double ddx = raw[i_back].x() - raw[i_back - 1].x();
+      const double ddy = raw[i_back].y() - raw[i_back - 1].y();
+      d_back += std::sqrt(ddx * ddx + ddy * ddy);
+      --i_back;
+    }
+
+    // Walk forward from i until cumulative arclength >= window.
+    size_t i_fwd = i;
+    double d_fwd = 0.0;
+    while (i_fwd + 1 < raw.size() && d_fwd < window) {
+      const double ddx = raw[i_fwd + 1].x() - raw[i_fwd].x();
+      const double ddy = raw[i_fwd + 1].y() - raw[i_fwd].y();
+      d_fwd += std::sqrt(ddx * ddx + ddy * ddy);
+      ++i_fwd;
+    }
+
+    // Need at least some arclength on each side to get a meaningful direction.
+    if (d_back < 0.5 * window || d_fwd < 0.5 * window) continue;
+
+    Eigen::Vector2d v1(raw[i].x() - raw[i_back].x(),
+                       raw[i].y() - raw[i_back].y());
+    Eigen::Vector2d v2(raw[i_fwd].x() - raw[i].x(),
+                       raw[i_fwd].y() - raw[i].y());
+    const double n1 = v1.norm();
+    const double n2 = v2.norm();
+    if (n1 < 1e-6 || n2 < 1e-6) continue;
+    v1 /= n1;
+    v2 /= n2;
+    const double cos_turn = v1.dot(v2);
+    if (cos_turn >= cos_thresh) continue;  // not sharp enough
+
+    // Must be far enough ahead for a useful leg AFTER the backoff.
+    const double dx_to_curr = raw[i].x() - A.pos.x();
+    const double dy_to_curr = raw[i].y() - A.pos.y();
+    if (dx_to_curr * dx_to_curr + dy_to_curr * dy_to_curr <
+        min_leg_sq + backoff * backoff) {
+      continue;
+    }
+
+    pick_idx = i;
+    incoming_unit = v1;
+    outgoing_unit = v2;
+    found = true;
+    break;
+  }
+
+  state local_G;
+
+  if (found) {
+    const Vecf<3>& p_corner = raw[pick_idx];
+    local_G.pos = Eigen::Vector3d(p_corner.x() - backoff * incoming_unit.x(),
+                                  p_corner.y() - backoff * incoming_unit.y(),
+                                  p_corner.z());
+    local_G.yaw = std::atan2(outgoing_unit.y(), outgoing_unit.x());
+
+    // Replace global_path (the L-BFGS input) with raw[0..pick_idx] and snap
+    // the last point to the backed-off subgoal. This makes the L-BFGS plan
+    // stop exactly at the backed-off point.
+    global_path.clear();
+    global_path.reserve(pick_idx + 1);
+    for (size_t k = 0; k <= pick_idx; ++k) {
+      global_path.push_back(raw[k]);
+    }
+    if (!global_path.empty()) {
+      global_path.back() = local_G.pos;
+    }
+
+    // Cache for hysteresis.
+    held_subgoal_pos_ = local_G.pos;
+    held_subgoal_yaw_ = local_G.yaw;
+    held_subgoal_valid_ = true;
+  } else {
+    // No sharp bend — use the path end as G with yaw toward the terminal
+    // goal (legacy horizon-projection fallback).
+    local_G.pos = global_path.back();
+    Eigen::Vector3d dir = G_term.pos - local_G.pos;
+    local_G.yaw = (dir.norm() > 1e-6) ? std::atan2(dir.y(), dir.x()) : 0.0;
+    held_subgoal_valid_ = false;
+  }
+
+  setG(local_G);
+}
+
+// ----------------------------------------------------------------------------
+
 /**
  * @brief Checks if we need to replan.
  * @return bool
@@ -173,6 +363,27 @@ bool MIGHTY::needReplan(const state& local_state, const state& local_G_term,
   if (drone_status_ == DroneStatus::GOAL_SEEN &&
       dist_from_last_plan_state_to_term_G < par_.goal_radius) {
     return false;
+  }
+
+  // Corridor-center subgoal arrival -> turn in place (ground robot only).
+  // When the robot enters goal_radius of an intermediate corridor subgoal
+  // (G_ != G_term), flip to YAWING with the target yaw already stored in
+  // G_.yaw (set by computeG_corridorHop). The YAWING branch in the yaw
+  // controller reads corridor_hop_yawing_ and uses G_.yaw as the target.
+  // No replan happens while YAWING (see the gate below); replanning
+  // resumes automatically after the yaw-error threshold at line ~1567.
+  if (par_.vehicle_type == "ground_robot" && par_.corridor_hop_enabled &&
+      drone_status_ == DroneStatus::TRAVELING) {
+    state G_now;
+    getG(G_now);
+    const double dist_to_G = (local_state.pos - G_now.pos).norm();
+    const double dist_G_to_term = (G_now.pos - local_G_term.pos).norm();
+    const bool G_is_final = dist_G_to_term < 1e-3;
+    if (!G_is_final && dist_to_G < par_.goal_radius) {
+      corridor_hop_yawing_ = true;
+      changeDroneStatus(DroneStatus::YAWING);
+      return false;
+    }
   }
 
   // Don't plan if drone is not traveling
@@ -706,6 +917,18 @@ bool MIGHTY::generateGlobalPath(vec_Vecf<3>& global_path, double current_time,
   if (par_.debug_verbose)
     printf("[TIMING]   HGP solve: %.2f ms\n", timer_solve.getElapsedMicros() / 1000.0);
 
+  // Bend pre-alignment (ground robot only). Detects sharp bends on the raw
+  // A* path using a windowed direction average (robust to resample phase),
+  // then replaces global_path with a truncated version ending at a backed-
+  // off subgoal so L-BFGS stops short of each inside corner. UAVs unaffected.
+  if (par_.vehicle_type == "ground_robot" && par_.corridor_hop_enabled) {
+    computeG_corridorHop(local_A, local_G_term, global_path, raw_global_path);
+    // Refresh local_G with the (possibly) new subgoal; local_G is read again
+    // later in this function and fed into the safe-corridor / local-traj
+    // pipeline in planLocalTrajectory.
+    getG(local_G);
+  }
+
   // use this for map resizing
   {
     std::lock_guard<std::mutex> lock(mtx_global_path_);
@@ -1196,31 +1419,6 @@ void MIGHTY::getLastPlanState(state& state) {
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Sets the lookahead point from pure pursuit controller
- * @param const Eigen::Vector3d &point: Lookahead point
- */
-void MIGHTY::setLookaheadPoint(const Eigen::Vector3d& point) {
-  std::lock_guard<std::mutex> lock(mtx_lookahead_point_);
-  pure_pursuit_lookahead_point_ = point;
-  lookahead_point_received_ = true;
-}
-
-// ----------------------------------------------------------------------------
-
-/**
- * @brief Gets the lookahead point from pure pursuit controller
- * @param Eigen::Vector3d &point: Output lookahead point
- * @param bool &received: Output flag indicating if lookahead has been received
- */
-void MIGHTY::getLookaheadPoint(Eigen::Vector3d& point, bool& received) {
-  std::lock_guard<std::mutex> lock(mtx_lookahead_point_);
-  point = pure_pursuit_lookahead_point_;
-  received = lookahead_point_received_;
-}
-
-// ----------------------------------------------------------------------------
-
-/**
  * @brief Gets trajs_ (returns copy of shared_ptrs, not deep copy of trajectory data)
  * @return std::vector<std::shared_ptr<dynTraj>>: Copy of trajs_ vector
  */
@@ -1460,7 +1658,15 @@ void MIGHTY::getDesiredYaw(state& next_goal) {
 
   switch (drone_status_) {
     case DroneStatus::YAWING:
-      desired_yaw = atan2(G_term.pos[1] - next_goal.pos[1], G_term.pos[0] - next_goal.pos[0]);
+      if (corridor_hop_yawing_) {
+        // Corridor-hop TIP: target is the heading toward the NEXT subgoal,
+        // stored in G_.yaw by computeG_corridorHop.
+        state G_now;
+        getG(G_now);
+        desired_yaw = G_now.yaw;
+      } else {
+        desired_yaw = atan2(G_term.pos[1] - next_goal.pos[1], G_term.pos[0] - next_goal.pos[0]);
+      }
       diff = desired_yaw - local_state.yaw;
       // std::cout << "diff1= " << diff << std::endl;
       break;
@@ -1479,6 +1685,10 @@ void MIGHTY::getDesiredYaw(state& next_goal) {
 
   mighty_utils::angle_wrap(diff);
   if (fabs(diff) < 0.04 && drone_status_ == DroneStatus::YAWING) {
+    // Leaving YAWING: clear the corridor-hop override and drop the held
+    // subgoal so needReplan picks a fresh one for the next leg.
+    corridor_hop_yawing_ = false;
+    held_subgoal_valid_ = false;
     changeDroneStatus(DroneStatus::TRAVELING);
   }
 

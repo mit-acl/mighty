@@ -109,6 +109,32 @@ class VisitedMap {
     data_[static_cast<size_t>(iy) * width_ + ix] = v;
   }
 
+  /** @brief Merge a peer robot's visited map into this one.  Only overwrites
+   *  cells that are still UNKNOWN locally — i.e. never overrides this robot's
+   *  own observations.  Handles different grid origins/dimensions by converting
+   *  through world coordinates.
+   *
+   *  @param data       Row-major tristate buffer (kUnknown / kFree / kOccupied).
+   *  @param w,h        Grid width/height in cells.
+   *  @param origin_x,origin_y  World-frame lower-left corner.
+   *  @param resolution Cell size in meters.
+   */
+  void mergeFrom(const int8_t* data, int w, int h,
+                 double origin_x, double origin_y, double resolution) {
+    if (data_.empty()) return;
+    for (int iy = 0; iy < h; ++iy) {
+      for (int ix = 0; ix < w; ++ix) {
+        const int8_t v = data[iy * w + ix];
+        if (v == kUnknown) continue;  // nothing to learn
+        const double wx = origin_x + (ix + 0.5) * resolution;
+        const double wy = origin_y + (iy + 0.5) * resolution;
+        if (getStateWorld(wx, wy) == kUnknown) {
+          setStateWorld(wx, wy, v);
+        }
+      }
+    }
+  }
+
   void clear() { std::fill(data_.begin(), data_.end(), kUnknown); }
 
   // Geometry accessors (used by visualization & frontier filter).

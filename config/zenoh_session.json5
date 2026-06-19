@@ -1,0 +1,46 @@
+// Partial session config for rmw_zenoh_cpp tuned for MIGHTY multi-agent loads.
+// Merged over /opt/ros/humble/share/rmw_zenoh_cpp/config/DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5.
+//
+// Use:
+//   export ZENOH_SESSION_CONFIG_URI=/home/swarm/code/mighty_ws/install/mighty/share/mighty/config/zenoh_session.json5
+//
+// Symptom this addresses:
+//   "zenoh_transport::unicast::universal::tx: Unable to push non droppable
+//    network message to <peer>. Closing transport!"
+// Cause: a reliable (non-droppable) message could not get a batch slot in the
+// TX queue within wait_before_close, so the publisher closes the link.
+// Fix: more batches per priority (size) + more slack before declaring the
+// transport dead (wait_before_close).
+//
+// Schema reference: rmw_zenoh ships its DEFAULT config at
+// /opt/ros/humble/share/rmw_zenoh_cpp/config/DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5
+{
+  transport: {
+    link: {
+      tx: {
+        queue: {
+          // Batches per priority. Valid range 1–16 (default 2).
+          // SIZE_xxx * batch_size bytes is allocated per queue.
+          size: {
+            control: 4,
+            real_time: 4,
+            interactive_high: 4,
+            interactive_low: 4,
+            data_high: 16,
+            data: 16,
+            data_low: 8,
+            background: 4,
+          },
+          congestion_control: {
+            // Reliable/non-droppable messages: how long to wait for a free
+            // batch before closing the transport. Default 60 s; bumped to
+            // 120 s for multi-agent startup bursts.
+            block: {
+              wait_before_close: 120000000,
+            },
+          },
+        },
+      },
+    },
+  },
+}

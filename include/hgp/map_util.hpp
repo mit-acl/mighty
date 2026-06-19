@@ -1925,6 +1925,35 @@ class MapUtil {
    *  @param d_safe Distance at which heat reaches 0.
    *  @param h_max  Maximum heat value (at obstacle surface).
    */
+  /** @brief Project 3D dynamic heat (heat_) into 2D heat_2d_ as max-over-z.
+   *
+   *  Both ESDF/Occ2D 2D builders compute heat_2d_ from static distance fields
+   *  only; they would otherwise discard the dynamic-obstacle tube populated in
+   *  heat_ during updateMap. Calling this after their static fill merges the
+   *  dynamic tube in via per-column max, so 2D A* (and ground_2d_heat viz)
+   *  account for predicted-trajectory heat.
+   */
+  void mergeDynamicHeatInto2D() {
+    if (!dynamic_heat_enabled_ || heat_.empty() || heat_2d_.empty()) return;
+    const int dimX = dim_(0);
+    const int dimY = dim_(1);
+    const int dimZ = dim_(2);
+    if (dimX <= 0 || dimY <= 0 || dimZ <= 0) return;
+    for (int x = 0; x < dimX; ++x) {
+      for (int y = 0; y < dimY; ++y) {
+        float max_h = 0.0f;
+        for (int z = 0; z < dimZ; ++z) {
+          const size_t idx_3d = static_cast<size_t>(x) +
+                                static_cast<size_t>(dimX) *
+                                    (static_cast<size_t>(y) + static_cast<size_t>(dimY) * z);
+          if (idx_3d < heat_.size()) max_h = std::max(max_h, heat_[idx_3d]);
+        }
+        const size_t idx_2d = static_cast<size_t>(x) + static_cast<size_t>(dimX) * y;
+        if (max_h > heat_2d_[idx_2d]) heat_2d_[idx_2d] = max_h;
+      }
+    }
+  }
+
   void buildMap2DFromEsdf(const EsdfGrid2D& esdf, double d_safe, double h_max) {
     const int dimX = dim_(0);
     const int dimY = dim_(1);
@@ -1961,6 +1990,7 @@ class MapUtil {
         // window extends past the mapper's fixed-origin coverage.
       }
     }
+    mergeDynamicHeatInto2D();
     has_2d_map_ = true;
   }
 
@@ -2040,6 +2070,7 @@ class MapUtil {
         }
       }
     }
+    mergeDynamicHeatInto2D();
     has_2d_map_ = true;
   }
 

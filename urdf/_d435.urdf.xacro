@@ -58,7 +58,7 @@ aluminum peripherial evaluation case.
       <origin xyz="${d435_cam_mount_from_center_offset} ${-d435_cam_depth_py} 0" rpy="${M_PI/2} 0 ${M_PI/2}"/>
         <geometry>
           <!-- <box size="${d435_cam_width} ${d435_cam_height} ${d435_cam_depth}"/> -->
-          <mesh filename="package://mighty/share/dynus/meshes/real_sense/d435.dae" />
+          <mesh filename="package://mighty/meshes/real_sense/d435.dae" />
         </geometry>
         <material name="${name}_aluminum"/>
       </visual>

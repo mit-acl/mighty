@@ -41,8 +41,8 @@ struct parameters {
   std::string vehicle_type;
   bool provide_goal_in_global_frame;
   bool use_hardware;
-  bool use_trajectory_tracker{false};
   std::string map_frame_id{"map"};
+  bool share_traj{true};
   bool use_frame_alignment{false};
   int num_agents{10};
 
@@ -280,6 +280,29 @@ struct parameters {
   double esdf_d_safe{1.0};             // [m] Safety distance threshold
   int esdf_truncation_distance{10};    // [voxels] Must match mapper config
 
+  // Bend pre-alignment (ground robot only).
+  // At each sharp HGP bend, back off the subgoal along the incoming direction
+  // by corridor_backoff_m so the robot stops short of the inside corner,
+  // turns in place to face the outgoing segment, then drives straight through
+  // the bend. Works in narrow corridors because the robot body never
+  // approaches the inside wall during the turn.
+  //
+  // Detection runs on the RAW A* path (not the resampled / smoothed path) so
+  // corner angles are not blurred by the resample phase. A windowed detector
+  // averages direction over corridor_detection_window_m on each side of every
+  // candidate cell, which kills A* diagonal-grid noise while preserving real
+  // 90° bends.
+  bool corridor_hop_enabled{false};
+  double corridor_corner_angle_deg{75.0};    // min direction change [deg] to count as a real bend
+  double corridor_detection_window_m{0.8};   // arclength used to average incoming/outgoing direction
+  double corridor_backoff_m{0.4};            // subgoal offset backward along the incoming segment
+  double corridor_min_leg_m{0.3};            // min distance from A to the (backed-off) subgoal
+  // Legacy ESDF gradient-ascent snap (kept for build compat — typically off).
+  double corridor_clearance_threshold_m{0.7};
+  double corridor_max_ascent_m{0.0};         // 0 disables the ascent
+  double corridor_ascent_step_m{0.05};
+  int    corridor_ascent_max_iters{0};       // 0 disables the ascent
+
   // Trajectory publishing parameters
   int trajectory_downsample_points{500};  // Number of points to downsample trajectory to
   double mpc_path_spacing{0.05};          // [m] Spacing between waypoints in MPC path
@@ -328,6 +351,16 @@ struct parameters {
   int    expl_verify_radius_cells{2};
   int    expl_max_frontiers{1000};
   int    expl_unreachable_consec_thresh{5};
+  // Pursuit timeout — auto-invalidate a frontier we've been chasing too long.
+  // Budget = max(min_sec, dist / v_ref * factor). Set factor <= 0 to disable.
+  double expl_pursuit_timeout_factor{10.0};
+  double expl_pursuit_timeout_v_ref{0.5};
+  double expl_pursuit_timeout_min_sec{10.0};
+  // Invalidation keep-out — drop fresh clusters that fall within radius_m of
+  // any INVALIDATED record whose invalidation is still inside the cooldown
+  // window. Set radius_m <= 0 to disable; cooldown_sec <= 0 = permanent.
+  double expl_invalidation_keep_out_radius_m{1.5};
+  double expl_invalidation_cooldown_sec{30.0};
   // Persistent visited bitmap (suppresses re-detection of revisited frontiers)
   double expl_visited_map_center_x{0.0};
   double expl_visited_map_center_y{0.0};
@@ -342,8 +375,25 @@ struct parameters {
   // of one-frame UNKNOWN flicker. Static-environment only — re-introduces
   // stale OCCUPIED for moving obstacles that have since left.
   bool   expl_fuse_persistent_into_local{true};
+  // When true, run the frontier detector on the persistent visited_map_
+  // (entire mission history) instead of the freshly received local sliding
+  // window. Surfaces frontiers at the boundary of explored area no matter
+  // where the robot currently is — fixes "revisited corridor doesn't show
+  // its far-end frontier" symptom. Inherits the phantom-OCCUPIED caveat of
+  // the persistent map for dynamic environments.
+  bool   expl_detect_on_visited_map{true};
+  // MinPos multi-robot exploration
+  bool   expl_use_minpos{false};              // enable rank-based peer-aware allocation
+  double expl_peer_timeout_sec{5.0};          // drop peer after this silence (seconds)
+  double expl_peer_publish_rate_hz{5.0};      // throttle for pose broadcast (Hz)
+  double expl_min_frontier_dist_to_peers_m{0.0};  // reject frontier candidates within this radius of any active peer; 0 disables
+  double expl_peer_visit_radius_m{2.0};       // mark frontier VISITED when any active peer is within this radius (sticky); 0 disables
   // Visualization
   bool   expl_publish_markers{true};
+  // When true, skip publishing exploration goals from exploreSelectCallback so
+  // an external selector (e.g. a VLM node) can own term_goal. Frontier
+  // detection, scoring, and marker publication continue as normal.
+  bool   expl_external_selector{false};
 };
 
 struct BasisConverter {

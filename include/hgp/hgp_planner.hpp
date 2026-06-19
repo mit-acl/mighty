@@ -12,6 +12,8 @@
  */
 #pragma once
 
+#include <cmath>
+
 #include <hgp/data_type.hpp>
 #include <hgp/graph_search.hpp>
 #include <hgp/map_util.hpp>
@@ -228,6 +230,16 @@ class HGPPlanner {
   double esdf_weight_astar_ = 0.0;
   double esdf_d_safe_astar_ = 0.0;
 
+  // Corridor-center corner snap (ground robot only). Params are set via
+  // setCornerSnapParams; snap_enabled_ defaults to false so UAV flow is
+  // untouched.
+  bool   snap_enabled_ = false;
+  double snap_corner_angle_rad_ = 0.0;
+  double snap_clearance_threshold_m_ = 0.0;
+  double snap_max_ascent_m_ = 0.0;
+  double snap_ascent_step_m_ = 0.0;
+  int    snap_ascent_max_iters_ = 0;
+
   // LOS post processing
   int los_cells_ = 3;       // number of cells for inflation in LoS
   double min_len_ = 0.5;    // minimum length of edges
@@ -248,6 +260,33 @@ class HGPPlanner {
     esdf_weight_astar_ = weight;
     esdf_d_safe_astar_ = d_safe;
   }
+
+  /** @brief Configure corridor-center corner snap post-processing (ground robot only).
+   *
+   *  At each sharp corner waypoint in the processed path, performs ESDF gradient
+   *  ascent until either (a) the local clearance exceeds @p clearance_threshold
+   *  (open-field / corridor-center reached) or (b) the accumulated displacement
+   *  exceeds @p max_ascent. Corners already ≥ @p clearance_threshold from any
+   *  obstacle are left alone. No-op when @p enabled is false or the ESDF grid
+   *  is unset.
+   */
+  void setCornerSnapParams(bool enabled, double corner_angle_deg,
+                           double clearance_threshold, double max_ascent,
+                           double ascent_step, int ascent_max_iters) {
+    snap_enabled_ = enabled;
+    snap_corner_angle_rad_ = corner_angle_deg * M_PI / 180.0;
+    snap_clearance_threshold_m_ = clearance_threshold;
+    snap_max_ascent_m_ = max_ascent;
+    snap_ascent_step_m_ = ascent_step;
+    snap_ascent_max_iters_ = ascent_max_iters;
+  }
+
+  /** @brief Snap sharp corners in @p path toward local ESDF max-clearance points.
+   *
+   *  See setCornerSnapParams for behavior. Mutates @p path in place. Preserves
+   *  z coordinates (operates in the xy plane only).
+   */
+  void snapCornersToClearance(vec_Vecf<3>& path) const;
 
   /// Whether all path smoothing is disabled (raw A* path is used directly).
   bool disable_all_smoothing_{false};

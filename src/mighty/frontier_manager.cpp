@@ -25,7 +25,8 @@ bool FrontierManager::isInsideMap(const FrontierRecord& r,
 void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
                              const OccGrid2D& current_grid,
                              const Eigen::Vector3d& robot_pose,
-                             double t_now) {
+                             double t_now,
+                             const std::vector<PeerPose>& peers) {
   const Eigen::Vector2d robot_xy = robot_pose.head<2>();
   const double dt = (last_update_t_ > 0.0) ? std::max(0.0, t_now - last_update_t_)
                                            : 0.0;
@@ -40,8 +41,12 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
     for (size_t j = 0; j < records_.size(); ++j) {
       if (existing_matched[j]) continue;
       const auto& rec = records_[j];
-      if (rec.state == FrontierState::VISITED ||
-          rec.state == FrontierState::INVALIDATED) {
+      // INVALIDATED records (wall-huggers etc.) stay skipped — we want fresh
+      // clusters near them to be re-evaluated, not re-bound to a bad record.
+      // VISITED records DO participate in matching so that fresh clusters at
+      // an already-visited location get absorbed into the existing record
+      // instead of spawning a brand-new ACTIVE ghost every dwell cycle.
+      if (rec.state == FrontierState::INVALIDATED) {
         continue;
       }
       const double d = (fresh[i].centroid - rec.centroid_xy).norm();
@@ -62,13 +67,41 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
     const auto& c = fresh[i];
     if (match_for_fresh[i] >= 0) {
       auto& r = records_[match_for_fresh[i]];
-      r.centroid_xy   = alpha * c.centroid + (1.0 - alpha) * r.centroid_xy;
-      r.size_cells    = c.size_cells;
-      r.aabb_min      = c.aabb_min;
-      r.aabb_max      = c.aabb_max;
-      r.last_seen_t   = t_now;
-      r.state         = FrontierState::ACTIVE;
+      r.last_seen_t = t_now;
+      // Don't revive a VISITED record or overwrite its centroid/size —
+      // absorbing the fresh cluster is enough to keep it from spawning a
+      // duplicate. Its VISITED state is preserved.
+      if (r.state != FrontierState::VISITED) {
+        r.centroid_xy = alpha * c.centroid + (1.0 - alpha) * r.centroid_xy;
+        r.size_cells  = c.size_cells;
+        r.aabb_min    = c.aabb_min;
+        r.aabb_max    = c.aabb_max;
+        r.state       = FrontierState::ACTIVE;
+      }
     } else {
+      // Suppress fresh clusters that fall inside the keep-out radius of a
+      // recently-INVALIDATED record. The matching loop above intentionally
+      // skipped INVALIDATED so we wouldn't revive a bad record; without this
+      // check we'd just spawn a brand-new ACTIVE ghost in the same place and
+      // the agent would re-pursue the goal it just gave up on.
+      if (params_.invalidation_keep_out_radius_m > 0.0) {
+        bool suppressed = false;
+        const double r2 = params_.invalidation_keep_out_radius_m
+                        * params_.invalidation_keep_out_radius_m;
+        for (const auto& rec : records_) {
+          if (rec.state != FrontierState::INVALIDATED) continue;
+          if (params_.invalidation_cooldown_sec > 0.0) {
+            if (rec.invalidated_at_t < 0.0) continue;
+            if (t_now - rec.invalidated_at_t
+                > params_.invalidation_cooldown_sec) continue;
+          }
+          if ((c.centroid - rec.centroid_xy).squaredNorm() < r2) {
+            suppressed = true;
+            break;
+          }
+        }
+        if (suppressed) continue;  // drop fresh cluster, don't spawn new record
+      }
       FrontierRecord r;
       r.id           = next_id_++;
       r.centroid_xy  = c.centroid;
@@ -105,6 +138,7 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
     current_grid.worldToGrid(r.centroid_xy.x(), r.centroid_xy.y(), ix, iy);
     if (current_grid.isOccupied(ix, iy)) {
       r.state = FrontierState::INVALIDATED;
+      r.invalidated_at_t = t_now;
       continue;
     }
     if (current_grid.isFree(ix, iy)) {
@@ -147,6 +181,55 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
       // Reset dwell when the robot leaves the visit radius — visits must be
       // contiguous, not the sum of brief drive-bys.
       r.dwell_time_sec = 0.0;
+    }
+  }
+
+  // ---- Peer-presence visit suppression ----
+  // If any active peer's pose is within peer_visit_radius_m of a record's
+  // centroid, treat the record as VISITED. Sticky — once flipped, the record
+  // stays VISITED for the rest of the run (or until eviction). This catches
+  // peers that have already explored an area we still see as a frontier
+  // (e.g. when peer-shared visited_maps don't propagate cleanly under
+  // frame drift). No dwell — peer pose history is implicit in the FrontierRecord
+  // state, so a single sample where a peer is in radius is enough.
+  if (params_.peer_visit_radius_m > 0.0 && !peers.empty()) {
+    const double r2 = params_.peer_visit_radius_m * params_.peer_visit_radius_m;
+    for (auto& r : records_) {
+      if (r.state != FrontierState::ACTIVE &&
+          r.state != FrontierState::DORMANT) continue;
+      for (const auto& p : peers) {
+        if ((p.position - r.centroid_xy).squaredNorm() < r2) {
+          r.state = FrontierState::VISITED;
+          ++r.visit_count;
+          break;
+        }
+      }
+    }
+  }
+
+  // ---- Pursuit-timeout check ----
+  // Any record with an armed deadline that has elapsed is INVALIDATED if it's
+  // still ACTIVE or DORMANT — once we've given up trying to reach it, the
+  // tombstone participates in the invalidation keep-out so the next detection
+  // cycle doesn't immediately spawn a fresh ACTIVE ghost at the same spot.
+  // Eviction (evictIfOverCap) prefers INVALIDATED → DORMANT → VISITED, so the
+  // DB stays bounded. Records already VISITED/INVALIDATED just have their
+  // deadlines cleared.
+  if (params_.pursuit_timeout_factor > 0.0) {
+    for (auto& r : records_) {
+      if (r.pursuit_deadline_t <= 0.0) continue;
+      if (r.state != FrontierState::ACTIVE &&
+          r.state != FrontierState::DORMANT) {
+        r.pursuit_deadline_t = -1.0;
+        r.pursuit_budget_sec = 0.0;
+        continue;
+      }
+      if (t_now >= r.pursuit_deadline_t) {
+        r.state = FrontierState::INVALIDATED;
+        r.invalidated_at_t = t_now;
+        r.pursuit_deadline_t = -1.0;
+        r.pursuit_budget_sec = 0.0;
+      }
     }
   }
 
@@ -239,22 +322,104 @@ std::optional<FrontierRecord> FrontierManager::selectNextGoal(
   return std::nullopt;
 }
 
+std::optional<FrontierRecord> FrontierManager::selectNextGoalMinPos(
+    const Eigen::Vector3d& robot_pose,
+    const OccGrid2D& current_grid,
+    const std::vector<PeerPose>& peers,
+    double min_dist_to_peers_m) const {
+  const Eigen::Vector2d robot_xy = robot_pose.head<2>();
+
+  struct Candidate {
+    int idx;
+    int rank;
+    double dist;
+    double utility;
+  };
+
+  auto collectCandidates = [&](FrontierState want) -> std::vector<Candidate> {
+    std::vector<Candidate> cands;
+    for (size_t i = 0; i < records_.size(); ++i) {
+      if (records_[i].state != want) continue;
+
+      if (min_dist_to_peers_m > 0.0) {
+        bool too_close = false;
+        for (const auto& p : peers) {
+          if ((p.position - records_[i].centroid_xy).norm() < min_dist_to_peers_m) {
+            too_close = true;
+            break;
+          }
+        }
+        if (too_close) continue;
+      }
+
+      const double d_self = (robot_xy - records_[i].centroid_xy).norm();
+      int rank = 0;
+      for (const auto& p : peers) {
+        if ((p.position - records_[i].centroid_xy).norm() < d_self) ++rank;
+      }
+      const double u = computeUtility(records_[i], robot_pose, current_grid);
+      cands.push_back({static_cast<int>(i), rank, d_self, u});
+    }
+    std::sort(cands.begin(), cands.end(), [](const Candidate& a, const Candidate& b) {
+      if (a.rank != b.rank) return a.rank < b.rank;
+      if (a.dist != b.dist) return a.dist < b.dist;
+      return a.utility > b.utility;
+    });
+    return cands;
+  };
+
+  // Two-tier: exhaust ACTIVE before falling back to DORMANT.
+  for (FrontierState tier : {FrontierState::ACTIVE, FrontierState::DORMANT}) {
+    auto cands = collectCandidates(tier);
+    if (!cands.empty()) {
+      FrontierRecord r = records_[cands[0].idx];
+      r.cached_utility = cands[0].utility;
+      return r;
+    }
+  }
+  return std::nullopt;
+}
+
 void FrontierManager::markVisited(uint64_t id) {
   for (auto& r : records_) {
     if (r.id == id) {
       ++r.visit_count;
       r.state = FrontierState::VISITED;
+      r.pursuit_deadline_t = -1.0;
+      r.pursuit_budget_sec = 0.0;
       return;
     }
   }
 }
 
-void FrontierManager::markInvalidated(uint64_t id) {
+void FrontierManager::markInvalidated(uint64_t id, double t_now) {
   for (auto& r : records_) {
     if (r.id == id) {
       r.state = FrontierState::INVALIDATED;
+      r.invalidated_at_t = t_now;
+      r.pursuit_deadline_t = -1.0;
+      r.pursuit_budget_sec = 0.0;
       return;
     }
+  }
+}
+
+void FrontierManager::markSelected(uint64_t id, const Eigen::Vector2d& robot_xy,
+                                   double t_now) {
+  if (params_.pursuit_timeout_factor <= 0.0) return;  // feature disabled
+  for (auto& r : records_) {
+    if (r.id != id) continue;
+    // Don't clobber a deadline that's already armed for this record — we keep
+    // ticking from first selection even if the select tick re-affirms the
+    // same goal later (e.g. after a re-match).
+    if (r.pursuit_deadline_t > 0.0) return;
+    const double dist = (r.centroid_xy - robot_xy).norm();
+    const double v_ref = std::max(1e-3, params_.pursuit_timeout_v_ref);
+    const double budget = std::max(params_.pursuit_timeout_min_sec,
+                                   dist / v_ref * params_.pursuit_timeout_factor);
+    r.pursuit_budget_sec = budget;
+    r.pursuit_deadline_t = t_now + budget;
+    return;
   }
 }
 

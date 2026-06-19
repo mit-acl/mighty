@@ -43,12 +43,15 @@ def generate_launch_description():
     odom_topic_arg    = DeclareLaunchArgument('odom_topic', default_value='visual_slam/odom')
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='map')
     sim_env_arg = DeclareLaunchArgument('sim_env', default_value='', description='Simulation environment: gazebo or fake_sim (empty = use mighty.yaml default)')
+    config_file_arg = DeclareLaunchArgument('config_file', default_value='', description='Override planner config yaml (bare filename in mighty/config, or absolute path; empty = auto-select mighty.yaml / mighty_ground_robot.yaml)')
     use_ground_robot_arg = DeclareLaunchArgument('use_ground_robot', default_value='false', description='Enable ground robot mode (spawns p3at, uses cmd_vel control)')
-    use_trajectory_tracker_arg = DeclareLaunchArgument('use_trajectory_tracker', default_value='', description='Override use_trajectory_tracker (empty = use config default)')
     use_onboard_localization_arg = DeclareLaunchArgument('use_onboard_localization', default_value='false', description='Use onboard localization (DLIO) vs Vicon')
     depth_camera_name_arg = DeclareLaunchArgument('depth_camera_name', default_value='d435', description='Depth camera name for topic remapping')
     robot_type_arg = DeclareLaunchArgument('robot_type', default_value='quadrotor', description='Robot type: quadrotor, red_rover, star_robot')
     num_agents_arg = DeclareLaunchArgument('num_agents', default_value='10', description='Number of agents (for frame alignment subscriptions)')
+    external_selector_arg = DeclareLaunchArgument(
+        'external_selector', default_value='false',
+        description='Set exploration.external_selector=true so mighty_node yields term_goal control (used by --use-vlm)')
     map_frame_id_arg = DeclareLaunchArgument('map_frame_id', default_value='',
         description='Override map frame ID (empty = auto from use_hardware)')
     use_frame_alignment_arg = DeclareLaunchArgument('use_frame_alignment', default_value='',
@@ -112,8 +115,15 @@ def generate_launch_description():
         # The path to the urdf file - select based on robot type
         urdf_filename = 'p3at.urdf.xacro' if use_ground_robot else 'quadrotor.urdf.xacro'
         urdf_path=PathJoinSubstitution([FindPackageShare('mighty'), 'urdf', urdf_filename])
-        config_filename = 'mighty_ground_robot.yaml' if use_ground_robot else 'mighty.yaml'
-        parameters_path=os.path.join(get_package_share_directory('mighty'), 'config', config_filename)
+        # Planner config: explicit override wins (bare filename resolved against
+        # mighty/config, or an absolute path used as-is); else auto-select by robot type.
+        config_file_override = LaunchConfiguration('config_file').perform(context)
+        if config_file_override:
+            parameters_path = config_file_override if os.path.isabs(config_file_override) \
+                else os.path.join(get_package_share_directory('mighty'), 'config', config_file_override)
+        else:
+            config_filename = 'mighty_ground_robot.yaml' if use_ground_robot else 'mighty.yaml'
+            parameters_path = os.path.join(get_package_share_directory('mighty'), 'config', config_filename)
 
         # Get the dict of parameters from the yaml file
         with open(parameters_path, 'r') as file:
@@ -141,14 +151,6 @@ def generate_launch_description():
                 hw_params = yaml.safe_load(f)['mighty_node']['ros__parameters']
             parameters.update(hw_params)
 
-        # Check if trajectory tracker is enabled — launch arg overrides config
-        tracker_override = LaunchConfiguration('use_trajectory_tracker').perform(context)
-        if tracker_override:
-            use_trajectory_tracker = convert_str_to_bool(tracker_override)
-            parameters['use_trajectory_tracker'] = use_trajectory_tracker
-        else:
-            use_trajectory_tracker = parameters.get('use_trajectory_tracker', False)
-
         # Update parameters for benchmarking
         parameters['file_path'] = data_file
         parameters['use_benchmark'] = bool(use_benchmark)
@@ -159,6 +161,10 @@ def generate_launch_description():
         map_frame_id = map_frame_id_override if map_frame_id_override else (f'{namespace}/map' if use_hardware else 'map')
         parameters['map_frame_id'] = map_frame_id
         parameters['num_agents'] = num_agents
+
+        external_selector_str = LaunchConfiguration('external_selector').perform(context)
+        if external_selector_str:
+            parameters['exploration.external_selector'] = convert_str_to_bool(external_selector_str)
         if use_frame_alignment_str:
             parameters['use_frame_alignment'] = convert_str_to_bool(use_frame_alignment_str)
         if sim_frame_offset_qz_str:
@@ -251,53 +257,34 @@ def generate_launch_description():
             ],
             emulate_tty=True,
             output='screen',
+            arguments=['--ros-args', '--log-level', 'error'],
         )
 
-        # Pure pursuit controller for ground robot
-        pure_pursuit_node = Node(
-            package='mighty',
-            executable='pure_pursuit',
-            name='pure_pursuit',
-            namespace=namespace,
-            parameters=[{
-                'L_min': parameters.get('pure_pursuit_L_min', 0.5),
-                'k_v': parameters.get('pure_pursuit_k_v', 0.5),
-                'max_velocity': parameters.get('ground_robot_v_max', 0.5),
-                'max_angular_velocity': parameters.get('ground_robot_w_max', 3.0),
-                'stopping_radius': parameters.get('pure_pursuit_stopping_radius', 0.1),
-                'adaptive_lookahead_distance': parameters.get('pure_pursuit_adaptive_lookahead_distance', 2.0),
-                'turn_in_place_threshold_deg': parameters.get('pure_pursuit_turn_in_place_threshold_deg', 60.0),
-                'slow_down_threshold_deg': parameters.get('pure_pursuit_slow_down_threshold_deg', 30.0),
-                'w_smoothing_alpha': parameters.get('pure_pursuit_w_smoothing_alpha', 0.3),
-                'use_hardware': use_hardware,
-                'map_frame_id': map_frame_id,
-                'control_rate': 50.0,
-            }],
-            output='screen',
-            emulate_tty=True,
-        )
-
-        # Feedforward + feedback trajectory tracker for ground robot (replaces MPC)
-        trajectory_tracker_node = Node(
-            package='mighty',
-            executable='trajectory_tracker',
-            name='trajectory_tracker',
-            namespace=namespace,
-            parameters=[{
-                'control_rate': 50.0,
-                'max_velocity': parameters.get('ground_robot_v_max', 0.5),
-                'max_angular_velocity': 1.5,
-                'stopping_radius': 0.3,
-                'Kp_along': 1.0,
-                'Kp_cross': 2.0,
-                'Kp_yaw': 2.0,
-                'w_smoothing': 0.3,
-                'use_hardware': use_hardware,
-                'map_frame_id': map_frame_id,
-            }],
-            output='screen',
-            emulate_tty=True,
-        )
+        # MPC controller for ground robot (subscribes to mpc_waypoints, publishes cmd_vel).
+        # Only ground robots (sim) or red_rover/star_robot (HW) use it. Guard the package
+        # lookup so UAV sims don't require the 'mpc' package to be installed (e.g. Docker).
+        need_mpc = (use_ground_robot and not use_hardware) or (use_hardware and robot_type in [RED_ROVER, STAR_ROBOT])
+        mpc_node = None
+        if need_mpc:
+            mpc_params_filename = 'mpc.yaml' if use_hardware else 'mpc_sim.yaml'
+            mpc_params_file = os.path.join(get_package_share_directory('mpc'), 'config', mpc_params_filename)
+            mpc_cmd_vel_topic = 'cmd_vel_auto' if use_hardware else 'cmd_vel'
+            mpc_overrides = {'cmd_vel_topic': mpc_cmd_vel_topic}
+            # In sim, fake_sim publishes a single global "map" frame (not per-agent).
+            # Prefix '/' tells mpc_node to treat the frame as absolute (skip namespace prefix).
+            if not use_hardware:
+                mpc_overrides['tracking_frame'] = '/' + map_frame_id
+            # On HW with mocap, pose comes from the Vicon "world" topic (not DLIO)
+            if use_hardware and not use_onboard_localization:
+                mpc_overrides['pose_topic'] = 'world'
+            mpc_node = Node(
+                package='mpc',
+                executable='mpc_node',
+                name='mpc',
+                namespace=namespace,
+                output='screen',
+                parameters=[mpc_params_file, mpc_overrides],
+            )
 
         # Create a fake sim node
         fake_sim_node = Node(
@@ -371,13 +358,11 @@ def generate_launch_description():
                 if robot_type == QUADROTOR:
                     nodes_to_start.append(hw_odom_to_state_node)
                 elif robot_type in [STAR_ROBOT, RED_ROVER]:
-                    nodes_to_start.extend([hw_odom_to_state_node, static_tf_node])
-                    if use_trajectory_tracker:
-                        nodes_to_start.append(trajectory_tracker_node)
-                    else:
-                        nodes_to_start.append(pure_pursuit_node)
+                    nodes_to_start.extend([hw_odom_to_state_node, mpc_node]) #static_tf_node
             else:
                 nodes_to_start.append(pose_twist_to_state_node)  # Vicon
+                if robot_type in [STAR_ROBOT, RED_ROVER]:
+                    nodes_to_start.append(mpc_node)
         else:
             # === EXISTING SIM CODE — COMPLETELY UNCHANGED ===
             nodes_to_start.append(pose_twist_to_state_node) if use_hardware else None
@@ -385,10 +370,7 @@ def generate_launch_description():
             nodes_to_start.append(robot_state_publisher_node) if parameters['sim_env'] == 'gazebo' else None
             nodes_to_start.append(spawn_entity_node) if parameters['sim_env'] == 'gazebo' else None
             if use_ground_robot:
-                if use_trajectory_tracker:
-                    nodes_to_start.append(trajectory_tracker_node)
-                else:
-                    nodes_to_start.append(pure_pursuit_node)
+                nodes_to_start.append(mpc_node)
             nodes_to_start.append(pcl_render_node) if parameters['sim_env'] == 'fake_sim' else None
 
         return nodes_to_start
@@ -412,12 +394,13 @@ def generate_launch_description():
         map_size_z_arg,
         odometry_topic_arg,
         sim_env_arg,
+        config_file_arg,
         use_ground_robot_arg,
-        use_trajectory_tracker_arg,
         use_onboard_localization_arg,
         depth_camera_name_arg,
         robot_type_arg,
         num_agents_arg,
+        external_selector_arg,
         map_frame_id_arg,
         use_frame_alignment_arg,
         sim_frame_offset_qz_arg,

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <fstream>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -24,6 +25,7 @@
 
 #include <dynus_interfaces/msg/dyn_traj.hpp>
 #include <dynus_interfaces/msg/dyn_traj_array.hpp>
+#include <dynus_interfaces/msg/frontier_list.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nav_msgs/msg/path.hpp>
@@ -47,6 +49,8 @@ class FrontierDetector;
 class FrontierManager;
 class VisitedMap;
 struct FrontierRecord;
+
+#include "mighty/peer_tracker.hpp"
 
 #include "ament_index_cpp/get_package_share_directory.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -120,7 +124,6 @@ class MIGHTY_NODE : public rclcpp::Node {
   void swarmGoalCallback(const geometry_msgs::msg::PoseStamped& msg);
   // Frontier exploration goal-selection loop, runs at expl_select_rate_hz.
   void exploreSelectCallback();
-  void lookaheadPointCallback(const geometry_msgs::msg::PointStamped::SharedPtr msg);
   void mapCallback(const sensor_msgs::msg::PointCloud2::ConstPtr& pcl2ptr_map_ros,
                    const sensor_msgs::msg::PointCloud2::ConstPtr& pcl2ptr_unk_ros);
   void occupancyMapCallback(const sensor_msgs::msg::PointCloud2::ConstPtr& map_msg);
@@ -183,6 +186,7 @@ class MIGHTY_NODE : public rclcpp::Node {
   void publishVelocityInText(const Eigen::Vector3d& position, double velocity);
   // Frontier exploration visualization
   void publishFrontierMarkers();
+  void publishFrontierData();
   void publishExplorationCurrentGoal(const FrontierRecord& r);
   void publishVisitedMap();
 
@@ -244,6 +248,8 @@ class MIGHTY_NODE : public rclcpp::Node {
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_vel_text_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_traj_received_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_traj_transformed_;
+  // Corridor-hop yaw-target arrow at G (ground robot only).
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_corridor_yaw_target_;
 
   // Subscribers
   rclcpp::Subscription<dynus_interfaces::msg::DynTraj>::SharedPtr sub_traj_;
@@ -252,7 +258,6 @@ class MIGHTY_NODE : public rclcpp::Node {
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_terminal_goal_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_swarm_goal_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_fake_sim_occupancy_map_;
-  rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr sub_lookahead_point_;
 
   // Time synchronizer
   message_filters::Subscriber<sensor_msgs::msg::PointCloud2> occup_grid_sub_;
@@ -279,20 +284,50 @@ class MIGHTY_NODE : public rclcpp::Node {
   // along the seam where the sliding mapper window re-blanks revisited
   // areas to UNKNOWN. Owned and updated here, queried by frontier_detector_.
   std::unique_ptr<VisitedMap>       visited_map_;
+  // Most recent grid the detector ran on. Aliases occ_grid_2d_ when
+  // expl_detect_on_visited_map is false; otherwise it's a snapshot of the
+  // fused (own + peers) visited_map. The manager and goal-selection paths
+  // must read state from the same grid the detector saw, otherwise frontiers
+  // cleared by peers stay stuck ACTIVE because the local sliding window
+  // still shows UNKNOWN there.
+  std::shared_ptr<const OccGrid2D>  current_detect_grid_;
   bool     exploration_active_     = false;  // we issued the current goal
   bool     manual_goal_active_     = false;  // user issued the current goal
   uint64_t current_explore_id_     = 0;
   int      unreachable_consec_count_ = 0;
+  Eigen::Vector3d exploration_start_pos_{0.0, 0.0, 0.0};
+  bool exploration_start_captured_ = false;  // sticky for the whole exploration session
   rclcpp::TimerBase::SharedPtr timer_explore_select_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_frontiers_;
+  rclcpp::Publisher<dynus_interfaces::msg::FrontierList>::SharedPtr pub_frontier_data_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_explore_current_goal_;
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_visited_map_;
+  // MinPos peer tracking (multi-robot frontier allocation)
+  PeerTracker peer_tracker_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_peer_pose_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_peer_pose_;
+  double last_peer_pose_publish_t_ = 0.0;
+  // Visited map sharing (global topic, all agents pub+sub)
+  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_peer_visited_map_;
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr sub_peer_visited_map_;
+  double last_peer_visited_publish_t_ = 0.0;
+  // Global return-home trigger. A single Empty publish on /exploration/return_home
+  // makes every agent issue a goal back to its captured exploration_start_pos_
+  // and stop accepting new frontier goals (so it stays parked once arrived).
+  rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr sub_return_home_;
+  bool home_return_requested_ = false;
   // Wall-clock seconds of the last successful publishVisitedMap() call.
   // Used to throttle the (potentially large) tristate-grid publish to ~1 Hz
   // — RViz only needs occasional updates because the persistent map only
   // grows incrementally and `transient_local` QoS replays the latest snapshot
   // to late subscribers.
   double last_visited_publish_t_ = 0.0;
+
+  // Latched origin.z of the most recent occ_2d_topic message, so the
+  // visited_map we republish renders at the same ground plane as the live
+  // occupancy grid (global_mapper sets it to z_ground). std::nullopt until
+  // we've seen a real occ_2d — falls back to expl_default_goal_z then.
+  std::optional<double> occ2d_origin_z_;
 
   // Wall-clock seconds of the last visualization publish in replanCallback.
   // The replan loop runs at 100 Hz which is fine for control but floods RViz
