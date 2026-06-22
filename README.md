@@ -8,7 +8,7 @@ If you like this project, please consider starring ⭐ the repo!
 
 **Multi-Agent Trajectory Planning** — multiple aerial agents arranged on a circle swap to diametrically opposite positions, avoiding one another in real time:
 
-<video src="https://github.com/user-attachments/assets/b41a41bc-9b8c-4138-9732-aeba8a095275" width="100%" autoplay loop muted playsinline controls></video>
+<video src="https://github.com/user-attachments/assets/25ebadb2-050c-4762-81df-80c962d652d5" width="100%" autoplay loop muted playsinline controls></video>
 
 | **Trajectory** | **Forest** |
 | ------------------------- | ------------------------- |
