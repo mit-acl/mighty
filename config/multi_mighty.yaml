@@ -93,7 +93,7 @@ mighty_node:
 
         # --- Global Planner ---
         global_planner: "astar_heat"                    # ["sjps", "astar_heat"]
-        inflation_hgp: 0.0                             # [m] Static obstacle inflation for global A* planning
+        inflation_hgp: 0.3                             # [m] Static obstacle inflation for global A* planning
         hgp_timeout_duration_ms: 10000                  # [ms] Global planner timeout
         max_expand: 1000000                             # [-] Max A* node expansions
 
@@ -103,9 +103,9 @@ mighty_node:
         goal_seen_radius: 5.0                           # [m] Distance to stop replanning (too small makes planning very hard)
 
         # --- L-BFGS Optimization Weights ---
-        dynamic_weight: 1e+3                            # [-] Dynamic obstacle avoidance weight
+        dynamic_weight: 1e+4                            # [-] Dynamic obstacle avoidance weight
         time_weight: 1e+2                               # [-] Time cost weight
-        stat_weight: 1e+3                               # [-] Static obstacle weight
+        stat_weight: 1e+4                               # [-] Static obstacle weight
         jerk_weight: 1e-1                               # [-] Jerk smoothness weight
         dyn_constr_vel_weight: 1e+3                     # [-] Velocity constraint violation weight
         dyn_constr_acc_weight: 1e+3                     # [-] Acceleration constraint violation weight
@@ -159,7 +159,7 @@ mighty_node:
         relocate_occupied_goal: true                    # [-] If user goal lands in occupied voxel, relocate to nearest free/unknown cell + ||drone_bbox|| clearance
         global_planner_heuristic_weight: 2.0            # [-] A* heuristic weight (higher = greedier)
         heat_weight: 5.0                                # [-] Overall heat map weight in A* cost
-        max_dist_vertexes: 2.0                          # [m] Max distance between path vertices
+        max_dist_vertexes: 1.0                          # [m] Max distance between path vertices
         w_unknown: 0.0                                  # [-] Cost weight for unknown cells
         w_align: 0.0                                    # [-] Cost weight for alignment with initial velocity
         decay_len_cells: 100.0                          # [-] Decay length for alignment cost
