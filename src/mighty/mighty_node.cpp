@@ -1497,6 +1497,7 @@ void MIGHTY_NODE::stateCallback(const dynus_interfaces::msg::State::SharedPtr ms
     }
     RCLCPP_INFO(this->get_logger(), "State initialized");
     state_initialized_ = true;
+    state_init_time_ = this->now().seconds();
     timer_goal_->reset();
   }
 
@@ -3430,14 +3431,22 @@ void MIGHTY_NODE::exploreSelectCallback() {
   if (!exploration_start_captured_ && par_.expl_use_minpos) {
     const auto peers = peer_tracker_.getActivePeers(
         this->now().seconds(), par_.expl_peer_timeout_sec);
-    if (!peers.empty()) {
+    // Bound the guard in time: defer for up to kStartSettleSec after
+    // state init, then accept the current pose even at origin. Two rovers
+    // each parked at their own odom origin would otherwise defer forever
+    // (mutual deadlock -- the !peers.empty() solo fix does not help when
+    // the peer IS the other deadlocked rover).
+    constexpr double kStartSettleSec = 3.0;
+    const double settle_age = (state_init_time_ >= 0.0)
+        ? (this->now().seconds() - state_init_time_) : 0.0;
+    if (!peers.empty() && settle_age < kStartSettleSec) {
       const double dist_to_origin =
           std::sqrt(cur.pos.x() * cur.pos.x() + cur.pos.y() * cur.pos.y());
       if (dist_to_origin < 0.5) {
         RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
           "Exploration deferred: robot pose (%.3f, %.3f) within 0.5m of origin "
-          "with %zu peer(s) active — waiting for state to settle",
-          cur.pos.x(), cur.pos.y(), peers.size());
+          "with %zu peer(s) active, %.1f/%.1fs settle — waiting for state to settle",
+          cur.pos.x(), cur.pos.y(), peers.size(), settle_age, kStartSettleSec);
         return;
       }
     }

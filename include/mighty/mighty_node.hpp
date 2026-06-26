@@ -434,6 +434,7 @@ class MIGHTY_NODE : public rclcpp::Node {
 
   // Flags
   bool state_initialized_ = false;           // State initialized
+  double state_init_time_ = -1.0;             // wall-clock (s) when state_initialized_ flipped true; -1 = unset
   bool replan_timer_started_ = false;        // Replan timer started
   bool use_benchmark_ = false;               // Use benchmark
 
