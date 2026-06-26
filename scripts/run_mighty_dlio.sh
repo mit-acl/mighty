@@ -42,6 +42,10 @@ source "${WS}/install/setup.bash"
 # Only needed if you changed C++/Python source (NOT just YAML config) -- comment
 # out the two lines below for a config-only relaunch.
 #
+# Build from the workspace root so colcon discovers the --packages-select
+# packages and writes build/install/log into ${WS}, regardless of the
+# caller's CWD (makes this script safe to run from any directory).
+cd "${WS}"
 colcon build --packages-select \
     mighty mpc global_mapper global_mapper_ros direct_lidar_inertial_odometry \
     --cmake-args -DCMAKE_BUILD_TYPE=Release
