@@ -115,7 +115,9 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
         mapper_cmd = (
             f'ros2 launch global_mapper_ros global_mapper_node.launch.py'
             f' hardware:=true ground_robot:=true quad:={rover_name}'
-            f' depth_pointcloud_topic:=livox/lidar'
+            # NOTE: use the mapper DLIO's deskewed, odom-frame, scan-stamped
+            # cloud NOT the raw 'livox/lidar' (un-deskewed, lidar frame).
+            f' depth_pointcloud_topic:=dlio/odom_node/pointcloud/deskewed'
             f' pose_topic:=dlio/odom_node/pose'
             f' use_obstacle_tracker:=false'
         )

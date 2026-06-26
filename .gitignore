@@ -6,3 +6,8 @@ CLAUDE.md
 
 # Python cache
 __pycache__/
+
+# local tooling + editor backups
+.claude/
+*.bak
+*.bak.*

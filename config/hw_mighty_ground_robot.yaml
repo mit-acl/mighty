@@ -47,7 +47,7 @@ mighty_node:
         a_max: 1.0                                      # [m/s^2] Max acceleration
         j_max: 2.0                                     # [m/s^3] Max jerk
         w_max: 1.0                                      # [rad/s] Max yaw rate (~4.0 for hardware)
-        drone_bbox: [0.6, 0.6, 0.5]                     # [m] Vehicle bounding box
+        drone_bbox: [0.78, 0.78, 0.5]                     # [m] Vehicle bounding box
 
         # --- UAV-Specific Dynamics (not used for ground robot, but must be declared) ---
         omega_max: 0.10472                              # [rad/s] Max body rate (6 deg/s)
@@ -99,7 +99,7 @@ mighty_node:
         # --- L-BFGS Optimization Weights ---
         dynamic_weight: 1e+1                            # [-] Dynamic obstacle avoidance weight
         time_weight: 1e+3                               # [-] Time cost weight
-        stat_weight: 0.0                                # [-] Static obstacle weight
+        stat_weight: 1e+3                                # [-] Static obstacle weight
         jerk_weight: 1e+4                               # [-] Jerk smoothness weight
         dyn_constr_vel_weight: 1e+3                     # [-] Velocity constraint violation weight
         dyn_constr_acc_weight: 1e+3                     # [-] Acceleration constraint violation weight
@@ -334,7 +334,7 @@ mighty_node:
         exploration.detector.obstacle_clearance_cells: 1
         exploration.detector.min_obstacle_distance_m: 0.1
         exploration.detector.robot_snap_radius_m: 0.5
-        exploration.bounds.enabled: true
+        exploration.bounds.enabled: false
         exploration.bounds.min_x: -6.0
         exploration.bounds.max_x:  18.0
         exploration.bounds.min_y: -17.5
