@@ -94,8 +94,17 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
             f' two_d_only:={"true" if two_d_only else "false"}'
         )
     else:
+        # Pure DLIO (no mocap): DLIO only emits <ns>/odom -> <ns>/base_link, but
+        # the global mapper's global_frame is `map`, so it looks up <ns>/map ->
+        # <ns>/base_link and warns "<ns>/map ... does not exist". Without global
+        # localization map == odom, so publish an identity <ns>/map -> <ns>/odom
+        # static TF; the chain map -> odom -> base_link then resolves. (mocap mode
+        # supplies `map` via its own world -> <ns>/map static; this is the pure-DLIO
+        # equivalent.) Backgrounded so dlio.launch.py stays the pane's foreground.
         dlio_cmd = (
-            f'ros2 launch direct_lidar_inertial_odometry dlio.launch.py'
+            f'ros2 run tf2_ros static_transform_publisher'
+            f' --frame-id {rover_name}/map --child-frame-id {rover_name}/odom'
+            f' & ros2 launch direct_lidar_inertial_odometry dlio.launch.py'
             f' namespace:={rover_name}'
             f' two_d_only:={"true" if two_d_only else "false"}'
         )
