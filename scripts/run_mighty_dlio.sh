@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # =============================================================================
-# run_mighty_dlio.sh   (RR06)
+# run_mighty_dlio.sh   (rover-agnostic; identity from /etc/rover/rover.env)
 #
-# Bring up the MIGHTY hardware autonomy stack on RR06 using PURE DLIO odometry
+# Bring up the MIGHTY hardware autonomy stack on the host rover using PURE DLIO
 # (no mocap). Pure DLIO seeds at origin (0,0) and needs no mocap, unlike
-# dlio_in_mocap (the stock `mighty` alias), which needs /RR06/world publishing
+# dlio_in_mocap (the stock `mighty` alias), which needs /<ROVER_NAME>/world publishing
 # at startup to seed DLIO.
 #
 # Differences from the stock `mighty` alias:
 #   1. --odom-type dlio   -> pure DLIO. Seeds at origin; needs NO mocap.
-#   2. `colcon build` ENABLED -> rebuilds on each launch (rr06 runs from source).
+#   2. `colcon build` ENABLED -> rebuilds on each launch (rovers run from source).
 #                                Comment it out below for a config-only relaunch.
 #
 # The launcher (run_hw_red_rover.py) internally does:
@@ -21,24 +21,36 @@
 
 WS=/home/swarm/code/mighty_ws
 
-# --- ROS 2 / Zenoh environment (RR06) ----------------------------------------
-# In an interactive `swarm` login shell these are already exported by ~/.bashrc.
-# Repeated here so the script ALSO works non-interactively (ssh "bash ...", cron),
-# where ~/.bashrc is NOT sourced.
-export VEHTYPE=RR
-export VEHNUM=06
-export ROVER_NAME="${VEHTYPE}${VEHNUM}"            # -> RR06
-export ROS_DOMAIN_ID=22                            # RR06 on domain 22
+# --- Rover identity + ROS 2 / Zenoh environment ------------------------------
+# Derive rover identity (VEHTYPE/VEHNUM/ROVER_NAME/ROS_DOMAIN_ID) from the host's
+# single source of truth, /etc/rover/rover.env, so this one committed script runs
+# correctly on ANY rover (RR06, RR08, ...) with NO per-rover edits. In an
+# interactive `swarm` login shell ~/.bashrc already exports these; sourcing
+# rover.env here makes the script ALSO correct non-interactively (ssh "bash ...",
+# cron), where ~/.bashrc is NOT sourced.
+ROVER_ENV=/etc/rover/rover.env
+if [[ -r "${ROVER_ENV}" ]]; then
+    set -a; source "${ROVER_ENV}"; set +a            # export VEHTYPE/VEHNUM/ROBOT_NAME/...
+else
+    echo "WARNING: ${ROVER_ENV} not found; relying on pre-exported VEHTYPE/VEHNUM" >&2
+fi
+export VEHTYPE="${VEHTYPE:?set VEHTYPE or provide /etc/rover/rover.env}"
+export VEHNUM="${VEHNUM:?set VEHNUM or provide /etc/rover/rover.env}"
+export ROVER_NAME="${ROBOT_NAME:-${VEHTYPE}${VEHNUM}}"   # e.g. RR08 (authoritative: ROBOT_NAME)
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-22}"
 export RMW_IMPLEMENTATION=rmw_zenoh_cpp
+# Script-specific override: this stack uses the ISOLATED zenoh router config, NOT
+# the rovlink config that rover.env points ZENOH_ROUTER_CONFIG_URI at. Set AFTER
+# sourcing rover.env so it wins.
 export ZENOH_ROUTER_CONFIG_URI=/home/swarm/config/zenoh_config_isolated.json
-# tmuxp is system-installed at /usr/bin on RR06 (already on PATH).
+# tmuxp is system-installed at /usr/bin (already on PATH).
 
 # --- Source ROS 2 + the mighty workspace overlay -----------------------------
 source /opt/ros/humble/setup.bash
 source "${WS}/install/setup.bash"
 
 # --- Rebuild (ENABLED) -------------------------------------------------------
-# rr06 rebuilds on each launch (matches the stock `mighty` alias' build step).
+# Rovers rebuild on each launch (matches the stock `mighty` alias' build step).
 # Only needed if you changed C++/Python source (NOT just YAML config) -- comment
 # out the two lines below for a config-only relaunch.
 #
@@ -64,7 +76,7 @@ python3 src/mighty/scripts/run_hw_red_rover.py --odom-type dlio --two-d-only
 #   tmux attach -t hw_mighty            (Ctrl-b d to detach)
 # -----------------------------------------------------------------------------
 #
-# CONFIG STATE (RR06, as of 2026-06-26):
+# CONFIG STATE (as of 2026-06-26; values apply to RR06 & RR08):
 #   * Frontier exploration is ON: hw_mighty_ground_robot.yaml exploration.enabled=true
 #     -> auto-explore mode. Set exploration.enabled=false for manual-goal only.
 #   * Geofence is OFF: exploration.bounds.enabled=false (src + install copies).
