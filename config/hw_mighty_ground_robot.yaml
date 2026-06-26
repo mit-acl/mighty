@@ -331,8 +331,8 @@ mighty_node:
         exploration.default_goal_z: 0.0
         exploration.detector.cluster_min_cells: 10
         exploration.detector.border_margin_cells: 1
-        exploration.detector.obstacle_clearance_cells: 1
-        exploration.detector.min_obstacle_distance_m: 0.1
+        exploration.detector.obstacle_clearance_cells: 2
+        exploration.detector.min_obstacle_distance_m: 0.45
         exploration.detector.robot_snap_radius_m: 0.5
         exploration.bounds.enabled: false
         exploration.bounds.min_x: -6.0
