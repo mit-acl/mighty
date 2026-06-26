@@ -39,10 +39,11 @@ export VEHNUM="${VEHNUM:?set VEHNUM or provide /etc/rover/rover.env}"
 export ROVER_NAME="${ROBOT_NAME:-${VEHTYPE}${VEHNUM}}"   # e.g. RR08 (authoritative: ROBOT_NAME)
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-22}"
 export RMW_IMPLEMENTATION=rmw_zenoh_cpp
-# Script-specific override: this stack uses the ISOLATED zenoh router config, NOT
-# the rovlink config that rover.env points ZENOH_ROUTER_CONFIG_URI at. Set AFTER
-# sourcing rover.env so it wins.
-export ZENOH_ROUTER_CONFIG_URI=/home/swarm/config/zenoh_config_isolated.json
+# NOTE: this stack launches NO zenoh router. The single rmw_zenohd router daemon
+# (on :7447) is owned by the boot-time rover-drive.service; mighty's nodes are
+# zenoh sessions that attach to it. So ZENOH_ROUTER_CONFIG_URI is intentionally
+# NOT set here -- it would only configure a router we never start, and cannot
+# reconfigure the already-running one. Per-node tuning lives in zenoh_session.json5.
 # tmuxp is system-installed at /usr/bin (already on PATH).
 
 # --- Source ROS 2 + the mighty workspace overlay -----------------------------
