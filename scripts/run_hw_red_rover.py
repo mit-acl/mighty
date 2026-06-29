@@ -216,11 +216,25 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
         # },
     ]
 
+    # Label each pane on its tmux border (enabled via the window 'options' below).
+    # Order MUST match the `panes` list above; the OSC-2 escape sets pane_title and
+    # the ros2 nodes don't overwrite it. In mocap mode pane 2 is static TFs, not DLIO.
+    pane_titles = [
+        'onboard_mighty', 'livox', 'dlio', 'repub_goal',
+        'tf_lidar_tilt', 'tf_odom_map', 'global_mapper',
+    ]
+    for pane, title in zip(panes, pane_titles):
+        pane['shell_command'].insert(0, r'printf "\033]2;%s\033\\"' % title)
+
     yaml_content = {
         'session_name': 'hw_mighty',
         'windows': [{
             'window_name': 'main',
             'layout': 'tiled',
+            'options': {
+                'pane-border-status': 'top',
+                'pane-border-format': ' #P  #{pane_title} ',
+            },
             'shell_command_before': [
                 f'source /opt/ros/humble/setup.bash',
             ],
