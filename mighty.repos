@@ -2,8 +2,12 @@ repositories:
   # ROS 2 dependencies (build with colcon in mighty_ws)
   acl-mapping:
     type: git
-    url: https://gitlab.com/mit-acl/lab/acl-mapping.git
-    version: 0d3875daf29d163a35c19d356c4652a749ed501d
+    url: git@gitlab.com:mit-acl/lab/acl-mapping.git
+    version: 00502bd0224794bb019cc486437227d8f548cc0f
+  direct_lidar_inertial_odometry:
+    type: git
+    url: https://github.com/kotakondo/direct_lidar_inertial_odometry.git
+    version: 2f304f6ed5e5807d843b5ccd505d8fee634eefdb
   dynus_interfaces:
     type: git
     url: https://github.com/kotakondo/dynus_interfaces.git
@@ -15,7 +19,11 @@ repositories:
   livox_laser_simulation_ros2:
     type: git
     url: https://github.com/kotakondo/livox_laser_simulation_ros2.git
-    version: 2f0024c1aebae0ad5d54e70672af824e8fd37dba
+    version: 044e83e6fc5d527b082852550d7206dd4308d950
+  mpc:
+    type: git
+    url: git@gitlab.com:mit-acl/ugv/ugv_control/mpc.git
+    version: 193c36bf7d78e7e10e493f9db38c31c6d84122b4
   realsense_gazebo_plugin:
     type: git
     url: https://github.com/kotakondo/realsense_gazebo_plugin.git
@@ -23,7 +31,7 @@ repositories:
   uav_simulator:
     type: git
     url: https://github.com/kotakondo/uav_simulator.git
-    version: d4e953b716789bbb2a687eb4a49fe85d58bc03bc
+    version: b196208d3cbf0269b8e80220f7cc1cc992b6c7f8
 
   # Decomp (built in decomp_ws — decomp_util first, then the rest)
   DecompROS2:
