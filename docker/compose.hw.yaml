@@ -1,0 +1,56 @@
+# hw-mighty — the MIGHTY hardware autonomy stack in ONE container, with the
+# same attachable tmux 'hw_mighty' session running inside it. Sibling of the
+# rover-drive container and follows its conventions exactly (see rfc0001
+# rover_bringup/docker/compose.yaml).
+#
+#   attach:   docker exec -it hw-mighty tmux attach -t hw_mighty
+#             (Ctrl-C / Up / Enter in a pane restarts just that node; Ctrl-b d detaches)
+#   build:    docker compose -f compose.hw.yaml build      (or: make hw-build)
+#   up/down:  ./mighty_hw.sh start | stop                  (manual — no systemd unit)
+#
+# The zenoh router is NOT ours: rover-drive owns rmw_zenohd on :7447; mighty's
+# nodes are zenoh sessions that attach to it via network_mode: host. The Livox
+# MID360 (UDP, host 192.168.1.100) also rides on host networking — no devices.
+name: hw-mighty
+services:
+  hw-mighty:
+    # Build context = /home/swarm/code (4 levels up from this docker/ dir), so
+    # the image bakes the HOST checkouts of mighty_ws / decomp_ws / livox_ws /
+    # Livox-SDK2 at their host paths (rover-drive pattern). What ships is
+    # filtered by Dockerfile.hw.dockerignore.
+    build:
+      context: ../../../..
+      dockerfile: mighty_ws/src/mighty/docker/Dockerfile.hw
+    image: mighty-hw:local            # retagged for registry push by `make hw-push`
+    container_name: hw-mighty
+    network_mode: host
+    env_file: /etc/rover/rover.env    # VEHTYPE/VEHNUM/ROBOT_NAME/ROS_DOMAIN_ID/RMW
+    init: true
+    stop_grace_period: 15s
+    restart: "no"                     # manual stack; a dead pane stays dead (native semantics)
+    # NO tty: a detached container's unattached pty reports width 0 and newer
+    # libtmux fails with "new-session: width too small" — COLUMNS/LINES are
+    # pinned in the command instead (rover-drive gotcha).
+    environment:
+      ODOM_TYPE: ${ODOM_TYPE:-dlio}   # dlio | mocap | dlio_in_mocap
+      TWO_D_ONLY: ${TWO_D_ONLY-1}     # non-empty => --two-d-only (export TWO_D_ONLY= to disable)
+    volumes:
+      - /etc/rover:/etc/rover:ro      # config only — sources are baked in the image
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        # run_hw_red_rover.py reads ROVER_NAME; rover.env provides ROBOT_NAME.
+        export ROVER_NAME="$${ROVER_NAME:-$${ROBOT_NAME:-$${VEHTYPE}$${VEHNUM}}}"
+        # rover.env's router config URI belongs to rover-drive's rmw_zenohd, not us.
+        unset ZENOH_ROUTER_CONFIG_URI
+        # Detached-pty sizing (see the NO-tty note above); an attaching client
+        # resizes the session to its own terminal anyway.
+        export COLUMNS="$${COLUMNS:-220}" LINES="$${LINES:-56}"
+        cd /home/swarm/code/mighty_ws
+        python3 src/mighty/scripts/run_hw_red_rover.py \
+          --odom-type "$${ODOM_TYPE:-dlio}" $${TWO_D_ONLY:+--two-d-only}
+        echo "hw_mighty session loaded; holding foreground (attach: docker exec -it hw-mighty tmux attach -t hw_mighty)"
+        while tmux has-session -t hw_mighty 2>/dev/null; do sleep 5; done
+        echo "hw_mighty session ended; exiting."

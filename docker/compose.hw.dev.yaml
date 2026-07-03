@@ -1,0 +1,46 @@
+# Fast-iteration override (mirrors rover-drive's compose.dev.yaml): mount the
+# HOST mighty + mpc sources read-only over the baked copies and colcon-build
+# INSIDE the container before launching. install/ and build/ live in named
+# volumes — install/ is pre-seeded from the image on first use, so only the
+# selected packages rebuild (incremental thereafter via the build/ volume) and
+# host binaries are never mixed in.
+#
+#   ./mighty_hw.sh start --dev
+#   (or: docker compose -f compose.hw.yaml -f compose.hw.dev.yaml up -d)
+#
+# Scope: only src/mighty and src/mpc are mounted. Edits to other packages
+# (acl-mapping, dlio, livox, decomp) need an image rebuild — cheap, since only
+# the affected COPY layer onward re-runs (make hw-build).
+#
+# z_ground caveat (same as the native rebuild-on-launch flow): the build copies
+# src-side configs over install — keep src YAML values authoritative.
+services:
+  hw-mighty:
+    volumes:
+      - /etc/rover:/etc/rover:ro
+      - ..:/home/swarm/code/mighty_ws/src/mighty:ro          # .. from docker/ == the mighty repo root
+      - ../../mpc:/home/swarm/code/mighty_ws/src/mpc:ro      # ../.. == mighty_ws/src
+      - hw-mighty-install:/home/swarm/code/mighty_ws/install
+      - hw-mighty-build:/home/swarm/code/mighty_ws/build
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        export ROVER_NAME="$${ROVER_NAME:-$${ROBOT_NAME:-$${VEHTYPE}$${VEHNUM}}}"
+        unset ZENOH_ROUTER_CONFIG_URI
+        export COLUMNS="$${COLUMNS:-220}" LINES="$${LINES:-56}"
+        source /opt/ros/humble/setup.bash
+        source /home/swarm/code/decomp_ws/install/setup.bash
+        cd /home/swarm/code/mighty_ws
+        source install/setup.bash
+        colcon build --packages-select mighty mpc \
+          --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_SIMULATION=OFF
+        python3 src/mighty/scripts/run_hw_red_rover.py \
+          --odom-type "$${ODOM_TYPE:-dlio}" $${TWO_D_ONLY:+--two-d-only}
+        echo "hw_mighty session loaded (dev); holding foreground"
+        while tmux has-session -t hw_mighty 2>/dev/null; do sleep 5; done
+        echo "hw_mighty session ended; exiting."
+volumes:
+  hw-mighty-install:
+  hw-mighty-build:

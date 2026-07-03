@@ -162,3 +162,33 @@ shell:
 				--rm \
 				--entrypoint /bin/bash \
 				mighty
+
+
+# ---------------------------------------------------------------------------
+# Hardware (rover) image: mighty-hw — see README.hw.md. The targets above are
+# the SIM image and are untouched.
+# ---------------------------------------------------------------------------
+HW_COMPOSE        = docker compose -f compose.hw.yaml
+HW_IMAGE          = mighty-hw:local
+HW_REGISTRY_IMAGE ?= ghcr.io/mit-acl/mighty-hw
+HW_TAG            ?= $(shell date +%Y%m%d)
+
+.PHONY: hw-build hw-push hw-up hw-down hw-attach hw-status
+hw-build:
+	$(HW_COMPOSE) build
+
+hw-push: hw-build
+	docker tag $(HW_IMAGE) $(HW_REGISTRY_IMAGE):$(HW_TAG)
+	docker push $(HW_REGISTRY_IMAGE):$(HW_TAG)
+
+hw-up:
+	$(HW_COMPOSE) up -d
+
+hw-down:
+	$(HW_COMPOSE) down
+
+hw-attach:
+	docker exec -it hw-mighty tmux attach -t hw_mighty
+
+hw-status:
+	./mighty_hw.sh status
