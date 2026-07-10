@@ -274,6 +274,69 @@ TEST(FrontierDetectorTest, FreeIslandDisconnectedFromUnknownYieldsNothing) {
   EXPECT_EQ(out.size(), 0u);
 }
 
+// ---- isStillFrontier: record re-validation against the current grid --------
+
+TEST(FrontierDetectorTest, IsStillFrontierTrueOnLiveFrontier) {
+  // Left 5 cols FREE, right 5 UNKNOWN -> a 10-cell frontier seam at ix=4.
+  std::vector<int8_t> data(100);
+  for (int iy = 0; iy < 10; ++iy)
+    for (int ix = 0; ix < 10; ++ix)
+      data[iy * 10 + ix] = (ix < 5) ? F : U;
+  auto grid = MakeGrid(10, 10, data);
+  auto det = MakeDetector();
+
+  double wx, wy;
+  grid->gridToWorld(4, 5, wx, wy);  // right on the seam
+  EXPECT_TRUE(det.isStillFrontier(*grid, Eigen::Vector2d(wx, wy),
+                                  /*min_cells=*/5, /*search_radius_cells=*/2));
+}
+
+TEST(FrontierDetectorTest, IsStillFrontierFalseAfterAreaExplored) {
+  // The former seam location is now fully observed FREE -> no frontier here,
+  // even though it is a known/free cell (the exact phantom we want to retire).
+  const std::vector<int8_t> data(100, F);
+  auto grid = MakeGrid(10, 10, data);
+  auto det = MakeDetector();
+
+  double wx, wy;
+  grid->gridToWorld(4, 5, wx, wy);
+  EXPECT_FALSE(det.isStillFrontier(*grid, Eigen::Vector2d(wx, wy),
+                                   /*min_cells=*/5, /*search_radius_cells=*/2));
+}
+
+TEST(FrontierDetectorTest, IsStillFrontierFalseForSubThresholdRemnant) {
+  // A lone UNKNOWN speck leaves an 8-cell frontier ring around it. With
+  // min_cells=15 that is below threshold, so the record must be retired -- this
+  // is the detector/manager asymmetry the reconcile pass exists to close.
+  std::vector<int8_t> data(100, F);
+  data[5 * 10 + 5] = U;  // single unexplored speck (e.g. an occlusion shadow)
+  auto grid = MakeGrid(10, 10, data);
+  auto det = MakeDetector();
+
+  double wx, wy;
+  grid->gridToWorld(4, 5, wx, wy);
+  EXPECT_FALSE(det.isStillFrontier(*grid, Eigen::Vector2d(wx, wy),
+                                   /*min_cells=*/15, /*search_radius_cells=*/2));
+}
+
+TEST(FrontierDetectorTest, IsStillFrontierToleratesCentroidDrift) {
+  // Live seam at ix=4, but query a centroid nudged 2 cells into free space
+  // (EMA drift). A radius-1 search can't reach the seam; radius-2 can.
+  std::vector<int8_t> data(100);
+  for (int iy = 0; iy < 10; ++iy)
+    for (int ix = 0; ix < 10; ++ix)
+      data[iy * 10 + ix] = (ix < 5) ? F : U;
+  auto grid = MakeGrid(10, 10, data);
+  auto det = MakeDetector();
+
+  double wx, wy;
+  grid->gridToWorld(2, 5, wx, wy);  // 2 cells left of the seam
+  EXPECT_FALSE(det.isStillFrontier(*grid, Eigen::Vector2d(wx, wy),
+                                   /*min_cells=*/5, /*search_radius_cells=*/1));
+  EXPECT_TRUE(det.isStillFrontier(*grid, Eigen::Vector2d(wx, wy),
+                                  /*min_cells=*/5, /*search_radius_cells=*/2));
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

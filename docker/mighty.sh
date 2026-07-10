@@ -40,6 +40,7 @@ GOAL_Y="${GOAL_Y:-0.0}"
 GOAL_Z="${GOAL_Z:-3.0}"
 NUM_AGENTS="${NUM_AGENTS:-10}"
 ENV="${ENV:-hard_forest}"
+GROUND_ROBOT="${GROUND_ROBOT:-false}"
 
 # Build arguments
 ARGS="--mode $MODE -s /home/kkondo/code/mighty_ws/install/setup.bash"
@@ -51,8 +52,16 @@ fi
 
 if [ "$MODE" = "gazebo" ]; then
     ARGS="$ARGS --goal $GOAL_X $GOAL_Y $GOAL_Z --env $ENV"
+    # Single-agent ground robot (Pioneer 3-AT) instead of the UAV
+    if [ "$GROUND_ROBOT" = "true" ]; then
+        ARGS="$ARGS --ground-robot"
+    fi
 elif [ "$MODE" = "interactive" ]; then
     : # interactive mode needs no extra args
+elif [ "$MODE" = "exploration-singleagent-ground" ]; then
+    # Single-agent ground robot autonomous frontier exploration.
+    # run_sim.py maps the default env (hard_forest) to ACL_office for this mode.
+    ARGS="$ARGS --env $ENV"
 else
     ARGS="$ARGS --num-agents $NUM_AGENTS"
 fi

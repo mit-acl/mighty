@@ -136,7 +136,7 @@ def generate_multiagent_positions(num_agents: int, radius: float = 10.0, z: floa
     return agents
 
 
-def generate_multiagent_yaml(setup_bash: Path, agents: list, sim_env: str, ros_domain_id: int = 20, radius: float = 10.0, no_goal: bool = False, rviz_config: Path = None, use_ground_robot: bool = False, agent_prefix: str = 'NX', config_file: Path = None) -> str:
+def generate_multiagent_yaml(setup_bash: Path, agents: list, sim_env: str, ros_domain_id: int = 30, radius: float = 10.0, no_goal: bool = False, rviz_config: Path = None, use_ground_robot: bool = False, agent_prefix: str = 'NX', config_file: Path = None) -> str:
     """Generate YAML for multi-agent fake simulation."""
     panes = []
 
@@ -192,7 +192,7 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRA
     return yaml.dump(yaml_content, default_flow_style=False, sort_keys=False)
 
 
-def generate_interactive_yaml(setup_bash: Path, ros_domain_id: int = 20, rviz_config: Path = None) -> str:
+def generate_interactive_yaml(setup_bash: Path, ros_domain_id: int = 30, rviz_config: Path = None) -> str:
     """Generate YAML for single-agent interactive simulation (click goals in RViz)."""
     sim_cmd = 'ros2 launch mighty simulator.launch.py'
     if rviz_config:
@@ -234,7 +234,7 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRA
 
 
 def generate_multiagent_ground_yaml(setup_bash: Path, agents: list, radius: float,
-                                    ros_domain_id: int = 20) -> str:
+                                    ros_domain_id: int = 30) -> str:
     """Generate YAML for multi-agent ground robot simulation in Gazebo with MPC."""
     panes = []
 
@@ -311,7 +311,7 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRA
 
 
 def generate_exploration_multiagent_ground_yaml(
-        setup_bash: Path, agents: list, ros_domain_id: int = 20,
+        setup_bash: Path, agents: list, ros_domain_id: int = 30,
         rviz_config: Path = None, sim_env: str = 'fake_sim',
         env: str = 'ACL_office', use_vlm: bool = False,
         use_follow: bool = False) -> str:
@@ -429,7 +429,7 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRA
 
 def generate_swap_multiagent_ground_yaml(
         setup_bash: Path, agents: list, radius: float, angle_offset: float,
-        ros_domain_id: int = 20, env: str = 'ACL_office') -> str:
+        ros_domain_id: int = 30, env: str = 'ACL_office') -> str:
     """Generate YAML for multi-agent ground robot position swapping in Gazebo.
 
     Each agent swaps with its diametrically opposite peer on a circle.
@@ -824,8 +824,8 @@ def main():
     parser.add_argument(
         '--ros-domain-id',
         type=int,
-        default=20,
-        help='ROS_DOMAIN_ID (default: 20)'
+        default=30,
+        help='ROS_DOMAIN_ID (default: 30)'
     )
 
     parser.add_argument(

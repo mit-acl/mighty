@@ -73,8 +73,31 @@ class FrontierDetector {
       const Eigen::Vector2d& robot_xy,
       const VisitedMap* visited_map = nullptr) const;
 
+  /** @brief Re-validate a persistent frontier record against the current grid.
+   *  Returns true iff `world_xy` lies on — or within `search_radius_cells` of —
+   *  a connected frontier-cell component of at least `min_cells` cells, using
+   *  the SAME per-cell definition as detect(). The search radius absorbs the
+   *  EMA drift of a record's centroid so a frontier that merely shifted a little
+   *  is not falsely retired.
+   *
+   *  Lets the frontier manager retire records whose unknown area has since been
+   *  explored (or shrank below the detection threshold, or is a permanently
+   *  occluded speck) so they stop lingering as phantom frontiers on known cells.
+   *  Walk early-exits once `min_cells` is reached, so cost is O(min_cells).
+   */
+  bool isStillFrontier(const OccGrid2D& grid, const Eigen::Vector2d& world_xy,
+                       int min_cells, int search_radius_cells,
+                       const VisitedMap* visited_map = nullptr) const;
+
   const FrontierDetectorParams& params() const { return params_; }
 
  private:
+  // Shared per-cell frontier predicate: a known-FREE cell (off the border ring)
+  // with at least one in-bounds, not-yet-visited UNKNOWN neighbor, that is not
+  // hugging an obstacle and lies inside the optional exploration bounds. Single
+  // source of truth for both detect() seed-tagging and isStillFrontier().
+  bool isFrontierCell(const OccGrid2D& grid, int cx, int cy,
+                      const VisitedMap* visited_map) const;
+
   FrontierDetectorParams params_;
 };

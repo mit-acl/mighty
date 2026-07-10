@@ -5,7 +5,7 @@ windows:
     shell_command_before:
     - source /home/kkondo/code/mighty_ws/install/setup.bash
     - source /home/kkondo/code/decomp_ws/install/setup.bash
-    - export ROS_DOMAIN_ID=20
+    - export ROS_DOMAIN_ID=30
     panes:
       # base station
       - shell_command:

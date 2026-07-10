@@ -355,6 +355,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
       mp.pursuit_timeout_factor  = par_.expl_pursuit_timeout_factor;
       mp.pursuit_timeout_v_ref   = par_.expl_pursuit_timeout_v_ref;
       mp.pursuit_timeout_min_sec = par_.expl_pursuit_timeout_min_sec;
+      mp.pursuit_timeout_max_strikes = par_.expl_pursuit_timeout_max_strikes;
       mp.invalidation_keep_out_radius_m = par_.expl_invalidation_keep_out_radius_m;
       mp.invalidation_cooldown_sec      = par_.expl_invalidation_cooldown_sec;
       mp.peer_visit_radius_m            = par_.expl_peer_visit_radius_m;
@@ -745,10 +746,13 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.enabled", false);
   this->declare_parameter("exploration.select_rate_hz", 1.0);
   this->declare_parameter("exploration.default_goal_z", 0.0);
+  this->declare_parameter("exploration.select_nearest", false);
+  this->declare_parameter("exploration.select_commit_margin_m", 0.5);
   this->declare_parameter("exploration.detector.cluster_min_cells", 6);
   this->declare_parameter("exploration.detector.border_margin_cells", 2);
   this->declare_parameter("exploration.detector.obstacle_clearance_cells", 1);
   this->declare_parameter("exploration.detector.robot_snap_radius_m", 1.0);
+  this->declare_parameter("exploration.detector.reconcile_stale", true);
   this->declare_parameter("exploration.bounds.enabled", false);
   this->declare_parameter("exploration.bounds.min_x", -50.0);
   this->declare_parameter("exploration.bounds.max_x",  50.0);
@@ -774,6 +778,7 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.manager.pursuit_timeout_factor", 10.0);
   this->declare_parameter("exploration.manager.pursuit_timeout_v_ref", 0.5);
   this->declare_parameter("exploration.manager.pursuit_timeout_min_sec", 10.0);
+  this->declare_parameter("exploration.manager.pursuit_timeout_max_strikes", 3);
   this->declare_parameter("exploration.manager.invalidation_keep_out_radius_m", 1.5);
   this->declare_parameter("exploration.manager.invalidation_cooldown_sec", 30.0);
   this->declare_parameter("exploration.visited_map.center_x", 0.0);
@@ -1105,11 +1110,14 @@ void MIGHTY_NODE::setParameters() {
   par_.expl_enabled              = this->get_parameter("exploration.enabled").as_bool();
   par_.expl_select_rate_hz       = this->get_parameter("exploration.select_rate_hz").as_double();
   par_.expl_default_goal_z       = this->get_parameter("exploration.default_goal_z").as_double();
+  par_.expl_select_nearest       = this->get_parameter("exploration.select_nearest").as_bool();
+  par_.expl_select_commit_margin_m = this->get_parameter("exploration.select_commit_margin_m").as_double();
   par_.expl_cluster_min_cells    = this->get_parameter("exploration.detector.cluster_min_cells").as_int();
   par_.expl_border_margin_cells  = this->get_parameter("exploration.detector.border_margin_cells").as_int();
   par_.expl_obstacle_clearance_cells =
       this->get_parameter("exploration.detector.obstacle_clearance_cells").as_int();
   par_.expl_robot_snap_radius_m  = this->get_parameter("exploration.detector.robot_snap_radius_m").as_double();
+  par_.expl_reconcile_stale      = this->get_parameter("exploration.detector.reconcile_stale").as_bool();
   par_.expl_bounds_enabled       = this->get_parameter("exploration.bounds.enabled").as_bool();
   par_.expl_bounds_min_x         = this->get_parameter("exploration.bounds.min_x").as_double();
   par_.expl_bounds_max_x         = this->get_parameter("exploration.bounds.max_x").as_double();
@@ -1140,6 +1148,8 @@ void MIGHTY_NODE::setParameters() {
       this->get_parameter("exploration.manager.pursuit_timeout_v_ref").as_double();
   par_.expl_pursuit_timeout_min_sec =
       this->get_parameter("exploration.manager.pursuit_timeout_min_sec").as_double();
+  par_.expl_pursuit_timeout_max_strikes =
+      this->get_parameter("exploration.manager.pursuit_timeout_max_strikes").as_int();
   par_.expl_invalidation_keep_out_radius_m =
       this->get_parameter("exploration.manager.invalidation_keep_out_radius_m").as_double();
   par_.expl_invalidation_cooldown_sec =
@@ -3323,6 +3333,35 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
       }
     }
 
+    // Re-validate persistent records against the detector's own frontier
+    // definition. update()'s Step-d keeps a record ACTIVE as long as a single
+    // UNKNOWN cell sits within verify_radius_cells of its centroid, which
+    // disagrees with the detector's cluster_min_cells threshold and leaves
+    // phantom frontiers on cells that were a border earlier but got explored
+    // (sub-threshold remnants, or permanently-occluded specks that never
+    // clear). Ask the detector "is this still a frontier here?" and retire
+    // (VISITED) any ACTIVE/DORMANT record whose location no longer qualifies.
+    // Uses the same grid + visited filter detection just ran on, so it is
+    // exactly consistent with what the detector would (not) emit.
+    if (par_.expl_reconcile_stale && frontier_detector_) {
+      const int min_cells = frontier_detector_->params().cluster_min_cells;
+      const double res = detect_grid.resolution();
+      // Search out to the manager's merge radius: anything within matching
+      // distance of a live frontier is "the same" frontier, so only records
+      // with no qualifying frontier within that radius are retired.
+      const int search_cells = std::max(1, static_cast<int>(std::ceil(
+          frontier_manager_->params().merge_radius_m / std::max(1e-6, res))));
+      for (const auto& r : frontier_manager_->records()) {
+        if (r.state != FrontierState::ACTIVE &&
+            r.state != FrontierState::DORMANT) continue;
+        if (!frontier_detector_->isStillFrontier(
+                detect_grid, r.centroid_xy, min_cells, search_cells,
+                visited_filter)) {
+          frontier_manager_->markVisited(r.id);
+        }
+      }
+    }
+
     // Publish the persistent occupancy map ~1 Hz so RViz can layer it behind
     // the sliding occ_2d. Throttling matters because each publish copies the
     // full persistent buffer (~444 KB at the 100×100 m default; bigger if the
@@ -3444,7 +3483,28 @@ void MIGHTY_NODE::exploreSelectCallback() {
   }
 
   std::optional<FrontierRecord> next;
-  if (par_.expl_use_minpos) {
+  if (par_.expl_select_nearest) {
+    // Strict "always go to the closest frontier" policy (utility-independent).
+    // Commitment: keep pursuing the current frontier while it stays selectable
+    // unless a different one is closer by more than select_commit_margin_m.
+    // Without this, two near-equidistant frontiers make the robot flip-flop,
+    // which reads as "not going to the closest one".
+    next = frontier_manager_->selectNearest(robot_pose);
+    if (next && exploration_active_) {
+      const FrontierRecord* cur = frontier_manager_->find(current_explore_id_);
+      if (cur && (cur->state == FrontierState::ACTIVE ||
+                  cur->state == FrontierState::DORMANT)) {
+        const Eigen::Vector2d rxy = robot_pose.head<2>();
+        const double d_cur  = (rxy - cur->centroid_xy).norm();
+        const double d_near = (rxy - next->centroid_xy).norm();
+        if (d_cur <= d_near + par_.expl_select_commit_margin_m) {
+          FrontierRecord keep = *cur;
+          keep.cached_utility = -d_cur;
+          next = keep;  // stick with the current goal
+        }
+      }
+    }
+  } else if (par_.expl_use_minpos) {
     auto peers = peer_tracker_.getActivePeers(
         this->now().seconds(), par_.expl_peer_timeout_sec);
     next = frontier_manager_->selectNextGoalMinPos(

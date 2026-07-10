@@ -320,7 +320,7 @@ if ! grep -q "MIGHTY Setup" ~/.bashrc; then
     echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
     echo "" >> ~/.bashrc
     echo "# ROS 2 RTPS network" >> ~/.bashrc
-    echo "export ROS_DOMAIN_ID=20" >> ~/.bashrc
+    echo "export ROS_DOMAIN_ID=30" >> ~/.bashrc
     echo "" >> ~/.bashrc
     echo "# Livox library path" >> ~/.bashrc
     echo "export LD_LIBRARY_PATH=$LIVOX_WS/install/livox_ros_driver2/lib:\$LD_LIBRARY_PATH:/usr/local/lib:/usr/local/include" >> ~/.bashrc

@@ -104,6 +104,43 @@ run-gazebo:
 				-e ENV=$(or $(ENV),hard_forest) \
 				--rm mighty
 
+# Run single-agent ground robot (Pioneer 3-AT) autonomous frontier exploration
+# in the ACL_office world. The robot self-drives — no goal needed.
+# Usage: make run-ground-exploration [ENV=ACL_office] [DEV=1]
+run-ground-exploration:
+	$(XHOST_CMD) && docker run $(PLATFORM_FLAG) -it \
+				$(GPU_FLAGS) \
+				--privileged \
+				$(DISPLAY_ENV) \
+				$(NETWORK_FLAG) \
+				--env="QT_X11_NO_MITSHM=1" \
+				$(DEV_MOUNTS) \
+				-e MODE=exploration-singleagent-ground \
+				-e ENV=$(or $(ENV),ACL_office) \
+				--rm mighty
+
+# Run single-agent ground robot (Pioneer 3-AT) in a forest world.
+# NOTE: config/mighty_ground_robot.yaml ships with exploration.enabled:true, so
+# out of the box the robot autonomously explores rather than driving to GOAL_*.
+# To navigate to a fixed goal, set exploration.enabled:false in that config
+# (use DEV=1 to edit it live without rebuilding), then pass GOAL_X/GOAL_Y/GOAL_Z.
+# Usage: make run-ground-robot [GOAL_X=30 GOAL_Y=0 GOAL_Z=0] [ENV=easy_forest] [DEV=1]
+run-ground-robot:
+	$(XHOST_CMD) && docker run $(PLATFORM_FLAG) -it \
+				$(GPU_FLAGS) \
+				--privileged \
+				$(DISPLAY_ENV) \
+				$(NETWORK_FLAG) \
+				--env="QT_X11_NO_MITSHM=1" \
+				$(DEV_MOUNTS) \
+				-e MODE=gazebo \
+				-e GROUND_ROBOT=true \
+				-e GOAL_X=$(or $(GOAL_X),30.0) \
+				-e GOAL_Y=$(or $(GOAL_Y),0.0) \
+				-e GOAL_Z=$(or $(GOAL_Z),0.0) \
+				-e ENV=$(or $(ENV),easy_forest) \
+				--rm mighty
+
 # Run with Xpra (macOS visualization via browser at http://localhost:8080)
 # Usage: make run-mac [NUM_AGENTS=5] [DEV=1]
 run-mac:
@@ -148,6 +185,41 @@ run-mac-gazebo:
 				-e GOAL_Y=$(or $(GOAL_Y),0.0) \
 				-e GOAL_Z=$(or $(GOAL_Z),3.0) \
 				-e ENV=$(or $(ENV),hard_forest) \
+				-p 8080:8080 \
+				--rm mighty
+
+# Run ground robot autonomous exploration on Mac (Xpra, browser at localhost:8080)
+# Usage: make run-mac-ground-exploration [ENV=ACL_office] [DEV=1]
+run-mac-ground-exploration:
+	docker run $(PLATFORM_FLAG) -it \
+				$(GPU_FLAGS) \
+				--privileged \
+				$(NETWORK_FLAG) \
+				--env="QT_X11_NO_MITSHM=1" \
+				$(DEV_MOUNTS) \
+				-e USE_XPRA=true \
+				-e MODE=exploration-singleagent-ground \
+				-e ENV=$(or $(ENV),ACL_office) \
+				-p 8080:8080 \
+				--rm mighty
+
+# Run ground robot in a forest world on Mac (Xpra, browser at localhost:8080)
+# See run-ground-robot notes re: exploration.enabled and goal navigation.
+# Usage: make run-mac-ground-robot [GOAL_X=30 GOAL_Y=0 GOAL_Z=0] [ENV=easy_forest] [DEV=1]
+run-mac-ground-robot:
+	docker run $(PLATFORM_FLAG) -it \
+				$(GPU_FLAGS) \
+				--privileged \
+				$(NETWORK_FLAG) \
+				--env="QT_X11_NO_MITSHM=1" \
+				$(DEV_MOUNTS) \
+				-e USE_XPRA=true \
+				-e MODE=gazebo \
+				-e GROUND_ROBOT=true \
+				-e GOAL_X=$(or $(GOAL_X),30.0) \
+				-e GOAL_Y=$(or $(GOAL_Y),0.0) \
+				-e GOAL_Z=$(or $(GOAL_Z),0.0) \
+				-e ENV=$(or $(ENV),easy_forest) \
 				-p 8080:8080 \
 				--rm mighty
 

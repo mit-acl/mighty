@@ -316,11 +316,25 @@ struct parameters {
   bool   expl_enabled{false};
   double expl_select_rate_hz{1.0};
   double expl_default_goal_z{0.0};
+  // Selection policy. When expl_select_nearest is true, the planner ignores the
+  // utility weights entirely and always drives to the geometrically closest
+  // selectable frontier. expl_select_commit_margin_m adds hysteresis: it keeps
+  // the current goal unless another frontier is closer by more than this many
+  // meters, preventing flip-flop between near-equidistant frontiers. 0 = strict
+  // nearest every tick.
+  bool   expl_select_nearest{false};
+  double expl_select_commit_margin_m{0.5};
   // Detector
   int    expl_cluster_min_cells{6};
   int    expl_border_margin_cells{2};
   int    expl_obstacle_clearance_cells{1};
   double expl_robot_snap_radius_m{1.0};
+  // Re-validate persistent frontier records against the detector's own frontier
+  // definition each map update, retiring (VISITED) any ACTIVE/DORMANT record
+  // whose location no longer holds a frontier of >= cluster_min_cells cells.
+  // Stops phantom frontiers lingering on cells that were a border earlier but
+  // have since been explored (or left only a sub-threshold / occluded speck).
+  bool   expl_reconcile_stale{true};
   // ESDF-based obstacle clearance for frontier centroids. Frontiers whose
   // centroid is within this distance of any obstacle (per the 2D ESDF) are
   // dropped and existing records are invalidated. Set to 0 (or no ESDF
@@ -356,6 +370,10 @@ struct parameters {
   double expl_pursuit_timeout_factor{10.0};
   double expl_pursuit_timeout_v_ref{0.5};
   double expl_pursuit_timeout_min_sec{10.0};
+  // After a frontier location times out this many times, its keep-out becomes
+  // permanent so it stops reappearing every cooldown. <= 0 disables (legacy
+  // indefinite respawn).
+  int    expl_pursuit_timeout_max_strikes{3};
   // Invalidation keep-out — drop fresh clusters that fall within radius_m of
   // any INVALIDATED record whose invalidation is still inside the cooldown
   // window. Set radius_m <= 0 to disable; cooldown_sec <= 0 = permanent.

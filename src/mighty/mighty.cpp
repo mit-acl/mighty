@@ -1243,8 +1243,8 @@ bool MIGHTY::generateLocalTrajectory(const state& local_A, double A_time, vec_Ve
   // If no solution is found, return.
   if (status < 0 || fopt_ > par_.fopt_threshold) {
     // do the same output in red with printf
-    printf("\033[1;31mLocal Optimization Failed with status: %d, fopt: %.2f\033[0m\n", status,
-           fopt_);
+    // printf("\033[1;31mLocal Optimization Failed with status: %d, fopt: %.2f\033[0m\n", status,
+    //        fopt_);
     return false;
   }
 
