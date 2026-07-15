@@ -1,0 +1,36 @@
+# BuildKit per-Dockerfile ignore for Dockerfile.hw (paths relative to the build
+# context root, /home/swarm/code). Allowlist style: ship ONLY the four source
+# trees the hw image needs; everything else under code/ stays on the host.
+*
+!mighty_ws/src
+!decomp_ws/src
+# livox_ros_driver2 is baked PREBUILT (its fork source no longer builds against the
+# v1.2.5 SDK on this box) — ship its colcon install tree, not the source.
+!livox_ws/install
+!Livox-SDK2
+
+# Sim-only source repos: not part of the hw package closure and mighty builds
+# with -DBUILD_SIMULATION=OFF, so keep them out of the image entirely.
+# EXCEPTION: local_sensing (+ its quadrotor_msgs dep) must exist because
+# onboard_mighty.launch.py calls get_package_share_directory('local_sensing')
+# unconditionally at parse time, even on hardware.
+mighty_ws/src/gazebo_ros_pkgs
+mighty_ws/src/livox_laser_simulation_ros2
+mighty_ws/src/realsense_gazebo_plugin
+mighty_ws/src/uav_simulator
+!mighty_ws/src/uav_simulator/local_sensing
+!mighty_ws/src/uav_simulator/Utils/quadrotor_msgs
+
+# Junk. NOTE: mighty's benchmarking/, worlds/, meshes/, urdf/ MUST ship — they
+# are referenced by install() rules in mighty's CMakeLists.
+**/.git
+**/__pycache__
+**/*.ipynb
+Livox-SDK2/build
+
+# RR04-specific: mighty_ws/src here still carries a DUPLICATE DecompROS2 (the 4
+# decomp packages are built separately from decomp_ws/src) and a non-colcon
+# Livox-SDK2 dir. Keep both out of the image build context to avoid a decomp
+# double-build/conflict and stray host artifacts.
+mighty_ws/src/DecompROS2
+mighty_ws/src/Livox-SDK2

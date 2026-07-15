@@ -1,0 +1,162 @@
+# syntax=docker/dockerfile:1.7-labs
+# mighty-hw — the MIGHTY hardware autonomy stack in ONE container, running the
+# same attachable 7-pane tmux 'hw_mighty' session inside it (sibling of the
+# rover-drive container; see rfc0001 rover_bringup/docker for the pattern).
+#
+# Sources are BAKED FROM THE HOST CHECKOUTS (build context = /home/swarm/code,
+# i.e. ../../../.. from this docker/ dir — the rover-drive trick): what the
+# rover runs natively today is exactly what gets containerized, including local
+# commits and applied configs (global_mapper z_ground, MID360 host IP). We do
+# NOT re-clone from mighty.repos here: those pins lack dlio and mpc entirely,
+# and the host workspaces are the operative source of truth for hardware.
+#
+# In-image workspace paths == host paths (/home/swarm/code/...), so
+# run_hw_red_rover.py (hardcoded MIGHTY_WS / DECOMP_SETUP_BASH) runs unmodified.
+#
+# Single stage on purpose: for this stack runtime deps ≈ build deps (mighty
+# links decomp_rviz_plugins -> rviz/ogre libs must be present at runtime
+# anyway), so a runtime-only stage saves little; build/ and log/ trees are
+# removed in-layer instead. Layer order is chosen for fast rebuilds: apt/pip
+# first (stable), then the three dependency workspaces (rarely change), then
+# mighty_ws LAST so a mighty/mpc code edit only re-runs the final colcon layer.
+#
+# Runs as root (rover-drive precedent): nothing host-owned is mounted rw.
+
+FROM ros:humble-ros-base
+
+ENV ROS_DISTRO=humble
+ENV DEBIAN_FRONTEND=noninteractive
+SHELL ["/bin/bash", "-c"]
+
+# ---- system + ROS deps -------------------------------------------------------
+# rviz libs: required because mighty hard-links decomp_rviz_plugins (CMakeLists).
+# gazebo-msgs: messages only (fake_sim target); full Gazebo is NOT installed —
+# mighty builds with -DBUILD_SIMULATION=OFF below.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git tmux vim wget gdb \
+        python3-pip python3-yaml \
+        libpcl-dev libeigen3-dev nlohmann-json3-dev \
+        ros-${ROS_DISTRO}-rmw-zenoh-cpp \
+        ros-${ROS_DISTRO}-pcl-ros \
+        ros-${ROS_DISTRO}-pcl-conversions \
+        ros-${ROS_DISTRO}-pcl-msgs \
+        ros-${ROS_DISTRO}-gazebo-msgs \
+        ros-${ROS_DISTRO}-rviz-common \
+        ros-${ROS_DISTRO}-rviz-rendering \
+        ros-${ROS_DISTRO}-rviz-default-plugins \
+        ros-${ROS_DISTRO}-rviz-ogre-vendor \
+        ros-${ROS_DISTRO}-image-transport \
+        ros-${ROS_DISTRO}-cv-bridge \
+        ros-${ROS_DISTRO}-laser-geometry \
+        ros-${ROS_DISTRO}-joy \
+        ros-${ROS_DISTRO}-message-filters \
+        ros-${ROS_DISTRO}-example-interfaces \
+        ros-${ROS_DISTRO}-tf2-eigen \
+        ros-${ROS_DISTRO}-tf2-geometry-msgs \
+        ros-${ROS_DISTRO}-tf2-sensor-msgs \
+        ros-${ROS_DISTRO}-tf-transformations \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- python deps ---------------------------------------------------------------
+# Pinned to the versions running on the rovers today (pip3 list, RR06 2026-07-03).
+# tmuxp drives the tmux session; mpc_node imports casadi/do_mpc. numpy/scipy are
+# installed second so their pins win over anything do-mpc's resolver picked.
+RUN pip3 install --no-cache-dir casadi==3.6.7 do-mpc==5.1.1 tmuxp && \
+    pip3 install --no-cache-dir numpy==2.2.6 scipy==1.15.3
+
+ENV CODE_DIR=/home/swarm/code
+ENV MIGHTY_WS=${CODE_DIR}/mighty_ws
+ENV DECOMP_WS=${CODE_DIR}/decomp_ws
+ENV LIVOX_WS=${CODE_DIR}/livox_ws
+ENV LIVOX_SDK_DIR=${CODE_DIR}/Livox-SDK2
+
+# ---- decomp_ws (decomp_util first, then msgs/plugins/test — mighty links all) --
+COPY decomp_ws/src ${DECOMP_WS}/src
+WORKDIR ${DECOMP_WS}
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash && \
+    colcon build --packages-select decomp_util --cmake-args -DCMAKE_BUILD_TYPE=Release && \
+    source install/setup.bash && \
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release && \
+    rm -rf build log
+
+# ---- Livox-SDK2 (cmake install to /usr/local) ----------------------------------
+COPY Livox-SDK2 ${LIVOX_SDK_DIR}
+WORKDIR ${LIVOX_SDK_DIR}
+RUN rm -rf build && mkdir build && cd build && \
+    cmake .. && make -j$(nproc) && make install && \
+    cd .. && rm -rf build
+
+# ---- livox_ros_driver2 (PREBUILT — baked from the host install) ----------------
+# RR04's blakete/livox_ros_driver2 fork HEAD (f103b4e) references
+# kLivoxLidarTypeMid360s, which is absent from every Livox-SDK2 on the box (all
+# upstream v1.2.5), so the source no longer builds — a native `livox_ws` rebuild
+# would fail identically. The rover runs a stale prebuilt install; bake that exact
+# artifact instead of rebuilding. The driver statically links the Livox SDK, so it
+# is self-contained (the SDK layer above is kept for /usr/local parity only).
+COPY livox_ws/install ${LIVOX_WS}/install
+
+# ---- mighty_ws (LAST heavy layer: only a mighty/mpc CODE edit re-runs it) -------
+# Sim-only source repos (gazebo fork, uav_simulator, livox sim, realsense
+# plugin) are excluded by Dockerfile.hw.dockerignore; BUILD_SIMULATION=OFF
+# skips mighty's Gazebo targets, so no Gazebo install is needed.
+#
+# Runtime-tunable dirs (mighty config/launch/rviz + mpc/config) are EXCLUDED from
+# this COPY and overlaid AFTER the build (see bottom of file). They are
+# install-only (never read at configure/compile), so excluding them is
+# compile-safe and means editing a YAML no longer busts this layer / forces a
+# full recompile. Exclude paths are relative to the COPY source (mighty_ws/src).
+COPY --exclude=mighty/config \
+     --exclude=mighty/launch \
+     --exclude=mighty/rviz \
+     --exclude=mpc/config \
+     --exclude=acl-mapping/global_mapper_ros/cfg \
+     mighty_ws/src ${MIGHTY_WS}/src
+WORKDIR ${MIGHTY_WS}
+# Empty placeholders for the excluded runtime dirs: mighty's CMake
+# `install(DIRECTORY launch config rviz ...)` ERRORS on a missing source dir
+# (it doesn't silently skip), so create them empty here — colcon then installs
+# empty config/launch/rviz into share/mighty, and the overlay COPYs at the
+# bottom fill them with the real files. (mkdir doesn't depend on their content,
+# so this layer stays cached across YAML edits.)
+RUN mkdir -p ${MIGHTY_WS}/src/mighty/config ${MIGHTY_WS}/src/mighty/launch \
+             ${MIGHTY_WS}/src/mighty/rviz   ${MIGHTY_WS}/src/mpc/config \
+             ${MIGHTY_WS}/src/acl-mapping/global_mapper_ros/cfg && \
+    source /opt/ros/${ROS_DISTRO}/setup.bash && \
+    source ${DECOMP_WS}/install/setup.bash && \
+    export CMAKE_PREFIX_PATH=${LIVOX_WS}/install/livox_ros_driver2:${CMAKE_PREFIX_PATH} && \
+    colcon build \
+        --packages-up-to mighty mpc global_mapper global_mapper_ros direct_lidar_inertial_odometry local_sensing \
+        --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_SIMULATION=OFF && \
+    rm -rf build log
+
+ENV LD_LIBRARY_PATH=${LIVOX_WS}/install/livox_ros_driver2/lib:/usr/local/lib
+
+# tmux panes are interactive bash shells: mirror the host ~/.bashrc sourcing so
+# every pane resolves all three workspaces. The livox pane in particular finds
+# livox_ros_driver2 only through here, exactly as on the native rover.
+#
+# HISTCONTROL: modern tmuxp (suppress_history default) prepends a space to the
+# commands it sends, and stock 'ignorespace' would keep them OUT of bash
+# history — breaking the Ctrl-C / Up / Enter pane-restart workflow (same gotcha
+# the drive stack fixed via suppress_history:false in drive_tmux.yaml; our YAML
+# is generated by run_hw_red_rover.py, so fix it shell-side instead).
+RUN sed -i 's/^HISTCONTROL=.*/HISTCONTROL=ignoredups/' /root/.bashrc && \
+    echo 'source /opt/ros/humble/setup.bash'                    >> /root/.bashrc && \
+    echo "source ${DECOMP_WS}/install/setup.bash"               >> /root/.bashrc && \
+    echo "source ${LIVOX_WS}/install/setup.bash"                >> /root/.bashrc && \
+    echo "source ${MIGHTY_WS}/install/setup.bash"               >> /root/.bashrc && \
+    echo "export LD_LIBRARY_PATH=${LIVOX_WS}/install/livox_ros_driver2/lib:/usr/local/lib:\${LD_LIBRARY_PATH}" >> /root/.bashrc
+
+WORKDIR ${MIGHTY_WS}
+# Command comes from compose (inline launcher; see compose.hw.yaml).
+
+# ---- runtime overlay (LAST layers) ---------------------------------------------
+# The tunable dirs excluded from the mighty_ws COPY above are placed straight into
+# the installed share trees here, AFTER the compile. Editing any of these re-runs
+# ONLY these trivial copies — the colcon layer stays cached. Two independent share
+# trees: share/mighty (CMake install(DIRECTORY)) and share/mpc (ament_python).
+COPY mighty_ws/src/mighty/config ${MIGHTY_WS}/install/mighty/share/mighty/config
+COPY mighty_ws/src/mighty/launch ${MIGHTY_WS}/install/mighty/share/mighty/launch
+COPY mighty_ws/src/mighty/rviz   ${MIGHTY_WS}/install/mighty/share/mighty/rviz
+COPY mighty_ws/src/mpc/config    ${MIGHTY_WS}/install/mpc/share/mpc/config
+COPY mighty_ws/src/acl-mapping/global_mapper_ros/cfg ${MIGHTY_WS}/install/global_mapper_ros/share/global_mapper_ros/cfg

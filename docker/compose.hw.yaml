@@ -1,0 +1,64 @@
+# hw-mighty — the MIGHTY hardware autonomy stack in ONE container, running the
+# same attachable 7-pane tmux 'hw_mighty' session inside it. Re-implemented for
+# RR04's dev-rr-mad branch: identity/env come from the `environment:` block below
+# (RR04 has no /etc/rover/rover.env), and the container runs the mighty NODES only
+# — it attaches to the HOST Zenoh router (rmw_zenohd, started via the `zenoh_route`
+# alias) over network_mode: host, exactly like the native `mighty` alias does.
+#
+#   build:   docker compose -f compose.hw.yaml build     (or: make hw-build)
+#   up:      ./mighty_hw.sh start                         (compose up -d + attach)
+#   attach:  docker exec -it hw-mighty tmux attach -t hw_mighty
+#            (Ctrl-C / Up / Enter in a pane restarts just that node; Ctrl-b d detaches)
+#   down:    ./mighty_hw.sh stop
+#
+# PREREQ: the host Zenoh router must already be running (`zenoh_route`) — same as
+# native. Do NOT run this alongside the native `mighty` alias (they double-publish).
+name: hw-mighty
+services:
+  hw-mighty:
+    # Build context = /home/swarm/code (4 levels up from this docker/ dir) so the
+    # image bakes the HOST checkouts of mighty_ws / decomp_ws / livox_ws /
+    # Livox-SDK2 at their host paths. What ships is filtered by
+    # Dockerfile.hw.dockerignore.
+    build:
+      context: ../../../..
+      dockerfile: mighty_ws/src/mighty/docker/Dockerfile.hw
+    image: mighty-hw:local
+    container_name: hw-mighty
+    network_mode: host            # share host net → reach the host rmw_zenohd on :7447
+    init: true
+    stop_grace_period: 15s
+    restart: "no"                 # manual stack; a dead pane stays dead (native semantics)
+    # NO tty: a detached container's unattached pty reports width 0 and newer
+    # libtmux fails with "new-session: width too small" — COLUMNS/LINES are
+    # pinned in the command instead.
+    environment:
+      # RR04 identity + ROS transport. Native source is ~/config/roman_rover.sh +
+      # RR04.sh; baked here because RR04 has no /etc/rover/rover.env. To reuse this
+      # image on another rover, change ROVER_NAME/VEHTYPE/VEHNUM (and ROS_DOMAIN_ID
+      # if different) — nothing rover-specific is baked into the image itself.
+      ROVER_NAME: RR04
+      VEHTYPE: RR
+      VEHNUM: "04"
+      ROS_DOMAIN_ID: "22"
+      RMW_IMPLEMENTATION: rmw_zenoh_cpp
+      # NOTE: ZENOH_ROUTER_CONFIG_URI is intentionally NOT set — the nodes are
+      # Zenoh sessions that attach to the host's rmw_zenohd at localhost:7447.
+      #
+      # Match the `mighty` alias default: DLIO seeded in mocap + 2D-only z pinning.
+      ODOM_TYPE: ${ODOM_TYPE:-dlio_in_mocap}   # dlio | mocap | dlio_in_mocap
+      TWO_D_ONLY: ${TWO_D_ONLY-1}              # non-empty => --two-d-only (export TWO_D_ONLY= to disable)
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        # Detached-pty sizing (see the NO-tty note above); an attaching client
+        # resizes the session to its own terminal anyway.
+        export COLUMNS="$${COLUMNS:-220}" LINES="$${LINES:-56}"
+        cd /home/swarm/code/mighty_ws
+        python3 src/mighty/scripts/run_hw_red_rover.py \
+          --odom-type "$${ODOM_TYPE:-dlio_in_mocap}" $${TWO_D_ONLY:+--two-d-only}
+        echo "hw_mighty session loaded; holding foreground (attach: docker exec -it hw-mighty tmux attach -t hw_mighty)"
+        while tmux has-session -t hw_mighty 2>/dev/null; do sleep 5; done
+        echo "hw_mighty session ended; exiting."
