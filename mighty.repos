@@ -3,7 +3,7 @@ repositories:
   acl-mapping:
     type: git
     url: git@gitlab.com:mit-acl/lab/acl-mapping.git
-    version: 00502bd0224794bb019cc486437227d8f548cc0f
+    version: 67c2195b4d70cc584a4fede03b290960afdf4f8e
   direct_lidar_inertial_odometry:
     type: git
     url: https://github.com/kotakondo/direct_lidar_inertial_odometry.git
@@ -43,8 +43,8 @@ repositories:
   # livox_ros_driver2 built in livox_ws via its own build.sh)
   livox_ros_driver2:
     type: git
-    url: https://github.com/kotakondo/livox_ros_driver2.git
-    version: 274aad204b5dfce15c648e88dfd375fa5d7b3026
+    url: git@github.com:blakete/livox_ros_driver2.git
+    version: f103b4e0fb686ea175a61da8a016a731fffdd866
   Livox-SDK2:
     type: git
     url: https://github.com/Livox-SDK/Livox-SDK2.git
