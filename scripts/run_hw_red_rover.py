@@ -120,6 +120,27 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
             f' use_obstacle_tracker:=false'
         )
 
+    # TF readiness gates (fix for the /tf_static startup race): the two
+    # static_transform_publisher panes below publish {ns}/map->{ns}/odom and
+    # {ns}/base_link->{ns}/lidar ONCE, latched on transient-local /tf_static. Over
+    # rmw_zenoh a consumer that subscribes BEFORE the publisher exists never
+    # receives that one-shot sample, so the mapper/mpc spam "{ns}/map does not
+    # exist". Gate each consumer so it starts only once the transforms it needs are
+    # actually lookup-able (a fresh late-joining listener always queries them
+    # successfully). wait_for_tf.py exits 0 on success; on timeout it warns and
+    # still exits 0 so the stack never deadlocks.
+    _static_tf_pairs = (
+        f'{rover_name}/map {rover_name}/odom'
+        f' {rover_name}/base_link {rover_name}/lidar'
+    )
+    if odom_type == 'mocap':
+        # mocap also latches world->{ns}/map (published by the dlio pane above)
+        mapper_wait_pairs = f'{_static_tf_pairs} world {rover_name}/map'
+    else:
+        mapper_wait_pairs = _static_tf_pairs
+    wait_mapper_cmd = f'ros2 run mighty wait_for_tf.py {mapper_wait_pairs}'
+    wait_mighty_cmd = f'ros2 run mighty wait_for_tf.py {rover_name}/map {rover_name}/odom'
+
     # Goal monitor: odom_type and goal_type are now baked in directly
     goal_monitor_cmd = (
         f'ros2 run mighty goal_monitor_node.py --ros-args'
@@ -130,11 +151,12 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
     )
 
     panes = [
-        # Onboard mighty
+        # Onboard mighty (mpc lives here) — gate on {ns}/map->{ns}/odom first
         {
             'shell_command': [
                 source_ws,
                 f'source {DECOMP_SETUP_BASH}',
+                wait_mighty_cmd,
                 mighty_cmd,
             ]
         },
@@ -160,26 +182,25 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
                 'ros2 run mighty repub_rviz_2Dgoal.py',
             ]
         },
-        # Static TF (lidar tilt)
+        # Static TF (lidar tilt) — publish ASAP (no sleep); consumers gate on it
         {
             'shell_command': [
                 source_ws,
-                'sleep 5',
                 f'ros2 run tf2_ros static_transform_publisher 0 0 0 0 0.3490659 0 {rover_name}/base_link {rover_name}/lidar',
             ]
         },
-        # Static TF (odom to map)
+        # Static TF (odom to map) — publish ASAP (no sleep); consumers gate on it
         {
             'shell_command': [
                 source_ws,
-                'sleep 5',
                 f'ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 {rover_name}/map {rover_name}/odom',
             ]
         },
-        # Global Mapper
+        # Global Mapper — gate on the full static chain before starting
         {
             'shell_command': [
                 source_ws,
+                wait_mapper_cmd,
                 mapper_cmd,
             ]
         },
@@ -205,11 +226,31 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
         # },
     ]
 
+    # --- Label each pane on its border (order matches the `panes` list above) ---
+    dlio_label = ('Static TFs (mocap)' if odom_type == 'mocap'
+                  else 'DLIO (mocap-seeded)' if odom_type == 'dlio_in_mocap'
+                  else 'DLIO')
+    pane_titles = [
+        'Onboard MIGHTY',        # pane 0
+        'Livox LiDAR',           # pane 1
+        dlio_label,              # pane 2
+        'RViz 2D goal',          # pane 3
+        'Static TF: lidar tilt', # pane 4
+        'Static TF: map->odom',  # pane 5
+        'Global Mapper',         # pane 6
+    ]
+    for p, title in zip(panes, pane_titles):
+        p['shell_command'].insert(0, f'tmux select-pane -t "$TMUX_PANE" -T "{title}"')
+
     yaml_content = {
         'session_name': 'hw_mighty',
         'windows': [{
             'window_name': 'main',
             'layout': 'tiled',
+            'options': {
+                'pane-border-status': 'top',
+                'pane-border-format': ' #{pane_index}: #{pane_title} ',
+            },
             'shell_command_before': [
                 f'source /opt/ros/humble/setup.bash',
             ],

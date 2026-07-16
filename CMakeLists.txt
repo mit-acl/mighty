@@ -170,6 +170,7 @@ install(PROGRAMS
   scripts/repub_rviz_2Dgoal.py
   scripts/frame_align_publisher.py
   scripts/formation_viz_node.py
+  scripts/wait_for_tf.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
