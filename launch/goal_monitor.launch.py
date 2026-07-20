@@ -57,7 +57,7 @@ def generate_launch_description():
     # tolerance arg
     goal_tol_arg = DeclareLaunchArgument(
         'goal_tolerance',
-        default_value='0.5',
+        default_value='1.0',
         description='Distance tolerance to consider a goal reached'
     )
 
