@@ -214,6 +214,7 @@ private:
   std::mutex mtx_original_global_path_; // Mutex for the original_global_path_
   std::mutex mtx_kdtree_map_;           // Mutex for the map_
   std::mutex mtx_kdtree_unk_;           // Mutex for the unknown map_
+  std::mutex mtx_init_pose_;            // Protects init_pose_transform_* and initial_pose_received_ (written by setInitialPose() on the initial-pose timer thread, read by updateState() on the state thread)
   pcl::PointCloud<pcl::PointXYZ>::ConstPtr pclptr_map_;
   pcl::PointCloud<pcl::PointXYZ>::ConstPtr pclptr_unk_;
 

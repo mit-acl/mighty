@@ -1210,34 +1210,65 @@ void MIGHTY::updateState(state data)
   // origin -- the "starts planning at the origin" bug, most visible in multi-agent runs where each
   // agent has a distinct, non-origin global start and the tf lookup lands late under heavier traffic.
   // Skip the update until the initial pose is ready so the first seeded point is the true global start.
-  if (par_.use_hardware && par_.provide_goal_in_global_frame && !initial_pose_received_)
-  {
-    static int waiting_log_throttle = 0;
-    if (waiting_log_throttle++ % 100 == 0)
-      std::cout << bold << yellow << "[updateState] Waiting for initial pose (tf map->init_pose) before seeding the plan..." << reset << std::endl;
-    return;
-  }
-
-  // If we are doing hardware and provide goal in global frame (e.g. vicon), we need to transform the goal to the local frame
-
+  // If we are doing hardware and provide goal in global frame (e.g. vicon), we need to transform the
+  // incoming (local/odometry-frame) state into the global frame.
   if (par_.use_hardware && par_.provide_goal_in_global_frame)
   {
+    // Snapshot the initial-pose transform under its mutex. setInitialPose() writes these members from
+    // the initial-pose timer thread (a different callback group), so without this lock updateState()
+    // could observe initial_pose_received_ == true while init_pose_transform_ is still the identity
+    // default (a reordered/torn read on weakly-ordered CPUs). Taking a consistent snapshot guarantees
+    // that once the transform is seen as ready, it is the fully-written one.
+    bool initial_pose_ready;
+    Eigen::Matrix4d T;
+    Eigen::Matrix3d Rot;
+    double yaw_off;
+    {
+      std::lock_guard<std::mutex> lk(mtx_init_pose_);
+      initial_pose_ready = initial_pose_received_;
+      T = init_pose_transform_;
+      Rot = init_pose_transform_rotation_;
+      yaw_off = yaw_init_offset_;
+    }
+
+    // Do not seed/update the state until the transform is valid, otherwise the local-frame state
+    // (which starts near the origin) would pass through the identity default and collapse to (0,0,0).
+    if (!initial_pose_ready)
+    {
+      static int waiting_log_throttle = 0;
+      if (waiting_log_throttle++ % 100 == 0)
+        std::cout << bold << yellow << "[updateState] Waiting for initial pose (tf map->init_pose) before seeding the plan..." << reset << std::endl;
+      return;
+    }
+
     // Apply transformation to position
     Eigen::Vector4d homo_pos(data.pos[0], data.pos[1], data.pos[2], 1.0);
-    Eigen::Vector4d global_pos = init_pose_transform_ * homo_pos;
+    Eigen::Vector4d global_pos = T * homo_pos;
     data.pos = Eigen::Vector3d(global_pos[0], global_pos[1], global_pos[2]);
 
     // Apply rotation to velocity
-    data.vel = init_pose_transform_rotation_ * data.vel;
+    data.vel = Rot * data.vel;
 
     // Apply rotation to accel
-    data.accel = init_pose_transform_rotation_ * data.accel;
+    data.accel = Rot * data.accel;
 
     // Apply rotation to jerk
-    data.jerk = init_pose_transform_rotation_ * data.jerk;
+    data.jerk = Rot * data.jerk;
 
     // Apply yaw
-    data.yaw += yaw_init_offset_;
+    data.yaw += yaw_off;
+
+    // Defensive guard (belt-and-suspenders): a correctly transformed global start is never at the map
+    // origin -- each hardware agent starts at a distinct, non-origin pose. If the transformed position
+    // is still at (0,0,0) here, the transform was not truly valid; reject this sample so the bogus
+    // origin never becomes the first plan point. Seeding resumes on the next valid state message.
+    if (data.pos.norm() < 1e-3)
+    {
+      static int origin_log_throttle = 0;
+      if (origin_log_throttle++ % 100 == 0)
+        std::cout << bold << red << "[updateState] Rejecting state at origin (0,0,0) -- initial-pose transform not valid yet; not seeding the plan." << reset << std::endl;
+      return;
+    }
   }
 
   mtx_state_.lock();
@@ -1246,6 +1277,9 @@ void MIGHTY::updateState(state data)
 
   if ((state_initialized_ == false || drone_status_ == DroneStatus::YAWING) && (!par_.use_hardware || terminal_goal_initialized_))
   {
+
+    // Remember whether this is the very first time the plan is being seeded (before we flip the flag).
+    const bool first_seed = (state_initialized_ == false);
 
     // create temporary state
     state tmp;
@@ -1258,6 +1292,12 @@ void MIGHTY::updateState(state data)
     plan_.clear();
     plan_.push_back(tmp);
     mtx_plan_.unlock();
+
+    // Log the very first point seeded into plan_ so the initial planning start is easy to verify.
+    if (first_seed)
+      std::cout << bold << green << "[updateState] Seeding first plan_ point at ("
+                << tmp.pos.x() << ", " << tmp.pos.y() << ", " << tmp.pos.z()
+                << "), yaw=" << tmp.yaw << reset << std::endl;
 
     // Update Point A
     setA(tmp);
@@ -1603,23 +1643,27 @@ void MIGHTY::setInitialPose(const geometry_msgs::msg::TransformStamped &init_pos
   init_pose_transform.block<3, 3>(0, 0) = init_pose_quat.toRotationMatrix();
   init_pose_transform.block<3, 1>(0, 3) = init_pose_translation;
 
-  // Get initial pose
-  init_pose_transform_ = init_pose_transform;
-  init_pose_transform_rotation_ = init_pose_quat.toRotationMatrix();
-  yaw_init_offset_ = std::atan2(init_pose_transform_rotation_(1, 0),
-                                init_pose_transform_rotation_(0, 0));
+  // Publish all transform members under mtx_init_pose_ so updateState() (running on a different
+  // callback group / thread) never observes a half-written transform. initial_pose_received_ is set
+  // LAST and inside the same lock, so any reader that sees it true is guaranteed to also see the
+  // fully-written transform. Without this lock, on weakly-ordered CPUs (e.g. ARM flight computers)
+  // the flag could become visible before the transform, and the first plan would seed at (0,0,0).
+  {
+    std::lock_guard<std::mutex> lk(mtx_init_pose_);
+    init_pose_transform_ = init_pose_transform;
+    init_pose_transform_rotation_ = init_pose_quat.toRotationMatrix();
+    yaw_init_offset_ = std::atan2(init_pose_transform_rotation_(1, 0),
+                                  init_pose_transform_rotation_(0, 0));
+
+    // Get the inverse of init_pose_ (geometry_msgs::msg::TransformStamped)
+    init_pose_transform_inv_ = init_pose_transform.inverse();
+    init_pose_transform_rotation_inv_ = init_pose_quat.toRotationMatrix().inverse();
+
+    // Mark the initial pose as received (set this LAST, after every transform member above).
+    initial_pose_received_ = true;
+  }
 
   std::cout << bold << green << "yaw_init_offset_: " << yaw_init_offset_ << reset << std::endl;
-
-  // Get the inverse of init_pose_ (geometry_msgs::msg::TransformStamped)
-  init_pose_transform_inv_ = init_pose_transform.inverse();
-  init_pose_transform_rotation_inv_ = init_pose_quat.toRotationMatrix().inverse();
-  // yaw_init_offset_ = std::atan2(init_pose_transform_rotation_inv_(1, 0),
-  // init_pose_transform_rotation_inv_(0, 0));
-
-  // Mark the initial pose as received. Set this LAST, after every transform member above is
-  // written, so that updateState() only proceeds once the transform is fully valid.
-  initial_pose_received_ = true;
 }
 
 // ----------------------------------------------------------------------------
