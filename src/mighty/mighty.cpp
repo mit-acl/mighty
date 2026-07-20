@@ -1202,6 +1202,22 @@ void MIGHTY::addTraj(std::shared_ptr<dynTraj> new_traj, double current_time)
 void MIGHTY::updateState(state data)
 {
 
+  // On hardware with goals in the global frame, the incoming state is expressed in the agent's
+  // local (odometry) frame and is transformed into the global frame below using init_pose_transform_.
+  // That transform only becomes valid once setInitialPose() runs (it is populated asynchronously from
+  // a tf lookup on a separate callback group). If we let the plan get seeded before then, the state is
+  // multiplied by an identity/uninitialized transform and the very first plan point collapses to the
+  // origin -- the "starts planning at the origin" bug, most visible in multi-agent runs where each
+  // agent has a distinct, non-origin global start and the tf lookup lands late under heavier traffic.
+  // Skip the update until the initial pose is ready so the first seeded point is the true global start.
+  if (par_.use_hardware && par_.provide_goal_in_global_frame && !initial_pose_received_)
+  {
+    static int waiting_log_throttle = 0;
+    if (waiting_log_throttle++ % 100 == 0)
+      std::cout << bold << yellow << "[updateState] Waiting for initial pose (tf map->init_pose) before seeding the plan..." << reset << std::endl;
+    return;
+  }
+
   // If we are doing hardware and provide goal in global frame (e.g. vicon), we need to transform the goal to the local frame
 
   if (par_.use_hardware && par_.provide_goal_in_global_frame)
@@ -1600,6 +1616,10 @@ void MIGHTY::setInitialPose(const geometry_msgs::msg::TransformStamped &init_pos
   init_pose_transform_rotation_inv_ = init_pose_quat.toRotationMatrix().inverse();
   // yaw_init_offset_ = std::atan2(init_pose_transform_rotation_inv_(1, 0),
   // init_pose_transform_rotation_inv_(0, 0));
+
+  // Mark the initial pose as received. Set this LAST, after every transform member above is
+  // written, so that updateState() only proceeds once the transform is fully valid.
+  initial_pose_received_ = true;
 }
 
 // ----------------------------------------------------------------------------

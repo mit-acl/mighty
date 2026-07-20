@@ -149,6 +149,7 @@ private:
   // Flags
   bool state_initialized_ = false;                           // State initialized
   bool terminal_goal_initialized_ = false;                   // Terminal goal initialized
+  bool initial_pose_received_ = false;                       // init_pose_transform_ populated from tf (setInitialPose)
   bool use_adapt_k_value_ = false;                           // Use adapt k value
   bool kdtree_map_initialized_ = false;                      // Kd-tree for the map initialized
   bool kdtree_unk_initialized_ = false;                      // Kd-tree for the map initialized
@@ -254,10 +255,13 @@ private:
 
   // Initial pose
   geometry_msgs::msg::TransformStamped init_pose_;
-  Eigen::Matrix4d init_pose_transform_;
-  Eigen::Matrix3d init_pose_transform_rotation_;
-  Eigen::Matrix4d init_pose_transform_inv_;
-  Eigen::Matrix3d init_pose_transform_rotation_inv_;
+  // Default to identity so that, before setInitialPose() runs, an accidental use of the
+  // transform passes the state through unchanged instead of collapsing it to the origin
+  // (an uninitialized Eigen matrix is often zeroed heap memory -> maps every point to 0,0,0).
+  Eigen::Matrix4d init_pose_transform_ = Eigen::Matrix4d::Identity();
+  Eigen::Matrix3d init_pose_transform_rotation_ = Eigen::Matrix3d::Identity();
+  Eigen::Matrix4d init_pose_transform_inv_ = Eigen::Matrix4d::Identity();
+  Eigen::Matrix3d init_pose_transform_rotation_inv_ = Eigen::Matrix3d::Identity();
   double yaw_init_offset_ = 0.0;
 
   // Safe corridor 
