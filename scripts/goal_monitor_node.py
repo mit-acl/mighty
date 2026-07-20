@@ -63,9 +63,9 @@ class GoalMonitorNode(Node):
         # elif self.namespace == 'PX03':
             # self.goal_points = [[14.0,  0.0, 2.0], [ -4.0,  0.0, 2.0]]
         elif self.namespace == 'PX04':
-            self.goal_points = [[13.0,  4.0, 0.5], [ -4.0,  -2.5, 1.5]]
+            self.goal_points = [[12.5,  3.5, 0.5], [ -2.2,  -4.0, 1.5]]
         elif self.namespace == 'PX05':
-            self.goal_points = [[13.0,  -2.5, 0.5], [ -4.0,  3.0, 1.5]]
+            self.goal_points = [[12.5,  -1.5, 0.5], [ -2.2,  4.0, 1.5]]
         elif self.namespace == 'PX06':
             # opposite of NX02
             self.goal_points = [[4.0,  0.0, 2.0], [ -4.0,  0.0, 2.0]]

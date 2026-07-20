@@ -61,7 +61,7 @@ mighty_node:
         # Optimization parameters
         horizon: 15.0                               # [m] Horizon
         dc: 0.01                                    # [s] Duration for the interpolation=Value of the timer pubGoal
-        v_max: 1.0 #1.0                                  # [m/s]  max velocity
+        v_max: 3.0 #1.0                                  # [m/s]  max velocity
         a_max: 3.0 #3.0                                 # [m/s2] max acceleration
         j_max: 5.0 #5.0                              # [m/s3] max jerk
         dynamic_weight: 1e+1                        # [-] Weight of the obstacles and agents distance in the optimization
