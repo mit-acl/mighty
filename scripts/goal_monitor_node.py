@@ -80,7 +80,7 @@ class GoalMonitorNode(Node):
             self.goal_points = [[4.0,  0.0, 2.0], [ -4.0,  0.0, 2.0]]
 
         # repeat pattern
-        num_iterations = 3
+        num_iterations = 2
         self.goal_points = self.goal_points * num_iterations
 
         # Publishers and Subscribers
