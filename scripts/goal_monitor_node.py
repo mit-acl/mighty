@@ -57,9 +57,9 @@ class GoalMonitorNode(Node):
         # Define goal points (x, y, z) in the world frame
         # Agents are on a circle of radius 10.0 at z=3.0 and swap with their opposite partner.
         if self.namespace == 'PX01':
-            self.goal_points = [[14.0,  5.0, 0.5], [ -4.0,  -2.0, 1.5]]
+            self.goal_points = [[ -4.0,  -2.0, 1.5], [14.0,  5.0, 0.5]]
         elif self.namespace == 'PX02':
-            self.goal_points = [[14.0,  -3.0, 0.5], [ -4.0,  2.0, 1.5]]
+            self.goal_points = [[ -4.0,  2.0, 1.5], [14.0,  -3.0, 0.5]]
         # elif self.namespace == 'PX03':
             # self.goal_points = [[14.0,  0.0, 2.0], [ -4.0,  0.0, 2.0]]
         elif self.namespace == 'PX04':
