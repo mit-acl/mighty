@@ -37,9 +37,9 @@ services:
       # RR04.sh; baked here because RR04 has no /etc/rover/rover.env. To reuse this
       # image on another rover, change ROVER_NAME/VEHTYPE/VEHNUM (and ROS_DOMAIN_ID
       # if different) — nothing rover-specific is baked into the image itself.
-      ROVER_NAME: RR04
+      ROVER_NAME: RR08
       VEHTYPE: RR
-      VEHNUM: "04"
+      VEHNUM: "08"
       ROS_DOMAIN_ID: "22"
       RMW_IMPLEMENTATION: rmw_zenoh_cpp
       # NOTE: ZENOH_ROUTER_CONFIG_URI is intentionally NOT set — the nodes are
@@ -48,6 +48,11 @@ services:
       # Match the `mighty` alias default: DLIO seeded in mocap + 2D-only z pinning.
       ODOM_TYPE: ${ODOM_TYPE:-dlio_in_mocap}   # dlio | mocap | dlio_in_mocap
       TWO_D_ONLY: ${TWO_D_ONLY-1}              # non-empty => --two-d-only (export TWO_D_ONLY= to disable)
+      NO_SENSORS: ${NO_SENSORS-}               # non-empty => --no-sensors (decoupled sensor bringup owns them)
+    # Override the baked launcher with the host copy so its --no-sensors
+    # de-confliction flag is live without rebuilding the image.
+    volumes:
+      - /home/swarm/code/mighty_ws/src/mighty/scripts/run_hw_red_rover.py:/home/swarm/code/mighty_ws/src/mighty/scripts/run_hw_red_rover.py:ro
     command:
       - bash
       - -lc
@@ -58,7 +63,7 @@ services:
         export COLUMNS="$${COLUMNS:-220}" LINES="$${LINES:-56}"
         cd /home/swarm/code/mighty_ws
         python3 src/mighty/scripts/run_hw_red_rover.py \
-          --odom-type "$${ODOM_TYPE:-dlio_in_mocap}" $${TWO_D_ONLY:+--two-d-only}
+          --odom-type "$${ODOM_TYPE:-dlio_in_mocap}" $${TWO_D_ONLY:+--two-d-only} $${NO_SENSORS:+--no-sensors}
         echo "hw_mighty session loaded; holding foreground (attach: docker exec -it hw-mighty tmux attach -t hw_mighty)"
         while tmux has-session -t hw_mighty 2>/dev/null; do sleep 5; done
         echo "hw_mighty session ended; exiting."
