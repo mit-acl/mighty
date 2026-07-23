@@ -55,6 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ros-${ROS_DISTRO}-tf2-geometry-msgs \
         ros-${ROS_DISTRO}-tf2-sensor-msgs \
         ros-${ROS_DISTRO}-tf-transformations \
+        libtbb-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- python deps ---------------------------------------------------------------
@@ -95,13 +96,25 @@ RUN rm -rf build && mkdir build && cd build && \
 # is self-contained (the SDK layer above is kept for /usr/local parity only).
 COPY livox_ws/install ${LIVOX_WS}/install
 
-# ---- mighty_ws (LAST heavy layer: only a mighty/mpc CODE edit re-runs it) -------
+# ---- mighty_ws, part 1 (SLOW layer: only a mighty/mpc/dlio CODE edit re-runs it) -
 # Sim-only source repos (gazebo fork, uav_simulator, livox sim, realsense
 # plugin) are excluded by Dockerfile.hw.dockerignore; BUILD_SIMULATION=OFF
 # skips mighty's Gazebo targets, so no Gazebo install is needed.
 #
-# Runtime-tunable dirs (mighty config/launch/rviz + mpc/config) are EXCLUDED from
-# this COPY and overlaid AFTER the build (see bottom of file). They are
+# The mighty_ws build is SPLIT IN TWO (see part 2 below). acl-mapping and
+# patchwork-plusplus are excluded here so that editing global_mapper /
+# global_mapper_ros / patchworkpp does not bust this layer and force the slow
+# mighty + mpc + dlio + local_sensing recompile. That is safe because those
+# packages are LEAVES of the workspace dep graph:
+#   colcon list --packages-above global_mapper global_mapper_ros patchworkpp \
+#                                fla_interfaces fla_utils
+#   -> returns only themselves; nothing here builds against them.
+# Their one shared dep, dynus_interfaces, is built in this layer and picked up
+# by part 2 from the install space.
+#
+# Runtime-tunable dirs (mighty config/launch/rviz + mpc/config) and the tmux
+# launcher scripts/run_hw_red_rover.py are EXCLUDED from this COPY and overlaid
+# AFTER the build (see bottom of file). They are
 # install-only (never read at configure/compile), so excluding them is
 # compile-safe and means editing a YAML no longer busts this layer / forces a
 # full recompile. Exclude paths are relative to the COPY source (mighty_ws/src).
@@ -109,7 +122,9 @@ COPY --exclude=mighty/config \
      --exclude=mighty/launch \
      --exclude=mighty/rviz \
      --exclude=mpc/config \
-     --exclude=acl-mapping/global_mapper_ros/cfg \
+     --exclude=mighty/scripts/run_hw_red_rover.py \
+     --exclude=acl-mapping \
+     --exclude=patchwork-plusplus \
      mighty_ws/src ${MIGHTY_WS}/src
 WORKDIR ${MIGHTY_WS}
 # Empty placeholders for the excluded runtime dirs: mighty's CMake
@@ -119,14 +134,41 @@ WORKDIR ${MIGHTY_WS}
 # bottom fill them with the real files. (mkdir doesn't depend on their content,
 # so this layer stays cached across YAML edits.)
 RUN mkdir -p ${MIGHTY_WS}/src/mighty/config ${MIGHTY_WS}/src/mighty/launch \
-             ${MIGHTY_WS}/src/mighty/rviz   ${MIGHTY_WS}/src/mpc/config \
-             ${MIGHTY_WS}/src/acl-mapping/global_mapper_ros/cfg && \
+             ${MIGHTY_WS}/src/mighty/rviz   ${MIGHTY_WS}/src/mpc/config && \
     source /opt/ros/${ROS_DISTRO}/setup.bash && \
     source ${DECOMP_WS}/install/setup.bash && \
     export CMAKE_PREFIX_PATH=${LIVOX_WS}/install/livox_ros_driver2:${CMAKE_PREFIX_PATH} && \
     colcon build \
-        --packages-up-to mighty mpc global_mapper global_mapper_ros direct_lidar_inertial_odometry local_sensing \
+        --packages-up-to mighty mpc direct_lidar_inertial_odometry local_sensing \
         --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_SIMULATION=OFF && \
+    rm -rf build log
+
+# ---- mighty_ws, part 2 (FAST layer: the leaf packages we iterate on) ------------
+# global_mapper / global_mapper_ros / patchworkpp (+ fla_interfaces, fla_utils,
+# which only global_mapper_ros uses). Editing any of them re-runs ONLY this
+# layer; part 1's install tree above stays cached.
+#
+# Two COPY lines, not one: `COPY dirA dirB dest/` merges the CONTENTS of both
+# into dest instead of preserving the directory names.
+#
+# --packages-SELECT (not up-to): part 1 removed build/, so `up-to` would drag
+# dynus_interfaces into a rebuild here; `select` takes it from the sourced
+# install space instead. colcon still topo-orders the selected set, so
+# global_mapper builds before global_mapper_ros. USE_SYSTEM_EIGEN3=ON keeps
+# patchworkpp on the apt libeigen3-dev instead of FetchContent-ing Eigen.
+#
+# global_mapper_ros/cfg is excluded + placeholder-mkdir'd for the same reason as
+# mighty's config/launch/rviz above (its CMakeLists install(DIRECTORY cfg)
+# errors on a missing dir); the real cfg is overlaid at the bottom of this file.
+COPY --exclude=global_mapper_ros/cfg mighty_ws/src/acl-mapping ${MIGHTY_WS}/src/acl-mapping
+COPY mighty_ws/src/patchwork-plusplus ${MIGHTY_WS}/src/patchwork-plusplus
+RUN mkdir -p ${MIGHTY_WS}/src/acl-mapping/global_mapper_ros/cfg && \
+    source /opt/ros/${ROS_DISTRO}/setup.bash && \
+    source ${DECOMP_WS}/install/setup.bash && \
+    source ${MIGHTY_WS}/install/setup.bash && \
+    colcon build \
+        --packages-select fla_interfaces fla_utils global_mapper global_mapper_ros patchworkpp \
+        --cmake-args -DCMAKE_BUILD_TYPE=Release -DUSE_SYSTEM_EIGEN3=ON && \
     rm -rf build log
 
 ENV LD_LIBRARY_PATH=${LIVOX_WS}/install/livox_ros_driver2/lib:/usr/local/lib
@@ -160,3 +202,9 @@ COPY mighty_ws/src/mighty/launch ${MIGHTY_WS}/install/mighty/share/mighty/launch
 COPY mighty_ws/src/mighty/rviz   ${MIGHTY_WS}/install/mighty/share/mighty/rviz
 COPY mighty_ws/src/mpc/config    ${MIGHTY_WS}/install/mpc/share/mpc/config
 COPY mighty_ws/src/acl-mapping/global_mapper_ros/cfg ${MIGHTY_WS}/install/global_mapper_ros/share/global_mapper_ros/cfg
+# The tmux launcher is run by compose STRAIGHT FROM THE SOURCE TREE
+# (`python3 src/mighty/scripts/run_hw_red_rover.py`, see compose.hw.yaml) and is
+# neither compiled nor installed — mighty's CMake install(PROGRAMS ...) lists 8
+# other scripts but NOT this one. So it goes back into src/ here instead of into
+# a share/ tree, and editing it costs one tiny COPY layer, not a recompile.
+COPY mighty_ws/src/mighty/scripts/run_hw_red_rover.py ${MIGHTY_WS}/src/mighty/scripts/run_hw_red_rover.py

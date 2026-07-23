@@ -28,7 +28,9 @@ RUN apt-get update && apt-get install -y \
         ros-${ROS_DISTRO}-turtlesim \
         ros-dev-tools \
         python3-vcstool \
-        libpcl-dev build-essential nlohmann-json3-dev && \
+        libpcl-dev build-essential nlohmann-json3-dev \
+        libeigen3-dev \
+        libtbb-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Workspace layout (paths must match mighty.sh / Makefile DEV_MOUNTS)
@@ -88,7 +90,7 @@ RUN source /opt/ros/humble/setup.bash && \
     export CMAKE_PREFIX_PATH=${LIVOX_WS}/install/livox_ros_driver2:${DECOMP_WS}/install/decomp_util:${CMAKE_PREFIX_PATH} && \
     export MAKEFLAGS="-j${JOBS:-$(nproc)}" && \
     colcon build ${JOBS:+--parallel-workers $JOBS} \
-                 --cmake-args -DCMAKE_BUILD_TYPE=Release
+                 --cmake-args -DCMAKE_BUILD_TYPE=Release -DUSE_SYSTEM_EIGEN3=ON
 
 # Gazebo audio fix
 RUN echo 'pcm.!default { type plug; slave.pcm "null" }' >> /usr/share/alsa/alsa.conf
