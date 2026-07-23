@@ -38,9 +38,7 @@ services:
       # image on another rover, change ROVER_NAME/VEHTYPE/VEHNUM (and ROS_DOMAIN_ID
       # if different) — nothing rover-specific is baked into the image itself.
       ROVER_NAME: RR08
-      ROVER_NAME: RR08
       VEHTYPE: RR
-      VEHNUM: "08"
       VEHNUM: "08"
       ROS_DOMAIN_ID: "22"
       RMW_IMPLEMENTATION: rmw_zenoh_cpp
