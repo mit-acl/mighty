@@ -20,6 +20,10 @@ repositories:
     type: git
     url: https://github.com/kotakondo/livox_laser_simulation_ros2.git
     version: 044e83e6fc5d527b082852550d7206dd4308d950
+  patchwork-plusplus:
+    type: git
+    url: https://github.com/url-kaist/patchwork-plusplus.git
+    version: 3e6903a1d5537a4cc2ace897b0bbb98a92d6014c
   mpc:
     type: git
     url: git@gitlab.com:mit-acl/ugv/ugv_control/mpc.git

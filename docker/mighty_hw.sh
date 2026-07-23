@@ -3,7 +3,7 @@
 # Opt-in: the native `mighty` / `kill_mighty` aliases are untouched and remain the
 # rollback path. PREREQ: the host Zenoh router (`zenoh_route`) must be running.
 #
-#   mighty_hw.sh start [--odom-type dlio|mocap|dlio_in_mocap] [--two-d-only|--no-two-d]
+#   mighty_hw.sh start [--odom-type dlio|mocap|dlio_in_mocap] [--two-d-only|--no-two-d] [--no-sensors]
 #   mighty_hw.sh attach     # tmux attach (Ctrl-b d detaches; stack keeps running)
 #   mighty_hw.sh stop       # compose down — tears the whole stack down
 #   mighty_hw.sh status     # container + pane status
@@ -34,6 +34,7 @@ case "${cmd}" in
                 --odom-type)   export ODOM_TYPE="$2"; shift ;;
                 --two-d-only)  export TWO_D_ONLY=1 ;;
                 --no-two-d)    export TWO_D_ONLY= ;;
+                --no-sensors)  export NO_SENSORS=1 ;;
                 *) echo "unknown option: $1" >&2; exit 2 ;;
             esac
             shift
