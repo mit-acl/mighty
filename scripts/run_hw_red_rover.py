@@ -118,6 +118,7 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
             f'ros2 launch global_mapper_ros global_mapper_patchworkpp.launch.py'
             f' hardware:=true ground_robot:=true quad:={rover_name}'
             # f' depth_pointcloud_topic:=livox/lidar'
+            f' depth_pointcloud_topic:=patchworkpp/nonground'
             f' use_sim_time:=false'
             f' pose_topic:=dlio/odom_node/pose'
             f' use_obstacle_tracker:=true'
