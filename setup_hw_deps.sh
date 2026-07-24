@@ -31,7 +31,10 @@ MIGHTY_SRC="$CODE_DIR/mighty_ws/src"
 DECOMP_SRC="$CODE_DIR/decomp_ws/src"
 REPOS_FILE="$SCRIPT_DIR/mighty.repos"
 
-SIM_ONLY="gazebo_ros_pkgs livox_laser_simulation_ros2 realsense_gazebo_plugin uav_simulator"
+# NOTE: uav_simulator is NOT sim-only despite the name — the hw image needs its
+# local_sensing (+ quadrotor_msgs) packages (onboard_mighty.launch.py resolves
+# local_sensing unconditionally; see Dockerfile.hw.dockerignore's exception).
+SIM_ONLY="gazebo_ros_pkgs livox_laser_simulation_ros2 realsense_gazebo_plugin"
 
 echo "CODE_DIR:   $CODE_DIR"
 echo "REPOS_FILE: $REPOS_FILE"
@@ -75,8 +78,10 @@ parse_repos | while read -r name url pin; do
   fi
 
   # Prefer a tracking branch when some origin branch tip == the pin
-  branch="$(git -C "$dest" branch -r --points-at "$pin" --format='%(refname:short)' 2>/dev/null \
-            | grep -v HEAD | head -1 | sed 's#^origin/##')"
+  # `|| true`: no-branch-at-pin makes grep exit 1, which pipefail+set -e would
+  # otherwise turn into a silent mid-loop death
+  branch="$( { git -C "$dest" branch -r --points-at "$pin" --format='%(refname:short)' 2>/dev/null \
+            | grep -v HEAD | head -1 | sed 's#^origin/##'; } || true)"
   if [ -n "$branch" ]; then
     git -C "$dest" checkout -B "$branch" "$pin"
     git -C "$dest" branch --set-upstream-to="origin/$branch" "$branch" 2>/dev/null || true
