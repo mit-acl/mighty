@@ -3,10 +3,11 @@ repositories:
   acl-mapping:
     type: git
     url: git@gitlab.com:mit-acl/lab/acl-mapping.git
-    version: 67c2195b4d70cc584a4fede03b290960afdf4f8e
+    # tip of patchwork-integration (fleet hw baseline)
+    version: f46feb8ce4dfb119ccd1d1ad3ead5e73bef6c346
   direct_lidar_inertial_odometry:
     type: git
-    url: https://github.com/kotakondo/direct_lidar_inertial_odometry.git
+    url: git@github.com:blakete/direct_lidar_inertial_odometry.git
     version: 2f304f6ed5e5807d843b5ccd505d8fee634eefdb
   dynus_interfaces:
     type: git
