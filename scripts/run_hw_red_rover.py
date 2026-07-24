@@ -35,6 +35,7 @@ Usage:
 
 import argparse
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -318,6 +319,15 @@ def main():
         help='Print generated YAML without launching',
     )
 
+    parser.add_argument(
+        '--docker-exec',
+        metavar='CONTAINER',
+        help='HOST-tmux mode (mirrors rover-drive): build the hw_mighty session '
+             'on the HOST tmux server, with each pane running its commands via '
+             '`docker exec -it CONTAINER bash -ic ...` in the idling container. '
+             'Run this on the host, not inside the container.',
+    )
+
     args = parser.parse_args()
 
     # Read rover name from environment (set in .bashrc)
@@ -329,6 +339,26 @@ def main():
     yaml_content = generate_yaml(args.odom_type, rover_name, args.goal_type,
                                  two_d_only=args.two_d_only,
                                  no_sensors=args.no_sensors)
+
+    if args.docker_exec:
+        # Rewrite each pane for the host-tmux variant: the `tmux select-pane -T`
+        # title line stays on the host pane; every remaining command runs inside
+        # the (idling) container through one interactive docker exec, so the
+        # container's /root/.bashrc provides the workspace sourcing that
+        # shell_command_before provided in-container. One exec line per pane
+        # keeps the Ctrl-C / Up / Enter per-node restart semantics.
+        data = yaml.safe_load(yaml_content)
+        window = data['windows'][0]
+        window.pop('shell_command_before', None)  # host panes don't need ROS
+        for pane in window['panes']:
+            cmds = pane['shell_command']
+            title_cmd = cmds[0]  # tmux select-pane -T (must run on the host)
+            joined = ' && '.join(cmds[1:])
+            pane['shell_command'] = [
+                title_cmd,
+                f'docker exec -it {args.docker_exec} bash -ic {shlex.quote(joined)}',
+            ]
+        yaml_content = yaml.dump(data, default_flow_style=False, sort_keys=False)
 
     print(f'[INFO] Odom type: {args.odom_type}')
     print(f'[INFO] Rover: {rover_name}')

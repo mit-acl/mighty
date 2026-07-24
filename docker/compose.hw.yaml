@@ -37,9 +37,9 @@ services:
       # RR04.sh; baked here because RR04 has no /etc/rover/rover.env. To reuse this
       # image on another rover, change ROVER_NAME/VEHTYPE/VEHNUM (and ROS_DOMAIN_ID
       # if different) — nothing rover-specific is baked into the image itself.
-      ROVER_NAME: RR08
-      VEHTYPE: RR
-      VEHNUM: "08"
+      ROVER_NAME: JR01
+      VEHTYPE: JR
+      VEHNUM: "01"
       ROS_DOMAIN_ID: "22"
       RMW_IMPLEMENTATION: rmw_zenoh_cpp
       # NOTE: ZENOH_ROUTER_CONFIG_URI is intentionally NOT set — the nodes are
@@ -49,18 +49,10 @@ services:
       ODOM_TYPE: ${ODOM_TYPE:-dlio_in_mocap}   # dlio | mocap | dlio_in_mocap
       TWO_D_ONLY: ${TWO_D_ONLY-1}              # non-empty => --two-d-only (export TWO_D_ONLY= to disable)
       NO_SENSORS: ${NO_SENSORS-}               # non-empty => --no-sensors (sensors_bringup owns livox/DLIO/TFs)
-    command:
-      - bash
-      - -lc
-      - |
-        set -e
-        # Detached-pty sizing (see the NO-tty note above); an attaching client
-        # resizes the session to its own terminal anyway.
-        export COLUMNS="$${COLUMNS:-220}" LINES="$${LINES:-56}"
-        cd /home/swarm/code/mighty_ws
-        python3 src/mighty/scripts/run_hw_red_rover.py \
-          --odom-type "$${ODOM_TYPE:-dlio_in_mocap}" $${TWO_D_ONLY:+--two-d-only} $${NO_SENSORS:+--no-sensors}
-          --odom-type "$${ODOM_TYPE:-dlio_in_mocap}" $${TWO_D_ONLY:+--two-d-only} $${NO_SENSORS:+--no-sensors}
-        echo "hw_mighty session loaded; holding foreground (attach: docker exec -it hw-mighty tmux attach -t hw_mighty)"
-        while tmux has-session -t hw_mighty 2>/dev/null; do sleep 5; done
-        echo "hw_mighty session ended; exiting."
+    # HOST-tmux variant (mirrors rover-drive): the container just idles as an
+    # exec target; the hw_mighty tmux session lives on the HOST, built by
+    # mighty_hw.sh via run_hw_red_rover.py --docker-exec. The ODOM_TYPE /
+    # TWO_D_ONLY / NO_SENSORS values resolved into the environment above are
+    # read back by mighty_hw.sh (docker exec printenv) so compose stays the
+    # single source of the defaults.
+    command: ["sleep", "infinity"]
