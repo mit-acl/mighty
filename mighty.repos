@@ -49,7 +49,8 @@ repositories:
   livox_ros_driver2:
     type: git
     url: git@github.com:blakete/livox_ros_driver2.git
-    version: f103b4e0fb686ea175a61da8a016a731fffdd866
+    # fix/build-vs-sdk-1.2.5 — f103b4e + numeric-compare patch so it compiles vs SDK v1.2.5
+    version: 37a62915b4e3f82ce4fbf5bbf7bc16b3ce498aaa
   Livox-SDK2:
     type: git
     url: https://github.com/Livox-SDK/Livox-SDK2.git
