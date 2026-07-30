@@ -245,12 +245,17 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
         'Global Mapper',         # pane 6
     ]
     if no_sensors:
-        # Decoupled sensor bringup (mad-slam-deploy) owns livox/DLIO/static TFs;
-        # drop mighty's copies so there is a single publisher of each.
-        _drop = {'Livox LiDAR', dlio_label,
-                 'Static TF: lidar tilt', 'Static TF: map->odom'}
+        # Decoupled sensor bringup owns livox/DLIO/static TFs; drop mighty's
+        # copies so there is a single publisher of each.
+        dropped_titles = {
+            'Livox LiDAR', dlio_label,
+            'Static TF: lidar tilt', 'Static TF: map->odom',
+        }
         panes, pane_titles = map(list, zip(*[
-            (p, t) for p, t in zip(panes, pane_titles) if t not in _drop]))
+            (pane, title)
+            for pane, title in zip(panes, pane_titles)
+            if title not in dropped_titles
+        ]))
 
     for p, title in zip(panes, pane_titles):
         p['shell_command'].insert(0, f'tmux select-pane -t "$TMUX_PANE" -T "{title}"')
@@ -310,7 +315,7 @@ def main():
         '--no-sensors',
         action='store_true',
         help='Do not launch the livox/DLIO/static-TF panes; a decoupled '
-             'sensor bringup (mad-slam-deploy) publishes them instead.',
+             'sensor bringup publishes them instead.',
     )
 
     parser.add_argument(
@@ -339,26 +344,6 @@ def main():
     yaml_content = generate_yaml(args.odom_type, rover_name, args.goal_type,
                                  two_d_only=args.two_d_only,
                                  no_sensors=args.no_sensors)
-
-    if args.docker_exec:
-        # Rewrite each pane for the host-tmux variant: the `tmux select-pane -T`
-        # title line stays on the host pane; every remaining command runs inside
-        # the (idling) container through one interactive docker exec, so the
-        # container's /root/.bashrc provides the workspace sourcing that
-        # shell_command_before provided in-container. One exec line per pane
-        # keeps the Ctrl-C / Up / Enter per-node restart semantics.
-        data = yaml.safe_load(yaml_content)
-        window = data['windows'][0]
-        window.pop('shell_command_before', None)  # host panes don't need ROS
-        for pane in window['panes']:
-            cmds = pane['shell_command']
-            title_cmd = cmds[0]  # tmux select-pane -T (must run on the host)
-            joined = ' && '.join(cmds[1:])
-            pane['shell_command'] = [
-                title_cmd,
-                f'docker exec -it {args.docker_exec} bash -ic {shlex.quote(joined)}',
-            ]
-        yaml_content = yaml.dump(data, default_flow_style=False, sort_keys=False)
 
     print(f'[INFO] Odom type: {args.odom_type}')
     print(f'[INFO] Rover: {rover_name}')

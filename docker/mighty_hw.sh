@@ -8,8 +8,8 @@
 # (`zenoh_route`) must be running.
 #
 #   mighty_hw.sh start [--odom-type dlio|mocap|dlio_in_mocap] [--two-d-only|--no-two-d] [--no-sensors]
-#   mighty_hw.sh attach     # tmux attach -t hw_mighty (Ctrl-b d detaches; stack keeps running)
-#   mighty_hw.sh stop       # kill host session + compose down
+#   mighty_hw.sh attach     # tmux attach (Ctrl-b d detaches; stack keeps running)
+#   mighty_hw.sh stop       # compose down — tears the whole stack down
 #   mighty_hw.sh status     # container + pane status
 #   mighty_hw.sh logs       # container PID-1 output (idle loop; panes hold the real logs)
 #
