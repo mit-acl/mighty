@@ -3,8 +3,7 @@ repositories:
   acl-mapping:
     type: git
     url: git@gitlab.com:mit-acl/lab/acl-mapping.git
-    # tip of patchwork-integration (fleet hw baseline)
-    version: f46feb8ce4dfb119ccd1d1ad3ead5e73bef6c346
+    version: 67c2195b4d70cc584a4fede03b290960afdf4f8e
   direct_lidar_inertial_odometry:
     type: git
     url: git@github.com:blakete/direct_lidar_inertial_odometry.git
@@ -21,10 +20,6 @@ repositories:
     type: git
     url: https://github.com/kotakondo/livox_laser_simulation_ros2.git
     version: 044e83e6fc5d527b082852550d7206dd4308d950
-  patchwork-plusplus:
-    type: git
-    url: https://github.com/url-kaist/patchwork-plusplus.git
-    version: 3e6903a1d5537a4cc2ace897b0bbb98a92d6014c
   mpc:
     type: git
     url: git@gitlab.com:mit-acl/ugv/ugv_control/mpc.git

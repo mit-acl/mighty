@@ -37,9 +37,9 @@ services:
       # RR04.sh; baked here because RR04 has no /etc/rover/rover.env. To reuse this
       # image on another rover, change ROVER_NAME/VEHTYPE/VEHNUM (and ROS_DOMAIN_ID
       # if different) — nothing rover-specific is baked into the image itself.
-      ROVER_NAME: JR01
-      VEHTYPE: JR
-      VEHNUM: "01"
+      ROVER_NAME: RR04
+      VEHTYPE: RR
+      VEHNUM: "04"
       ROS_DOMAIN_ID: "22"
       RMW_IMPLEMENTATION: rmw_zenoh_cpp
       # NOTE: ZENOH_ROUTER_CONFIG_URI is intentionally NOT set — the nodes are
