@@ -50,7 +50,8 @@ DECOMP_SETUP_BASH = Path('/home/swarm/code/decomp_ws/install/setup.bash')
 
 
 def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
-                  two_d_only: bool = False) -> str:
+                  two_d_only: bool = False,
+                  no_sensors: bool = False) -> str:
     """Generate tmuxp YAML for hardware red rover."""
 
     source_ws = f'source {SETUP_BASH}'
@@ -239,6 +240,19 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
         'Static TF: map->odom',  # pane 5
         'Global Mapper',         # pane 6
     ]
+    if no_sensors:
+        # Decoupled sensor bringup owns livox/DLIO/static TFs; drop mighty's
+        # copies so there is a single publisher of each.
+        dropped_titles = {
+            'Livox LiDAR', dlio_label,
+            'Static TF: lidar tilt', 'Static TF: map->odom',
+        }
+        panes, pane_titles = map(list, zip(*[
+            (pane, title)
+            for pane, title in zip(panes, pane_titles)
+            if title not in dropped_titles
+        ]))
+
     for p, title in zip(panes, pane_titles):
         p['shell_command'].insert(0, f'tmux select-pane -t "$TMUX_PANE" -T "{title}"')
 
@@ -294,6 +308,13 @@ def main():
     )
 
     parser.add_argument(
+        '--no-sensors',
+        action='store_true',
+        help='Do not launch the livox/DLIO/static-TF panes; a decoupled '
+             'sensor bringup publishes them instead.',
+    )
+
+    parser.add_argument(
         '--dry-run',
         action='store_true',
         help='Print generated YAML without launching',
@@ -308,7 +329,8 @@ def main():
         sys.exit(1)
 
     yaml_content = generate_yaml(args.odom_type, rover_name, args.goal_type,
-                                 two_d_only=args.two_d_only)
+                                 two_d_only=args.two_d_only,
+                                 no_sensors=args.no_sensors)
 
     print(f'[INFO] Odom type: {args.odom_type}')
     print(f'[INFO] Rover: {rover_name}')

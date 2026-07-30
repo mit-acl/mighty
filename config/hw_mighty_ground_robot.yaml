@@ -35,7 +35,7 @@ mighty_node:
 
         # --- Multi-Agent / Frame Alignment ---
         share_traj: true                               # [-] Publish own planned traj on /trajs (off for solo HW runs to skip the swarm channel)
-        use_frame_alignment: false                      # [-] Use inter-agent frame alignment - if false, until we receive frame alignment, we drop the msg from that agent
+        use_frame_alignment: true              # [-] Use inter-agent frame alignment - if false, until we receive frame alignment, we drop the msg from that agent
         num_agents: 10                                  # [-] Number of agents (for frame alignment subscriptions)
         sim_frame_offset_qx: 0.0                        # [-] Simulated frame offset quaternion (for testing in fake_sim)
         sim_frame_offset_qy: 0.0                        # [-]
@@ -97,10 +97,10 @@ mighty_node:
         goal_seen_radius: 2.0                           # [m] Distance to stop replanning
 
         # --- L-BFGS Optimization Weights ---
-        dynamic_weight: 1e+1                            # [-] Dynamic obstacle avoidance weight
+        dynamic_weight: 1e+1                         # [-] Dynamic obstacle avoidance weight
         time_weight: 1e+3                               # [-] Time cost weight
         stat_weight: 0.0                                # [-] Static obstacle weight
-        jerk_weight: 1e+4                               # [-] Jerk smoothness weight
+        jerk_weight: 1e+3                              # [-] Jerk smoothness weight
         dyn_constr_vel_weight: 1e+3                     # [-] Velocity constraint violation weight
         dyn_constr_acc_weight: 1e+3                     # [-] Acceleration constraint violation weight
         dyn_constr_jerk_weight: 1e+3                    # [-] Jerk constraint violation weight
@@ -334,7 +334,7 @@ mighty_node:
         exploration.detector.obstacle_clearance_cells: 1
         exploration.detector.min_obstacle_distance_m: 0.1
         exploration.detector.robot_snap_radius_m: 0.5
-        exploration.bounds.enabled: true
+        exploration.bounds.enabled: false
         # exploration.bounds.min_x: 3.0
         # exploration.bounds.max_x:  18.0
         # exploration.bounds.min_y:  -5.0

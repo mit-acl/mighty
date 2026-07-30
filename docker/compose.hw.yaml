@@ -48,6 +48,10 @@ services:
       # Match the `mighty` alias default: DLIO seeded in mocap + 2D-only z pinning.
       ODOM_TYPE: ${ODOM_TYPE:-dlio_in_mocap}   # dlio | mocap | dlio_in_mocap
       TWO_D_ONLY: ${TWO_D_ONLY-1}              # non-empty => --two-d-only (export TWO_D_ONLY= to disable)
+      NO_SENSORS: ${NO_SENSORS-}               # non-empty => --no-sensors (external sensor bringup owns them)
+    # Keep the launcher flag wiring live without rebuilding the existing image.
+    volumes:
+      - /home/swarm/code/mighty_ws/src/mighty/scripts/run_hw_red_rover.py:/home/swarm/code/mighty_ws/src/mighty/scripts/run_hw_red_rover.py:ro
     command:
       - bash
       - -lc
@@ -58,7 +62,7 @@ services:
         export COLUMNS="$${COLUMNS:-220}" LINES="$${LINES:-56}"
         cd /home/swarm/code/mighty_ws
         python3 src/mighty/scripts/run_hw_red_rover.py \
-          --odom-type "$${ODOM_TYPE:-dlio_in_mocap}" $${TWO_D_ONLY:+--two-d-only}
+          --odom-type "$${ODOM_TYPE:-dlio_in_mocap}" $${TWO_D_ONLY:+--two-d-only} $${NO_SENSORS:+--no-sensors}
         echo "hw_mighty session loaded; holding foreground (attach: docker exec -it hw-mighty tmux attach -t hw_mighty)"
         while tmux has-session -t hw_mighty 2>/dev/null; do sleep 5; done
         echo "hw_mighty session ended; exiting."
