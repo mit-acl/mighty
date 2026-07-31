@@ -342,6 +342,21 @@ struct parameters {
   // nearest every tick.
   bool   expl_select_nearest{false};
   double expl_select_commit_margin_m{0.5};
+  // Grace period before concluding exploration is done and returning home. The
+  // "no selectable frontier" condition must hold continuously for this long
+  // before the agent gives up — this absorbs transient gaps (a frontier briefly
+  // INVALIDATED by a one-off HGP failure / ESDF filter / dwell, or a lull
+  // between detection cycles) so the agent keeps exploring reachable frontiers
+  // instead of prematurely heading home. 0 disables (give up on the first gap).
+  double expl_home_grace_sec{3.0};
+  // Exploration stall watchdog. If the agent has an active exploration goal but
+  // has neither moved more than expl_stall_eps_m nor switched frontier for
+  // expl_stall_timeout_sec, the pursued frontier is invalidated so selection can
+  // advance. This is the only escape that runs on the select timer: every other
+  // one depends on map updates, the replan loop, or the drone status machine, so
+  // if any of those wedges the robot is stranded. 0 disables.
+  double expl_stall_timeout_sec{30.0};
+  double expl_stall_eps_m{0.15};
   // Detector
   int    expl_cluster_min_cells{6};
   int    expl_border_margin_cells{2};

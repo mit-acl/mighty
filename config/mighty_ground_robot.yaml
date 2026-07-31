@@ -334,6 +334,9 @@ mighty_node:
         exploration.enabled: true                                # [-] Master switch
         exploration.select_rate_hz: 1.0                          # [Hz] Goal-selection tick
         exploration.default_goal_z: 0.0                          # [m]  z for issued exploration goals
+        exploration.stall_timeout_sec: 30.0                      # [s]  watchdog: if an exploration goal is active but the robot has neither moved (stall_eps_m) nor switched frontier for this long, invalidate that frontier so selection can advance. This is the ONLY escape driven by the select timer — the pursuit timeout and dwell checks live in FrontierManager::update() (occ_2d-driven), goalReachedCheck() needs GOAL_REACHED + checkReadyToReplan(), and the unreachable path needs the replan loop to keep failing. Without it, one run in ten stranded the robot mid-map. 0 disables.
+        exploration.stall_eps_m: 0.15                            # [m]  movement below this counts as no progress for the watchdog above
+        exploration.home_grace_sec: 3.0                        # [s]  keep exploring this long after frontiers momentarily run out before giving up and returning home — absorbs transient gaps so the agent doesn't head home while reachable frontiers remain (0 = give up immediately)
         exploration.select_nearest: true                         # [-]  always drive to the geometrically CLOSEST frontier (ignores the utility weights below and minpos); set false to use the utility function
         exploration.select_commit_margin_m: 0.5                  # [m]  hysteresis: keep the current goal unless another frontier is closer by more than this (prevents flip-flop between near-equidistant frontiers); 0 = strict nearest every tick
         exploration.detector.cluster_min_cells: 5                # [cells] drop tiny frontier clusters

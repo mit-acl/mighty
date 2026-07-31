@@ -439,6 +439,13 @@ void FrontierManager::markInvalidated(uint64_t id, double t_now) {
     if (r.id == id) {
       r.state = FrontierState::INVALIDATED;
       r.invalidated_at_t = t_now;
+      // Count this as a strike. Repeated invalidations (HGP-unreachable, ESDF-
+      // too-close) at the same location escalate to a PERMANENT keep-out once
+      // timeout_count reaches pursuit_timeout_max_strikes — see update()'s
+      // keep-out scan. Without this, an unreachable frontier cycles forever
+      // (INVALIDATED -> cooldown expiry -> respawn ACTIVE -> fail -> ...),
+      // never letting exploration settle to zero frontiers.
+      ++r.timeout_count;
       r.pursuit_deadline_t = -1.0;
       r.pursuit_budget_sec = 0.0;
       return;

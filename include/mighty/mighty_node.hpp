@@ -295,6 +295,11 @@ class MIGHTY_NODE : public rclcpp::Node {
   bool     manual_goal_active_     = false;  // user issued the current goal
   uint64_t current_explore_id_     = 0;
   int      unreachable_consec_count_ = 0;
+  // Exploration stall watchdog: the pursued frontier id, the pose we last made
+  // progress at, and when. See the watchdog block in exploreSelectCallback.
+  uint64_t        explore_stall_id_  = 0;
+  Eigen::Vector2d explore_stall_pos_ = Eigen::Vector2d::Zero();
+  double          explore_stall_t_   = 0.0;
   Eigen::Vector3d exploration_start_pos_{0.0, 0.0, 0.0};
   bool exploration_start_captured_ = false;  // sticky for the whole exploration session
   rclcpp::TimerBase::SharedPtr timer_explore_select_;
@@ -316,6 +321,18 @@ class MIGHTY_NODE : public rclcpp::Node {
   // and stop accepting new frontier goals (so it stays parked once arrived).
   rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr sub_return_home_;
   bool home_return_requested_ = false;
+  // When the return-home latch was set by the INTERNAL "nothing left to explore"
+  // path (not the external /exploration/return_home command), lift it once the
+  // robot actually reaches home and re-evaluate — so a frontier discovered
+  // during the return (or a leftover that reappeared) still gets explored
+  // instead of sitting drawn-but-unexplored forever. The external command means
+  // "come home and stay parked", so it leaves this false.
+  bool home_return_resume_on_arrival_ = false;
+  // Wall-clock time (s) when selectable frontiers first ran out during active
+  // exploration. Used to enforce expl_home_grace_sec before returning home so a
+  // transient empty gap doesn't trigger a premature give-up. -1 = frontiers
+  // currently available (or not yet exploring).
+  double no_frontier_since_t_ = -1.0;
   // Wall-clock seconds of the last successful publishVisitedMap() call.
   // Used to throttle the (potentially large) tristate-grid publish to ~1 Hz
   // — RViz only needs occasional updates because the persistent map only
