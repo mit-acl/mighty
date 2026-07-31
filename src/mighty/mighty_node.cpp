@@ -727,6 +727,10 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("esdf_weight", 1e+3);
   this->declare_parameter("esdf_d_safe", 1.0);
   this->declare_parameter("esdf_truncation_distance", 10);
+  this->declare_parameter("use_persistent_global_map", false);
+  this->declare_parameter("reuse_global_path", false);
+  this->declare_parameter("global_path_max_age_sec", 2.0);
+  this->declare_parameter("global_path_max_deviation_m", 1.0);
 
   // Bend pre-alignment (ground robot only)
   this->declare_parameter("corridor_hop_enabled", false);
@@ -1096,6 +1100,10 @@ void MIGHTY_NODE::setParameters() {
   par_.corridor_hop_enabled = this->get_parameter("corridor_hop_enabled").as_bool();
   par_.corridor_corner_angle_deg = this->get_parameter("corridor_corner_angle_deg").as_double();
   par_.corridor_detection_window_m = this->get_parameter("corridor_detection_window_m").as_double();
+  par_.use_persistent_global_map = this->get_parameter("use_persistent_global_map").as_bool();
+  par_.reuse_global_path = this->get_parameter("reuse_global_path").as_bool();
+  par_.global_path_max_age_sec = this->get_parameter("global_path_max_age_sec").as_double();
+  par_.global_path_max_deviation_m = this->get_parameter("global_path_max_deviation_m").as_double();
   par_.corridor_backoff_m = this->get_parameter("corridor_backoff_m").as_double();
   par_.corridor_min_leg_m = this->get_parameter("corridor_min_leg_m").as_double();
   par_.corridor_clearance_threshold_m = this->get_parameter("corridor_clearance_threshold_m").as_double();
@@ -3254,7 +3262,30 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
   }
 
   occ_grid_2d_ = OccGrid2D::fromOccupancyGrid(*msg);
-  mighty_ptr_->setOccGrid2D(occ_grid_2d_);
+
+  // Choose the grid handed to the GLOBAL planner. By default it's the sliding
+  // occ_2d window (legacy). When use_persistent_global_map is on (ground robot),
+  // feed the accumulated visited_map_ instead, so the A* plans over the whole
+  // mission history — a stable route that doesn't churn as the window slides.
+  // The node keeps `occ_grid_2d_` (the sliding grid) for exploration/frontier
+  // use; only the core planner's copy is swapped. Falls back to the sliding grid
+  // until the persistent map exists and is non-empty (e.g. exploration disabled
+  // -> no visited_map_). absorb() here folds in the newest observation first;
+  // the exploration block below may absorb the same (small) sliding grid again,
+  // which is idempotent and negligible.
+  std::shared_ptr<const OccGrid2D> planner_grid = occ_grid_2d_;
+  if (par_.use_persistent_global_map && par_.vehicle_type == "ground_robot"
+      && visited_map_) {
+    visited_map_->absorb(*occ_grid_2d_);
+    if (!visited_map_->empty()) {
+      planner_grid = OccGrid2D::fromTristate(
+          visited_map_->width(), visited_map_->height(),
+          visited_map_->resolution(),
+          visited_map_->originX(), visited_map_->originY(),
+          visited_map_->data());
+    }
+  }
+  mighty_ptr_->setOccGrid2D(planner_grid);
 
   // Frontier-based exploration: detect frontiers in the new grid, update the
   // persistent global database, then immediately try to issue an exploration

@@ -367,6 +367,17 @@ class MIGHTY {
   bool generateGlobalPath(vec_Vecf<3>& global_path, double current_time,
                           double last_replaning_computation_time);
 
+  /** @brief Reuse gate for the ground-robot persistent-map route. If the cached
+   *  route is still valid (goal unchanged, not stale, robot not strayed, and
+   *  collision-free vs the current map), re-anchor it to @p local_A and return
+   *  it (skipping A*). Returns false to signal the caller must run a fresh solve.
+   *  @param local_A Current planning start.
+   *  @param current_time Current wall/sim time.
+   *  @param reanchored_out Output: the re-anchored (untruncated) cached route.
+   */
+  bool tryReuseCachedRoute(const state& local_A, double current_time,
+                           vec_Vecf<3>& reanchored_out);
+
   /** @brief Push the global path waypoints into free space.
    *  @param global_path Input/output global path.
    *  @param free_global_path Output path truncated to free space.
@@ -581,6 +592,15 @@ class MIGHTY {
   vec_Vecf<3> global_path_;
   vec_Vecf<3> original_global_path_;  // For visualization
   vec_Vecf<3> free_global_path_;
+
+  // Global-path reuse cache (Phase 3). The full route to G_term from the last
+  // FRESH A* solve, the goal it was planned for, and its plan time. The reuse
+  // gate re-anchors + re-truncates a copy of this each tick instead of solving.
+  // Touched only from the single-threaded replan flow (generateGlobalPath /
+  // tryReuseCachedRoute), so no dedicated mutex.
+  vec_Vecf<3> cached_route_;
+  state       cached_route_goal_;
+  double      cached_route_time_ = -1.0;
 
   // Static push
   vec_Vecf<3> static_push_points_;

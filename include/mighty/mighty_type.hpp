@@ -280,6 +280,24 @@ struct parameters {
   double esdf_d_safe{1.0};             // [m] Safety distance threshold
   int esdf_truncation_distance{10};    // [voxels] Must match mapper config
 
+  // Persistent global planning map (ground robot only). When true, the global
+  // A* plans over the accumulated visited_map_ (whole mission history) instead
+  // of the sliding occ_2d window, so the route is stable frame-to-frame and can
+  // target the true goal. Requires exploration enabled (visited_map_ exists);
+  // falls back to the sliding grid otherwise. See docs/plans/persistent_global_map_plan.md.
+  bool use_persistent_global_map{false};
+
+  // Global-path reuse gate (ground robot + persistent map only). When true, the
+  // replan loop REUSES the cached route (re-anchored to the current pose and
+  // re-truncated at the horizon) instead of re-running A* every tick — the A*
+  // search only runs when the cached route is invalid: goal moved, route now
+  // collides with the current map, robot strayed > max_deviation_m, or the route
+  // is older than max_age_sec. This is the Nav2-style "plan slow, control fast"
+  // split. Set max_age_sec / max_deviation_m <= 0 to disable that check.
+  bool   reuse_global_path{false};
+  double global_path_max_age_sec{2.0};
+  double global_path_max_deviation_m{1.0};
+
   // Bend pre-alignment (ground robot only).
   // At each sharp HGP bend, back off the subgoal along the incoming direction
   // by corridor_backoff_m so the robot stops short of the inside corner,

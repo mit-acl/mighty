@@ -90,6 +90,10 @@ mighty_node:
         inflation_hgp: 0.15                              # [m] Static obstacle inflation for global A* planning
         hgp_timeout_duration_ms: 10000                  # [ms] Global planner timeout
         max_expand: 1000000                               # [-] Max A* node expansions
+        use_persistent_global_map: true                 # [-] Plan global A* over the accumulated visited_map_ (persistent, whole-mission) instead of the sliding occ_2d window — stable route, no window-slide churn (ground robot; requires exploration enabled)
+        reuse_global_path: true                         # [-] Reuse the cached global route (re-anchored + re-truncated) instead of re-running A* every replan tick; A* only re-runs when the route is invalid (goal moved / collides / strayed / stale). Needs use_persistent_global_map
+        global_path_max_age_sec: 2.0                    # [s] Force a fresh A* if the cached route is older than this (<=0 disables the age check)
+        global_path_max_deviation_m: 1.0                # [m] Force a fresh A* if the robot has strayed farther than this from the cached route (<=0 disables the deviation check)
 
         # --- Local Planning ---
         horizon: 20.0                                   # [m] Planning horizon
