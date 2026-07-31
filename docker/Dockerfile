@@ -41,20 +41,25 @@ ENV LIVOX_SDK_DIR=${CODE_DIR}/Livox-SDK2
 # Clone MIGHTY at a pinned release tag (override with --build-arg MIGHTY_VERSION=<tag>).
 # All other dep versions live in mighty.repos — single source of truth.
 #
-# RELEASE STEP — the tag below must be bumped before publishing. mighty.repos is
-# read from the CLONED TAG, not from the working tree, so a dependency added
-# locally is invisible to this path. v0.0.6 has no `mpc` entry, which means a
-# plain `make build` yields an image with no ground-robot controller at all and
-# `make run-ground-exploration` cannot work. Publishing therefore requires:
-#   1. push the mpc pin in mighty.repos to the mighty remote
-#   2. tag that commit (v0.0.7)
-#   3. bump MIGHTY_VERSION here, and rebuild to verify
-# `make build-local` does not exercise this — it copies the working tree and
-# re-imports mighty.repos from it, so it sees mpc regardless.
+# RELEASING — this tag and mighty.repos are read from the CLONE, not from your
+# working tree, so anything committed locally but not pushed and tagged is
+# invisible here. That is not hypothetical: v0.0.6 predates the `mpc` pin, so
+# building against it produced an image with no ground-robot controller at all,
+# and it also predates the acl-mapping bump that carries
+# global_mapper_ros/cfg/sim_ground_robot.yaml. Cutting a release means:
+#   1. bump MIGHTY_VERSION below IN THE COMMIT YOU ARE ABOUT TO TAG — if you tag
+#      first and bump after, a checkout of the new tag still builds the old one
+#   2. push the branch, then verify the clone path before committing to a tag:
+#          make build MIGHTY_VERSION=<branch>
+#      (git clone --branch takes a branch name, so this exercises exactly this
+#      RUN without spending a tag you would then have to supersede)
+#   3. merge, tag, push the tag, and re-run plain `make build`
+# `make build-local` does NOT exercise any of this — it copies the working tree
+# and re-imports mighty.repos from it, so it always sees your local state.
 RUN mkdir -p ${MIGHTY_WS}/src
 WORKDIR ${MIGHTY_WS}/src
 ARG DUMMY=unknown
-ARG MIGHTY_VERSION=v0.0.6
+ARG MIGHTY_VERSION=v0.0.7
 RUN DUMMY=${DUMMY} git clone --depth 1 --branch ${MIGHTY_VERSION} https://github.com/mit-acl/mighty.git
 
 # Import every dependency (pinned in mighty.repos)

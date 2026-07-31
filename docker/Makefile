@@ -32,6 +32,18 @@ else
 BUILD_ARGS =
 endif
 
+# Override the git ref the image is built from. Accepts anything
+# `git clone --branch` takes, so a BRANCH works as well as a tag:
+#     make build MIGHTY_VERSION=dev-sim
+# That is the way to verify the clone-from-GitHub path before cutting a tag —
+# `make build-local` cannot, since it copies the working tree instead of
+# cloning. Empty (the default) uses the pinned tag in the Dockerfile.
+ifneq ($(MIGHTY_VERSION),)
+VERSION_ARG = --build-arg MIGHTY_VERSION=$(MIGHTY_VERSION)
+else
+VERSION_ARG =
+endif
+
 # Dev mode: bind-mount the local mighty source over the in-image one for fast
 # parameter / launch / rviz iteration without rebuilding the image. C++ source
 # changes still need a rebuild (the binaries are baked into the image).
@@ -54,6 +66,7 @@ build:
 	docker build \
 	  $(PLATFORM_FLAG) \
 	  $(BUILD_ARGS) \
+	  $(VERSION_ARG) \
 	  -f Dockerfile -t mighty ..
 
 .PHONY: build-no-cache
@@ -61,6 +74,7 @@ build-no-cache:
 	docker build \
 	$(PLATFORM_FLAG) \
 	$(BUILD_ARGS) \
+	$(VERSION_ARG) \
 	-f Dockerfile \
 	--build-arg DUMMY=`date +%s` -t mighty ..
 
