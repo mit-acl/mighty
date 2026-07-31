@@ -342,6 +342,7 @@ mighty_node:
         exploration.detector.min_obstacle_distance_m: 0.5        # [m]  ESDF-based clearance: drop frontiers whose centroid is closer than this to any obstacle (0=disabled). Uses esdf_2d_topic if available.
         exploration.detector.robot_snap_radius_m: 1.0            # [m]  spiral search if robot not on free cell
         exploration.detector.reconcile_stale: true               # [-]  each map update, retire records whose location is no longer a frontier of >= cluster_min_cells cells (kills phantom frontiers left on cells that used to be a border but got explored)
+        exploration.detector.unknown_bridge_cells: 4             # [cells] treat known-free regions separated by <= N UNKNOWN cells as connected during the reachability BFS (0 = strict free-only). The mapper only clears a 0.8 m cylinder around the robot while the first ray-cleared cells sit ~1.4 m out, so at startup the robot's own free pocket is ringed by UNKNOWN and disconnected from everything it can see — a free-only BFS finds one cluster centred on the robot, dwell retires it VISITED in ~1 s, and exploration deadlocks before the robot moves. 4 cells = 0.6 m covers that seam. OCCUPIED always blocks, so this never bridges through walls.
         # Optional axis-aligned exploration bounds. When enabled, frontier
         # seeds outside the box are dropped, so the robot only receives
         # exploration goals inside [min_x,max_x] x [min_y,max_y]. RViz shows

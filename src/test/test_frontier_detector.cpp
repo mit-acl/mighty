@@ -337,6 +337,87 @@ TEST(FrontierDetectorTest, IsStillFrontierToleratesCentroidDrift) {
                                   /*min_cells=*/5, /*search_radius_cells=*/2));
 }
 
+// --- unknown_bridge_cells: sensor near-field seam ---------------------------
+//
+// Reproduces the startup deadlock seen on the ground robot: the mapper clears a
+// small cylinder around the robot, but the first ray-cleared cells sit farther
+// out, so the robot's free pocket is ringed by UNKNOWN and not 8-connected to
+// the free space it can actually see. A free-only BFS reaches the pocket alone,
+// the only cluster it reports sits on top of the robot, the dwell check retires
+// it VISITED within a second, and the robot never gets a goal.
+namespace {
+
+// 20x10: robot pocket at ix 1..3, a `seam` wide UNKNOWN gap, then a large free
+// region at ix 6..14. Everything else UNKNOWN.
+std::shared_ptr<const OccGrid2D> MakeSeamGrid() {
+  std::vector<int8_t> data(200, U);
+  for (int iy = 3; iy <= 6; ++iy)
+    for (int ix = 1; ix <= 3; ++ix) data[iy * 20 + ix] = F;   // robot pocket
+  for (int iy = 1; iy <= 8; ++iy)
+    for (int ix = 6; ix <= 14; ++ix) data[iy * 20 + ix] = F;  // main region
+  return OccGrid2D::fromTristate(20, 10, 0.1, 0.0, 0.0, data);
+}
+
+FrontierDetector MakeBridgeDetector(int bridge) {
+  FrontierDetectorParams p;
+  p.cluster_min_cells    = 2;
+  p.border_margin_cells  = 0;
+  p.robot_snap_radius_m  = 5.0;
+  p.unknown_bridge_cells = bridge;
+  return FrontierDetector(p);
+}
+
+}  // namespace
+
+TEST(FrontierDetectorTest, NearFieldSeamStrandsRobotWithoutBridging) {
+  auto grid = MakeSeamGrid();
+  auto det = MakeBridgeDetector(0);
+  // Robot sits in the pocket at (ix=2, iy=4).
+  auto out = det.detect(*grid, Eigen::Vector2d(0.25, 0.45));
+  // Only the pocket is reachable: one cluster, and it is centred on the robot.
+  ASSERT_EQ(out.size(), 1u);
+  EXPECT_EQ(out[0].size_cells, 10);  // 3x4 pocket minus its 2 interior cells
+  EXPECT_LT(out[0].centroid.x(), 0.4);
+}
+
+TEST(FrontierDetectorTest, BridgingMustCoverTheFullSeamWidth) {
+  auto grid = MakeSeamGrid();
+  // Seam is 2 cells wide (ix=4,5); a 1-cell budget cannot cross it.
+  auto out = MakeBridgeDetector(1).detect(*grid, Eigen::Vector2d(0.25, 0.45));
+  ASSERT_EQ(out.size(), 1u);
+  EXPECT_LT(out[0].centroid.x(), 0.4);
+}
+
+TEST(FrontierDetectorTest, BridgingReconnectsRobotToMainFreeRegion) {
+  auto grid = MakeSeamGrid();
+  auto out = MakeBridgeDetector(2).detect(*grid, Eigen::Vector2d(0.25, 0.45));
+  // Both rings are now found, and they stay distinct clusters (Pass B only
+  // links frontier cells, which are free by definition). Sorted size-descending.
+  ASSERT_EQ(out.size(), 2u);
+  EXPECT_EQ(out[0].size_cells, 30);  // boundary ring of the 9x8 main region
+  EXPECT_GT(out[0].centroid.x(), 0.6);
+  EXPECT_EQ(out[1].size_cells, 10);  // the pocket
+}
+
+TEST(FrontierDetectorTest, BridgingDoesNotLeakThroughOccupiedCells) {
+  // Same layout, but the seam is a wall instead of unobserved space. Even a
+  // generous budget must not cross it.
+  std::vector<int8_t> data(200, U);
+  for (int iy = 3; iy <= 6; ++iy)
+    for (int ix = 1; ix <= 3; ++ix) data[iy * 20 + ix] = F;
+  for (int iy = 0; iy < 10; ++iy)
+    for (int ix = 4; ix <= 5; ++ix) data[iy * 20 + ix] = O;   // wall
+  for (int iy = 1; iy <= 8; ++iy)
+    for (int ix = 6; ix <= 14; ++ix) data[iy * 20 + ix] = F;
+  auto grid = OccGrid2D::fromTristate(20, 10, 0.1, 0.0, 0.0, data);
+
+  auto out = MakeBridgeDetector(8).detect(*grid, Eigen::Vector2d(0.25, 0.45));
+  // Pocket only. obstacle_clearance_cells=1 drops the column hugging the wall,
+  // so the reported cluster is smaller than the unobstructed case.
+  ASSERT_EQ(out.size(), 1u);
+  EXPECT_LT(out[0].centroid.x(), 0.4);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

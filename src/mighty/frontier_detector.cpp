@@ -73,10 +73,16 @@ std::vector<FrontierCluster> FrontierDetector::detect(
   const size_t N = static_cast<size_t>(W) * H;
   std::vector<uint8_t> visited(N, 0);
   std::vector<uint8_t> is_frontier(N, 0);
+  // Remaining UNKNOWN-bridging budget each cell was reached with. Stepping onto
+  // a known-free cell refills it; stepping onto an UNKNOWN cell spends one.
+  // With unknown_bridge_cells == 0 this degenerates to the free-only BFS.
+  const int bridge = std::max(0, params_.unknown_bridge_cells);
+  std::vector<int8_t> budget(N, 0);
 
   std::queue<std::pair<int, int>> q;
   q.push({seed_x, seed_y});
   visited[flatIdx(seed_x, seed_y, W)] = 1;
+  budget[flatIdx(seed_x, seed_y, W)] = static_cast<int8_t>(std::min(bridge, 127));
 
   while (!q.empty()) {
     auto [cx, cy] = q.front();
@@ -85,20 +91,32 @@ std::vector<FrontierCluster> FrontierDetector::detect(
     // Tag this cell as a frontier seed if it matches the shared per-cell
     // frontier predicate. Keeping the definition in one place (isFrontierCell)
     // guarantees record re-validation (isStillFrontier) can never drift from
-    // what detection considers a frontier.
-    if (isFrontierCell(grid, cx, cy, visited_map)) {
-      is_frontier[flatIdx(cx, cy, W)] = 1;
+    // what detection considers a frontier. Bridged UNKNOWN cells fail the
+    // predicate's isFree() gate, so they can never become seeds.
+    const size_t cidx = flatIdx(cx, cy, W);
+    const bool cur_free = grid.isFree(cx, cy);
+    if (cur_free && isFrontierCell(grid, cx, cy, visited_map)) {
+      is_frontier[cidx] = 1;
     }
 
-    // Expand BFS through known-free cells only.
+    // Expand BFS through known-free cells, plus short UNKNOWN seams when
+    // bridging is enabled. OCCUPIED always blocks, so bridging can only
+    // reconnect free space the sensor simply hasn't filled in yet.
+    const int cur_budget = cur_free ? bridge : budget[cidx];
     for (int i = 0; i < 8; ++i) {
       const int nx = cx + kDx8[i];
       const int ny = cy + kDy8[i];
       if (!grid.inBounds(nx, ny)) continue;
+      if (grid.isOccupied(nx, ny)) continue;
       const size_t nidx = flatIdx(nx, ny, W);
-      if (visited[nidx]) continue;
-      if (!grid.isFree(nx, ny)) continue;
+      const bool nfree = grid.isFree(nx, ny);
+      const int nbudget = nfree ? bridge : cur_budget - 1;
+      if (nbudget < 0) continue;  // out of bridging budget — seam too wide
+      // Revisit only when we arrive with strictly more budget to spend, so a
+      // cell first reached mid-seam can still expand once free space is found.
+      if (visited[nidx] && budget[nidx] >= nbudget) continue;
       visited[nidx] = 1;
+      budget[nidx] = static_cast<int8_t>(std::min(nbudget, 127));
       q.push({nx, ny});
     }
   }

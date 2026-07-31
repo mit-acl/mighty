@@ -31,6 +31,19 @@ struct FrontierDetectorParams {
                                         // Filters noisy frontiers hugging walls.
   double robot_snap_radius_m     = 1.0; // spiral search if robot is not on FREE
 
+  // Max run of consecutive UNKNOWN cells the reachability BFS may step through
+  // to treat two known-free regions as connected (0 = strictly free-only, the
+  // textbook WFD behavior). Sensors have a near-field blind zone: the mapper
+  // clears a small cylinder around the robot, but the first ray-cleared cells
+  // sit farther out, so the robot's own free pocket is ringed by UNKNOWN and
+  // is not 8-connected to anything it can see. A free-only BFS then reaches
+  // only that pocket, the sole cluster it finds is centred on the robot, the
+  // dwell check retires it as VISITED within a second, and exploration
+  // deadlocks before the robot ever moves. Bridging a couple of cells closes
+  // that seam. OCCUPIED cells always block, so this never leaks through walls,
+  // and bridged UNKNOWN cells are never tagged as frontier seeds themselves.
+  int    unknown_bridge_cells    = 0;
+
   // Optional axis-aligned bounding box that confines exploration. When
   // bounds_enabled is true, frontier seeds outside [min_x,max_x]×[min_y,max_y]
   // are dropped, so the robot never receives exploration goals outside the

@@ -362,6 +362,11 @@ struct parameters {
   // outside the box are dropped, so the robot only receives goals inside it.
   bool   expl_bounds_enabled{false};
   double expl_bounds_min_x{-50.0};
+  // Max run of consecutive UNKNOWN cells the detector's reachability BFS may
+  // step through to consider two known-free regions connected. Bridges the
+  // sensor near-field seam that otherwise strands the robot in its own cleared
+  // pocket at startup (0 = strict free-only WFD).
+  int    expl_unknown_bridge_cells{0};
   double expl_bounds_max_x{ 50.0};
   double expl_bounds_min_y{-50.0};
   double expl_bounds_max_y{ 50.0};

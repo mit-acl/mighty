@@ -329,6 +329,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
       dp.border_margin_cells     = par_.expl_border_margin_cells;
       dp.obstacle_clearance_cells = par_.expl_obstacle_clearance_cells;
       dp.robot_snap_radius_m     = par_.expl_robot_snap_radius_m;
+      dp.unknown_bridge_cells    = par_.expl_unknown_bridge_cells;
       dp.bounds_enabled          = par_.expl_bounds_enabled;
       dp.bounds_min_x            = par_.expl_bounds_min_x;
       dp.bounds_max_x            = par_.expl_bounds_max_x;
@@ -761,6 +762,7 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.bounds.min_x", -50.0);
   this->declare_parameter("exploration.bounds.max_x",  50.0);
   this->declare_parameter("exploration.bounds.min_y", -50.0);
+  this->declare_parameter("exploration.detector.unknown_bridge_cells", 0);
   this->declare_parameter("exploration.bounds.max_y",  50.0);
   this->declare_parameter("exploration.detector.min_obstacle_distance_m", 0.0);
   this->declare_parameter("exploration.utility.w_size", 1.0);
@@ -1133,6 +1135,8 @@ void MIGHTY_NODE::setParameters() {
   par_.expl_bounds_max_y         = this->get_parameter("exploration.bounds.max_y").as_double();
   par_.expl_min_obstacle_distance_m =
       this->get_parameter("exploration.detector.min_obstacle_distance_m").as_double();
+  par_.expl_unknown_bridge_cells =
+      this->get_parameter("exploration.detector.unknown_bridge_cells").as_int();
   par_.expl_w_size               = this->get_parameter("exploration.utility.w_size").as_double();
   par_.expl_w_dist               = this->get_parameter("exploration.utility.w_dist").as_double();
   par_.expl_w_info               = this->get_parameter("exploration.utility.w_info").as_double();
