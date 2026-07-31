@@ -47,7 +47,7 @@ mighty_node:
         a_max: 1.0                                      # [m/s^2] Max acceleration
         j_max: 2.0                                     # [m/s^3] Max jerk
         w_max: 1.0                                      # [rad/s] Max yaw rate (~4.0 for hardware)
-        drone_bbox: [0.6, 0.6, 0.5]                     # [m] Vehicle bounding box
+        drone_bbox: [0.6, 0.6, 0.5]                     # [m] Vehicle bounding box. Also derives drone_radius = drone_bbox[0]/2 (mighty_node.cpp), the inflation applied to safe corridors via ellip.set_inflate_distance() in hgp_manager. Note 0.30 m is slightly under the Pioneer's 0.326 m rotational swept radius (front wheel at (0.245, 0.215), urdf/p3at_manual.urdf), but raising this does NOT fix wheel-vs-wall contacts: probed at 0.90 (0.45 m inflation) and contacts persisted while coverage fell 0.991 -> 0.948 and the robot stopped returning home. The contacts come from path-tracking error, not corridor clearance.
 
         # --- UAV-Specific Dynamics (not used for ground robot, but must be declared) ---
         omega_max: 0.10472                              # [rad/s] Max body rate (6 deg/s)
@@ -87,7 +87,7 @@ mighty_node:
 
         # --- Global Planner ---
         global_planner: "astar_heat"                    # ["sjps", "astar_heat"]
-        inflation_hgp: 0.15                              # [m] Static obstacle inflation for global A* planning
+        inflation_hgp: 0.15                              # [m] Static obstacle inflation for global A* planning. NOTE: this does NOT affect the ground robot's static-obstacle clearance — for occ_2d-based planning the A* map is built by buildMap2DFromOcc2D() using esdf_d_safe (below) as a soft heat gradient, and inflation_hgp is only consumed on the 3D/dynamic-obstacle path. Ground-robot wall clearance is governed by drone_bbox (which derives drone_radius, the safe-corridor inflation).
         hgp_timeout_duration_ms: 10000                  # [ms] Global planner timeout
         max_expand: 1000000                               # [-] Max A* node expansions
         use_persistent_global_map: true                 # [-] Plan global A* over the accumulated visited_map_ (persistent, whole-mission) instead of the sliding occ_2d window — stable route, no window-slide churn (ground robot; requires exploration enabled)
@@ -220,8 +220,6 @@ mighty_node:
         delta: 1.0e-6                                   # [-] Function improvement convergence threshold
 
         # --- Dynamic Obstacle Internals ---
-        dynamic_obstacle_base_inflation: 0.5            # [m] Inflation for dynamic obstacles
-        max_dynamic_obstacle_inflation: 1.0             # [m] Max inflation for dynamic obstacles
         freq_dynamic_obstacle_update_to_tmap: 10.0      # [Hz] Dynamic obstacle update frequency
 
         # --- K-Value Adaptation ---
@@ -334,18 +332,18 @@ mighty_node:
         exploration.enabled: true                                # [-] Master switch
         exploration.select_rate_hz: 1.0                          # [Hz] Goal-selection tick
         exploration.default_goal_z: 0.0                          # [m]  z for issued exploration goals
+        exploration.select_nearest: true                         # [-]  always drive to the geometrically CLOSEST frontier (ignores the utility weights below and minpos); set false to use the utility function
+        exploration.select_commit_margin_m: 0.5                  # [m]  hysteresis: keep the current goal unless another frontier is closer by more than this (prevents flip-flop between near-equidistant frontiers); 0 = strict nearest every tick
         exploration.stall_timeout_sec: 30.0                      # [s]  watchdog: if an exploration goal is active but the robot has neither moved (stall_eps_m) nor switched frontier for this long, invalidate that frontier so selection can advance. This is the ONLY escape driven by the select timer — the pursuit timeout and dwell checks live in FrontierManager::update() (occ_2d-driven), goalReachedCheck() needs GOAL_REACHED + checkReadyToReplan(), and the unreachable path needs the replan loop to keep failing. Without it, one run in ten stranded the robot mid-map. 0 disables.
         exploration.stall_eps_m: 0.15                            # [m]  movement below this counts as no progress for the watchdog above
         exploration.home_grace_sec: 3.0                        # [s]  keep exploring this long after frontiers momentarily run out before giving up and returning home — absorbs transient gaps so the agent doesn't head home while reachable frontiers remain (0 = give up immediately)
-        exploration.select_nearest: true                         # [-]  always drive to the geometrically CLOSEST frontier (ignores the utility weights below and minpos); set false to use the utility function
-        exploration.select_commit_margin_m: 0.5                  # [m]  hysteresis: keep the current goal unless another frontier is closer by more than this (prevents flip-flop between near-equidistant frontiers); 0 = strict nearest every tick
         exploration.detector.cluster_min_cells: 5                # [cells] drop tiny frontier clusters
         exploration.detector.border_margin_cells: 2              # [cells] exclude N-cell border ring
         exploration.detector.obstacle_clearance_cells: 1         # [cells] reject frontier cells with an OCCUPIED neighbor within N cells (0=disabled)
         exploration.detector.min_obstacle_distance_m: 0.5        # [m]  ESDF-based clearance: drop frontiers whose centroid is closer than this to any obstacle (0=disabled). Uses esdf_2d_topic if available.
         exploration.detector.robot_snap_radius_m: 1.0            # [m]  spiral search if robot not on free cell
-        exploration.detector.reconcile_stale: true               # [-]  each map update, retire records whose location is no longer a frontier of >= cluster_min_cells cells (kills phantom frontiers left on cells that used to be a border but got explored)
         exploration.detector.unknown_bridge_cells: 4             # [cells] treat known-free regions separated by <= N UNKNOWN cells as connected during the reachability BFS (0 = strict free-only). The mapper only clears a 0.8 m cylinder around the robot while the first ray-cleared cells sit ~1.4 m out, so at startup the robot's own free pocket is ringed by UNKNOWN and disconnected from everything it can see — a free-only BFS finds one cluster centred on the robot, dwell retires it VISITED in ~1 s, and exploration deadlocks before the robot moves. 4 cells = 0.6 m covers that seam. OCCUPIED always blocks, so this never bridges through walls.
+        exploration.detector.reconcile_stale: true               # [-]  each map update, retire records whose location is no longer a frontier of >= cluster_min_cells cells (kills phantom frontiers left on cells that used to be a border but got explored)
         # Optional axis-aligned exploration bounds. When enabled, frontier
         # seeds outside the box are dropped, so the robot only receives
         # exploration goals inside [min_x,max_x] x [min_y,max_y]. RViz shows

@@ -2136,11 +2136,22 @@ void MIGHTY_NODE::convertDynTrajMsg2DynTraj(const dynus_interfaces::msg::DynTraj
   // Get terminal goal
   if (traj->is_agent) traj->goal << msg.goal[0], msg.goal[1], msg.goal[2];
 
-  // Get communication delay
+  // Get communication delay.
+  //
+  // NOTE: this value is currently WRITTEN BUT NEVER READ — nothing in the
+  // planner consumes traj->communication_delay, so comm-delay inflation is not
+  // actually applied despite use_comm_delay_inflation /
+  // comm_delay_inflation_alpha / comm_delay_inflation_max existing as
+  // parameters. Fixing the arithmetic anyway so the field is meaningful if it is
+  // ever wired up.
+  //
+  // The previous form ended the statement after now().seconds(), leaving
+  // "-msg.header.stamp.sec + ..." as a discarded expression, so the field got
+  // the full epoch (~1.79e9 s) instead of a delay of a few milliseconds.
   if (traj->is_agent && par_.use_comm_delay_inflation) {
-    // Get the delay (current time - msg time)
-    traj->communication_delay = this->now().seconds();
-    -msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9;
+    const double msg_stamp = static_cast<double>(msg.header.stamp.sec)
+                           + static_cast<double>(msg.header.stamp.nanosec) * 1e-9;
+    traj->communication_delay = this->now().seconds() - msg_stamp;
 
     // Sanity check - if the delay is negative, set it to 0 - send warning message: it's probably
     // due to the clock synchronization issue
