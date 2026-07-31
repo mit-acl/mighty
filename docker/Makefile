@@ -154,11 +154,11 @@ run-ground-exploration:
 				-e NO_RVIZ=$(or $(NO_RVIZ),false) \
 				--rm mighty
 
-# Run single-agent ground robot (Pioneer 3-AT) in a forest world.
-# NOTE: config/mighty_ground_robot.yaml ships with exploration.enabled:true, so
-# out of the box the robot autonomously explores rather than driving to GOAL_*.
-# To navigate to a fixed goal, set exploration.enabled:false in that config
-# (use DEV=1 to edit it live without rebuilding), then pass GOAL_X/GOAL_Y/GOAL_Z.
+# Run single-agent ground robot (Pioneer 3-AT) crossing a forest world to a
+# fixed goal — the ground-robot counterpart of run-gazebo. Exploration is turned
+# off at launch, so GOAL_X/GOAL_Y/GOAL_Z are honoured even though
+# config/mighty_ground_robot.yaml enables exploration. For frontier exploration
+# use run-ground-exploration instead (ENV selects the world there too).
 # Usage: make run-ground-robot [GOAL_X=30 GOAL_Y=0 GOAL_Z=0] [ENV=easy_forest] [DEV=1]
 run-ground-robot:
 	$(XHOST_CMD) && docker run $(PLATFORM_FLAG) -it \

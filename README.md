@@ -513,12 +513,19 @@ Besides the aerial vehicle, MIGHTY drives a single wheeled ground robot (Pioneer
 | **Autonomous exploration** | Robot explores an unknown `ACL_office` map on its own using frontier detection. | None — self-driven |
 | **Forest navigation** | Robot drives through a forest world (e.g. `easy_forest`). | Frontier exploration by default; a fixed goal after a one-line config change (see note) |
 
-> **Note on goal navigation.** `config/mighty_ground_robot.yaml` ships with
-> `exploration.enabled: true`, so the forest scenario **autonomously explores**
-> out of the box and the `--goal` / `GOAL_*` values are ignored. To make the
-> robot drive to a fixed goal instead, set `exploration.enabled: false` in
-> `config/mighty_ground_robot.yaml`, then provide a goal. In Docker, use `DEV=1`
-> to edit the config live without rebuilding the image.
+> **Exploring vs. driving to a goal.** The two ground-robot scenarios differ
+> only in who picks the goal:
+>
+> - `--mode exploration-singleagent-ground` / `make run-ground-exploration` —
+>   the frontier loop drives, no goal needed.
+> - `--mode gazebo --ground-robot` / `make run-ground-robot` — crosses the world
+>   to the `--goal` / `GOAL_*` you give it, exactly like the UAV Gazebo
+>   scenario. Exploration is switched off at launch
+>   (`exploration_enabled:=false`), so it is honoured even though
+>   `config/mighty_ground_robot.yaml` enables exploration.
+>
+> Both accept `--env` / `ENV`, so either behaviour is available in either world.
+> The goal's z is forced to 0 for a ground robot when left at the UAV default.
 
 ### What a healthy exploration run looks like
 
@@ -604,8 +611,8 @@ make run-ground-exploration
 # Ground robot in a forest world (explores by default; see note above for goal nav)
 make run-ground-robot
 
-# Forest navigation with a fixed goal (requires exploration.enabled:false)
-make run-ground-robot GOAL_X=30 GOAL_Y=0 GOAL_Z=0 ENV=easy_forest DEV=1
+# Forest navigation with a fixed goal
+make run-ground-robot GOAL_X=30 GOAL_Y=0 GOAL_Z=0 ENV=easy_forest
 ```
 
 > If you hit GPU errors, append `GPU=false` (see the Docker section above).
@@ -634,7 +641,7 @@ python3 src/mighty/scripts/run_sim.py --mode exploration-singleagent-ground \
 python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot \
   -s ~/code/mighty_ws/install/setup.bash
 
-# Forest navigation with a fixed goal (requires exploration.enabled:false)
+# Forest navigation with a fixed goal
 python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot \
   --env easy_forest --goal 30 0 0 -s ~/code/mighty_ws/install/setup.bash
 ```
@@ -645,7 +652,7 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot \
   | Target | Description | Options |
   |--------|-------------|---------|
   | `make run-ground-exploration` | Single ground robot, autonomous frontier exploration (ACL_office) | `ENV` (default: ACL_office) |
-  | `make run-ground-robot` | Single ground robot in a forest world (explores unless `exploration.enabled:false`) | `GOAL_X`, `GOAL_Y`, `GOAL_Z` (default: 30, 0, 0), `ENV` (default: easy_forest) |
+  | `make run-ground-robot` | Single ground robot crossing a forest world to a fixed goal | `GOAL_X`, `GOAL_Y`, `GOAL_Z` (default: 30, 0, 0), `ENV` (default: easy_forest) |
   | `make run-mac-ground-exploration` | Autonomous exploration on Mac (Xpra, browser at localhost:8080) | `ENV` (default: ACL_office) |
   | `make run-mac-ground-robot` | Forest world on Mac (Xpra, browser at localhost:8080) | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
 

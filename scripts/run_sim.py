@@ -86,9 +86,13 @@ def find_workspace_root() -> Path:
 
 def exploration_enabled_in_yaml(config_path: Path) -> bool:
     """Return True if `exploration.enabled: true` appears in the given YAML.
-    Tolerant to the dotted-key form used by ROS 2 parameter files. Used to
-    auto-skip goal_sender when frontier-based exploration would drive the
-    robot itself.
+
+    Tolerant to the dotted-key form used by ROS 2 parameter files. No longer
+    used by gazebo mode — that used to consult the config and silently drop the
+    goal_sender when exploration was on, which made `--mode gazebo
+    --ground-robot` an exploration run that ignored --goal. Gazebo mode now
+    turns exploration off at launch instead. Kept because it is the only
+    reader of the dotted-key form and is useful for the same check elsewhere.
     """
     if not config_path.exists():
         return False
@@ -714,8 +718,15 @@ def generate_gazebo_yaml(setup_bash: Path, goal: tuple, sim_env: str,
                          start_pos: tuple = (0, 0, 3.0), start_yaw: float = 1.57,
                          ros_domain_id: int = 7, use_rviz: bool = True,
                          use_gazebo_gui: bool = False, use_ground_robot: bool = False,
-                         no_goal: bool = False) -> str:
-    """Generate YAML for single-agent Gazebo simulation."""
+                         no_goal: bool = False, exploration_enabled: bool = None) -> str:
+    """Generate YAML for single-agent Gazebo simulation.
+
+    exploration_enabled=False is what makes this mode mean "drive to the goal"
+    for a ground robot. mighty_ground_robot.yaml enables exploration, so without
+    the override the frontier loop takes over and the published goal is ignored
+    — the robot wanders the world instead of crossing it. None leaves the config
+    value alone (UAVs, whose config has exploration off).
+    """
     goal_x, goal_y, goal_z = goal
     start_x, start_y, start_z = start_pos
 
@@ -752,16 +763,25 @@ def generate_gazebo_yaml(setup_bash: Path, goal: tuple, sim_env: str,
                 'sleep 3',
                 f'ros2 launch mighty onboard_mighty.launch.py x:={start_x} y:={start_y} z:={start_z} yaw:={start_yaw} '
                 f'sim_env:={sim_env} use_ground_robot:={str(use_ground_robot).lower()}'
+                + ('' if exploration_enabled is None
+                   else f' exploration_enabled:={str(exploration_enabled).lower()}')
             ]
         },
     ]
 
     if not no_goal:
-        # Goal sender
+        # Goal sender.
+        #
+        # goal_sender.launch.py reads default_goal_z from config/mighty.yaml —
+        # the UAV config — no matter what vehicle is running, and applies it
+        # over the z in list_goals. A ground robot therefore got a goal 1 m in
+        # the air. Pass the ground-level z explicitly; it is already a declared
+        # launch argument.
+        goal_z_arg = (f' default_goal_z:={goal_z}' if use_ground_robot else '')
         panes.append({
             'shell_command': [
                 'sleep 20',
-                f"ros2 launch mighty goal_sender.launch.py list_agents:=\"['NX01']\" list_goals:=\"['[{goal_x}, {goal_y}, {goal_z}]']\""
+                f"ros2 launch mighty goal_sender.launch.py list_agents:=\"['NX01']\" list_goals:=\"['[{goal_x}, {goal_y}, {goal_z}]']\"{goal_z_arg}"
             ]
         })
 
@@ -1079,21 +1099,33 @@ def main():
             start_pos[2] = 0.0  # Ground robot base_link at z=0 (wheels at ground)
         start_pos = tuple(start_pos)
 
-        # If frontier-based exploration is enabled in the ground-robot config,
-        # auto-skip the goal_sender pane — the exploration loop will issue
-        # goals and a manual goal_sender publication would just preempt it.
+        # `--mode gazebo` means "cross the world to a fixed goal", the same
+        # thing it means for a UAV. mighty_ground_robot.yaml ships
+        # exploration.enabled:true, so a ground robot here used to be hijacked
+        # by the frontier loop: this code previously responded by suppressing
+        # the goal_sender entirely, which turned the mode into an exploration
+        # run that ignored --goal. Turn exploration off at launch instead and
+        # keep the goal.
+        #
+        # For frontier exploration on a ground robot, use
+        # --mode exploration-singleagent-ground (it honours --env, so forest
+        # exploration is still reachable).
+        exploration_enabled = False if use_ground_robot else None
         no_goal = args.no_goal
+
+        # A ground robot cannot reach the UAV's default goal altitude.
+        goal = list(args.goal)
+        if use_ground_robot and goal[2] == 3.0:  # only touch the default
+            goal[2] = 0.0
+
         if use_ground_robot and not no_goal:
-            cfg_path = (Path(__file__).resolve().parent.parent
-                        / 'config' / 'mighty_ground_robot.yaml')
-            if exploration_enabled_in_yaml(cfg_path):
-                no_goal = True
-                print(f"[INFO] Exploration enabled in {cfg_path.name} — "
-                      f"skipping goal_sender (frontier loop drives the robot)")
+            print("[INFO] Ground robot in gazebo mode: exploration disabled, "
+                  f"driving to goal {tuple(goal)}. "
+                  "Use --mode exploration-singleagent-ground to explore instead.")
 
         yaml_content = generate_gazebo_yaml(
             setup_bash,
-            goal=tuple(args.goal),
+            goal=tuple(goal),
             sim_env=sim_env,
             env=world_name,
             start_pos=start_pos,
@@ -1102,7 +1134,8 @@ def main():
             use_rviz=use_rviz,
             use_gazebo_gui=args.gazebo_gui,
             use_ground_robot=use_ground_robot,
-            no_goal=no_goal
+            no_goal=no_goal,
+            exploration_enabled=exploration_enabled
         )
         print(f"[INFO] Mode: Single-agent Gazebo simulation (sim_env={sim_env})")
         print(f"[INFO] Environment: {args.env} (world: {world_name})")
@@ -1110,7 +1143,8 @@ def main():
             print(f"[INFO] Vehicle: Ground robot (Pioneer 3-AT)")
         print(f"[INFO] Start: ({start_pos[0]}, {start_pos[1]}, {start_pos[2]})")
         if not no_goal:
-            print(f"[INFO] Goal: ({args.goal[0]}, {args.goal[1]}, {args.goal[2]})")
+            # `goal`, not args.goal — the ground robot's z is lowered to 0.
+            print(f"[INFO] Goal: ({goal[0]}, {goal[1]}, {goal[2]})")
 
     if args.emit_yaml:
         # Machine-readable counterpart to --dry-run: write the tmuxp YAML to a
