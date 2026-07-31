@@ -765,7 +765,7 @@ makes long round trips, so motion alone is never treated as evidence of a stall.
 
 The L-BFGS solver implementation in this repository (`src/mighty/lbfgs_solver.cpp`, `include/mighty/lbfgs_solver.hpp`) is adapted from [ZJU-FAST-Lab/GCOPTER](https://github.com/ZJU-FAST-Lab/GCOPTER/blob/main/gcopter/include/gcopter/lbfgs.hpp). We thank the authors for making their implementation publicly available.
 
-The ground robot's MPC path-tracking controller ([kotakondo/mpc](https://github.com/kotakondo/mpc), pulled in via `mighty.repos`) was originally developed by **[Lucas Jia (@lucas-yyy000)](https://github.com/lucas-yyy000)**, with later contributions from Sera Ham and Elon Raya. The ground-robot simulation depends on it.
+The ground robot's MPC path-tracking controller ([kotakondo/mpc](https://github.com/kotakondo/mpc), pulled in via `mighty.repos`) was originally developed by **[Lucas Jia (@lucas-yyy000)](https://github.com/lucas-yyy000)**. The ground-robot simulation depends on it.
 
 ---
 
