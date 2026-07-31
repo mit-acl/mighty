@@ -362,6 +362,11 @@ struct parameters {
   int    expl_border_margin_cells{2};
   int    expl_obstacle_clearance_cells{1};
   double expl_robot_snap_radius_m{1.0};
+  // Max run of consecutive UNKNOWN cells the detector's reachability BFS may
+  // step through to consider two known-free regions connected. Bridges the
+  // sensor near-field seam that otherwise strands the robot in its own cleared
+  // pocket at startup (0 = strict free-only WFD).
+  int    expl_unknown_bridge_cells{0};
   // Re-validate persistent frontier records against the detector's own frontier
   // definition each map update, retiring (VISITED) any ACTIVE/DORMANT record
   // whose location no longer holds a frontier of >= cluster_min_cells cells.
@@ -377,11 +382,6 @@ struct parameters {
   // outside the box are dropped, so the robot only receives goals inside it.
   bool   expl_bounds_enabled{false};
   double expl_bounds_min_x{-50.0};
-  // Max run of consecutive UNKNOWN cells the detector's reachability BFS may
-  // step through to consider two known-free regions connected. Bridges the
-  // sensor near-field seam that otherwise strands the robot in its own cleared
-  // pocket at startup (0 = strict free-only WFD).
-  int    expl_unknown_bridge_cells{0};
   double expl_bounds_max_x{ 50.0};
   double expl_bounds_min_y{-50.0};
   double expl_bounds_max_y{ 50.0};
