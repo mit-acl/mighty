@@ -65,7 +65,7 @@ mighty_node:
         x_max: 1000.0                                   # [m] Map x upper bound
         y_min: -1000.0                                  # [m] Map y lower bound
         y_max: 1000.0                                   # [m] Map y upper bound
-        z_min: -0.5                                     # [m] Min altitude (matches global mapper z_ground)
+        z_min: -0.4                                     # [m] Min altitude (matches global mapper z_ground)
         z_max: 1.0                                      # [m] Max altitude (must include real obstacle heights from lidar)
         mighty_map_res: 0.15                             # [m] Voxel map resolution (coarser for ground robot)
 
@@ -97,7 +97,7 @@ mighty_node:
         goal_seen_radius: 2.0                           # [m] Distance to stop replanning
 
         # --- L-BFGS Optimization Weights ---
-        dynamic_weight: 1e+1                         # [-] Dynamic obstacle avoidance weight
+        dynamic_weight: 1e+2                         # [-] Dynamic obstacle avoidance weight
         time_weight: 1e+3                               # [-] Time cost weight
         stat_weight: 0.0                                # [-] Static obstacle weight
         jerk_weight: 1e+3                              # [-] Jerk smoothness weight
@@ -270,7 +270,7 @@ mighty_node:
         # --- 2D Ground Robot Planning (not used for UAV) ---
         use_2d_planning: true                          # [-] Enable 2D terrain-aware planning for ground robots
         robot_height: 0.5                               # [m] Robot height for obstacle column detection
-        obstacle_min_height: -0.2                       # [m] Min column height span to classify as obstacle
+        obstacle_min_height: 0.2                       # [m] Min column height span to classify as obstacle
         use_column_any_occupied: true                    # [-] Any occupied voxel in column → 2D occupied
         column_min_z: -0.4                              # [m] Ignore occupied voxels below this z (set to z_min)
         terrain_cost_weight: 1.0                        # [-] Multiplier for terrain gradient cost in A*

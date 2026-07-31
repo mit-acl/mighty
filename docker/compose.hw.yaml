@@ -1,13 +1,20 @@
-# hw-mighty — the MIGHTY hardware autonomy stack in ONE container, running the
-# same attachable 7-pane tmux 'hw_mighty' session inside it. Re-implemented for
-# RR04's dev-rr-mad branch: identity/env come from the `environment:` block below
-# (RR04 has no /etc/rover/rover.env), and the container runs the mighty NODES only
-# — it attaches to the HOST Zenoh router (rmw_zenohd, started via the `zenoh_route`
+# hw-mighty — the MIGHTY hardware autonomy stack in ONE container, HOST-tmux
+# variant (mirrors the rover drive/sensors/dlio services): the container just
+# IDLES (`sleep infinity`) and every pane is a docker exec living in the HOST
+# tmux session 'hw_mighty', built by mighty_hw.sh via run_hw_red_rover.py
+# --docker-exec. Identity/env come from the `environment:` block below (RR04 has
+# no /etc/rover/rover.env), and the container runs the mighty NODES only — it
+# attaches to the HOST Zenoh router (rmw_zenohd, started via the `zenoh_route`
 # alias) over network_mode: host, exactly like the native `mighty` alias does.
 #
+# The container must NEVER launch the session itself: when its command also ran
+# run_hw_red_rover.py (pre-2026-07-30), every `mighty_hw.sh start` produced TWO
+# full stacks — an in-container session plus the host session — i.e. duplicate
+# mighty/MPC/mapper nodes (two publishers on cmd_vel_auto).
+#
 #   build:   docker compose -f compose.hw.yaml build     (or: make hw-build)
-#   up:      ./mighty_hw.sh start                         (compose up -d + attach)
-#   attach:  docker exec -it hw-mighty tmux attach -t hw_mighty
+#   up:      ./mighty_hw.sh start                         (compose up -d + host session + attach)
+#   attach:  tmux attach -t hw_mighty                     (HOST session, no docker exec needed)
 #            (Ctrl-C / Up / Enter in a pane restarts just that node; Ctrl-b d detaches)
 #   down:    ./mighty_hw.sh stop
 #
@@ -29,9 +36,6 @@ services:
     init: true
     stop_grace_period: 15s
     restart: "no"                 # manual stack; a dead pane stays dead (native semantics)
-    # NO tty: a detached container's unattached pty reports width 0 and newer
-    # libtmux fails with "new-session: width too small" — COLUMNS/LINES are
-    # pinned in the command instead.
     environment:
       # RR04 identity + ROS transport. Native source is ~/config/roman_rover.sh +
       # RR04.sh; baked here because RR04 has no /etc/rover/rover.env. To reuse this
@@ -49,20 +53,8 @@ services:
       ODOM_TYPE: ${ODOM_TYPE:-dlio_in_mocap}   # dlio | mocap | dlio_in_mocap
       TWO_D_ONLY: ${TWO_D_ONLY-1}              # non-empty => --two-d-only (export TWO_D_ONLY= to disable)
       NO_SENSORS: ${NO_SENSORS-}               # non-empty => --no-sensors (external sensor bringup owns them)
-    # Keep the launcher flag wiring live without rebuilding the existing image.
-    volumes:
-      - /home/swarm/code/mighty_ws/src/mighty/scripts/run_hw_red_rover.py:/home/swarm/code/mighty_ws/src/mighty/scripts/run_hw_red_rover.py:ro
-    command:
-      - bash
-      - -lc
-      - |
-        set -e
-        # Detached-pty sizing (see the NO-tty note above); an attaching client
-        # resizes the session to its own terminal anyway.
-        export COLUMNS="$${COLUMNS:-220}" LINES="$${LINES:-56}"
-        cd /home/swarm/code/mighty_ws
-        python3 src/mighty/scripts/run_hw_red_rover.py \
-          --odom-type "$${ODOM_TYPE:-dlio_in_mocap}" $${TWO_D_ONLY:+--two-d-only} $${NO_SENSORS:+--no-sensors}
-        echo "hw_mighty session loaded; holding foreground (attach: docker exec -it hw-mighty tmux attach -t hw_mighty)"
-        while tmux has-session -t hw_mighty 2>/dev/null; do sleep 5; done
-        echo "hw_mighty session ended; exiting."
+    # Idle keep-alive: the nodes are started from the HOST tmux 'hw_mighty' session
+    # as docker execs (mighty_hw.sh -> run_hw_red_rover.py --docker-exec); the
+    # container only has to stay up. The launcher runs from the HOST checkout, so
+    # flag/pane changes need no image rebuild.
+    command: ["sleep", "infinity"]
