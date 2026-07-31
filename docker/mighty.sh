@@ -46,7 +46,9 @@ GROUND_ROBOT="${GROUND_ROBOT:-false}"
 ARGS="--mode $MODE -s /home/kkondo/code/mighty_ws/install/setup.bash"
 
 # If using Foxglove, skip RViz inside Docker (Xpra keeps RViz, it just forwards the window)
-if [ "${USE_FOXGLOVE}" = "true" ]; then
+# NO_RVIZ=true forces headless regardless — useful for unattended/CI runs where
+# no display is available or RViz would just contend for the GPU.
+if [ "${USE_FOXGLOVE}" = "true" ] || [ "${NO_RVIZ}" = "true" ]; then
     ARGS="$ARGS --no-rviz"
 fi
 

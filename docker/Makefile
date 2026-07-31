@@ -46,19 +46,39 @@ else
 DEV_MOUNTS =
 endif
 
+# The build context is the REPOSITORY ROOT (..), not docker/, so that
+# `build-local` can copy the working tree into the image. .dockerignore at the
+# repo root keeps the context small (excludes .git, build/, install/, log/).
 .PHONY: build
 build:
 	docker build \
 	  $(PLATFORM_FLAG) \
 	  $(BUILD_ARGS) \
-	  -t mighty .
+	  -f Dockerfile -t mighty ..
 
 .PHONY: build-no-cache
 build-no-cache:
 	docker build \
 	$(PLATFORM_FLAG) \
 	$(BUILD_ARGS) \
-	--build-arg DUMMY=`date +%s` -t mighty .
+	-f Dockerfile \
+	--build-arg DUMMY=`date +%s` -t mighty ..
+
+# Build the image from the LOCAL working tree instead of the pinned release tag.
+# Requires a prior `make build` (or any cached image layers): every dependency
+# layer is reused and only the mighty package is recompiled, so this takes
+# minutes rather than hours. Use it to test uncommitted C++ changes in Docker —
+# DEV=1 cannot, because it only bind-mounts config/launch/rviz over an image
+# whose binaries were compiled from the tag.
+# Usage: make build-local [JOBS=8]
+.PHONY: build-local
+build-local:
+	docker build \
+	  $(PLATFORM_FLAG) \
+	  $(BUILD_ARGS) \
+	  -f Dockerfile \
+	  --build-arg MIGHTY_SOURCE=local \
+	  --build-arg MIGHTY_LOCAL_REV=`date +%s` -t mighty ..
 
 # Run single-agent interactive mode (manual 2D Goal Pose via RViz2)
 # Usage: make run-interactive [DEV=1]
@@ -117,6 +137,7 @@ run-ground-exploration:
 				$(DEV_MOUNTS) \
 				-e MODE=exploration-singleagent-ground \
 				-e ENV=$(or $(ENV),ACL_office) \
+				-e NO_RVIZ=$(or $(NO_RVIZ),false) \
 				--rm mighty
 
 # Run single-agent ground robot (Pioneer 3-AT) in a forest world.

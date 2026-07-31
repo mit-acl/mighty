@@ -99,6 +99,21 @@ sudo apt-get install -q -y --no-install-recommends \
     git tmux vim wget tmuxp make openssh-server net-tools g++ xterm python3-pip
 
 pip install pymavlink
+
+# casadi and do_mpc are runtime dependencies of the `mpc` ground-robot
+# controller (mpc/mpc_node.py imports both at module scope). They are NOT
+# declared in mpc's package.xml, which lists only ROS packages, so rosdep does
+# not install them and nothing fails until launch time — at which point
+# mpc_node dies with ModuleNotFoundError, the robot never receives a velocity
+# command, and the exploration sim sits motionless while every other node looks
+# healthy. Versions match those the ground-robot validation ran against.
+#
+# numpy is held below 2 on purpose: unpinned, do-mpc pulls numpy 2.x, and
+# `import do_mpc` then fails with "numpy.core.multiarray failed to import"
+# because ROS 2 Humble's Python extensions are built against the numpy 1.x ABI.
+# That produces exactly the same dead mpc_node as having no casadi at all.
+pip install numpy==1.26.4 casadi==3.6.7 do-mpc==5.1.1
+
 sudo apt install -y libomp-dev libpcl-dev libeigen3-dev
 
 # ============================================
