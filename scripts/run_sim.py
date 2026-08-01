@@ -111,6 +111,30 @@ def exploration_enabled_in_yaml(config_path: Path) -> bool:
     return False
 
 
+# Default goal x per world, measured from the <pose> extents of each
+# worlds/*.world file. A fixed default cannot work: hard_forest runs to x=301.6
+# while easy_forest ends at x=100, so the old flat 105 stopped a third of the way
+# into hard_forest (the Docker path already used 305 for exactly this reason)
+# and anything near 305 would be outside easy_forest entirely.
+#
+# Values sit a few metres past the last obstacle, so the agent crosses the whole
+# world and finishes in free space.
+GOAL_X_BY_WORLD = {
+    'hard_forest': 305.0,   # obstacles to x=301.6
+    'easy_forest': 105.0,   # obstacles to x=100.0
+    'forest':      105.0,   # obstacles to x=97.1
+    'big_forest':   30.0,   # obstacles to x=24.9
+    'ACL_office':   30.0,   # obstacles to x=25.2
+}
+DEFAULT_GOAL_X = 105.0      # unknown world: keep the historical default
+
+
+def default_goal_for_env(env: str, ground_robot: bool) -> list:
+    """Goal that crosses `env`, at an altitude the vehicle can actually reach."""
+    return [GOAL_X_BY_WORLD.get(env, DEFAULT_GOAL_X), 0.0,
+            0.0 if ground_robot else 3.0]
+
+
 def find_rviz_config(name: str = 'mighty.rviz') -> Path:
     """Find the RViz config in the source tree (relative to this script)."""
     script_path = Path(__file__).resolve()
@@ -833,8 +857,10 @@ def main():
         type=float,
         nargs=3,
         metavar=('X', 'Y', 'Z'),
-        default=[105.0, 0.0, 3.0],
-        help='Goal position for gazebo mode (default: 105.0 0.0 3.0)'
+        default=None,
+        help='Goal position for gazebo mode. Default depends on --env, so the '
+             'goal is on the far side of the world being used: 305 for '
+             'hard_forest, 105 for easy_forest/forest, 20 for the small worlds'
     )
 
     parser.add_argument(
@@ -1113,10 +1139,15 @@ def main():
         exploration_enabled = False if use_ground_robot else None
         no_goal = args.no_goal
 
-        # A ground robot cannot reach the UAV's default goal altitude.
-        goal = list(args.goal)
-        if use_ground_robot and goal[2] == 3.0:  # only touch the default
-            goal[2] = 0.0
+        if args.goal is None:
+            goal = default_goal_for_env(world_name, use_ground_robot)
+            print(f"[INFO] No --goal given; using the default for "
+                  f"'{world_name}': ({goal[0]}, {goal[1]}, {goal[2]})")
+        else:
+            # A ground robot cannot reach the UAV's default goal altitude.
+            goal = list(args.goal)
+            if use_ground_robot and goal[2] == 3.0:
+                goal[2] = 0.0
 
         if use_ground_robot and not no_goal:
             print("[INFO] Ground robot in gazebo mode: exploration disabled, "

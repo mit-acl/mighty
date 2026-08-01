@@ -402,7 +402,9 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/
   --setup-bash, -s    Required. Path to setup.bash
   --num-agents, -n    Number of agents for multiagent modes (default: 10)
   --radius, -r        Circle radius for the multiagent formation (default: 10.0)
-  --goal, -g          Goal position X Y Z for gazebo mode (default: 105 0 3)
+  --goal, -g          Goal position X Y Z for gazebo mode (default: depends on --env —
+                      305 for hard_forest, 105 for easy_forest/forest, 30 for the
+                      small worlds; z drops to 0 for --ground-robot)
   --start, -p         Start position X Y Z for gazebo mode (default: 0 0 3)
   --start-yaw         Start yaw in radians (default: 1.57)
   --env, -e           Gazebo environment (default: hard_forest)
@@ -417,8 +419,10 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/
   --emit-yaml PATH    Write the generated YAML to PATH and exit (used by the test harness)
   ```
 
-  > The Docker entrypoint defaults `GOAL_X` to 305, so `make run-gazebo` and
-  > `run_sim.py --mode gazebo` do **not** start with the same goal.
+  > The goal default is chosen from the world's actual extent, so the agent
+  > crosses it rather than stopping partway. `hard_forest` runs to x=301.6
+  > (hence 305, matching the Docker entrypoint), while `easy_forest` ends at
+  > x=100. Pass `--goal X Y Z` to override.
 </details>
 
 ---
