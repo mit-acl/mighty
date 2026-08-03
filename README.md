@@ -194,7 +194,7 @@ In `run-interactive` mode, send goals from the RViz2 toolbar:
   | `make build-no-cache` | Build without cache (forces fresh build) | - |
   | `make run-interactive` | Run single agent with manual goal (RViz2 2D Goal Pose) | - |
   | `make run-multiagent` | Run multi-agent aerial simulation (agents swap positions on a circle) | `NUM_AGENTS` (default: 10) |
-  | `make run-gazebo` | Run single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z` (default: 305, 0, 3), `ENV` (default: hard_forest) |
+  | `make run-gazebo` | Run single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` — all optional; unset means the same defaults as the native command (hard_forest, goal 305 0 3) |
   | `make run-mac` | Run multi-agent aerial simulation on Mac (Xpra, browser at localhost:8080) | `NUM_AGENTS` (default: 10) |
   | `make run-mac-interactive` | Run single agent on Mac with manual goal (Xpra, browser at localhost:8080) | - |
   | `make run-mac-gazebo` | Run Gazebo on Mac (Xpra) | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
@@ -616,7 +616,7 @@ make run-ground-exploration
 make run-ground-robot
 
 # Forest navigation with a fixed goal
-make run-ground-robot GOAL_X=30 GOAL_Y=0 GOAL_Z=0 ENV=easy_forest
+make run-ground-robot GOAL_X=90 GOAL_Y=0 GOAL_Z=0 ENV=easy_forest
 ```
 
 > If you hit GPU errors, append `GPU=false` (see the Docker section above).
@@ -656,7 +656,7 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot \
   | Target | Description | Options |
   |--------|-------------|---------|
   | `make run-ground-exploration` | Single ground robot, autonomous frontier exploration (ACL_office) | `ENV` (default: ACL_office) |
-  | `make run-ground-robot` | Single ground robot crossing a forest world to a fixed goal | `GOAL_X`, `GOAL_Y`, `GOAL_Z` (default: 30, 0, 0), `ENV` (default: easy_forest) |
+  | `make run-ground-robot` | Single ground robot crossing a forest world to a fixed goal | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` — all optional; unset means the same defaults as the native command (hard_forest, goal 305 0 0) |
   | `make run-mac-ground-exploration` | Autonomous exploration on Mac (Xpra, browser at localhost:8080) | `ENV` (default: ACL_office) |
   | `make run-mac-ground-robot` | Forest world on Mac (Xpra, browser at localhost:8080) | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
 

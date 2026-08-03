@@ -35,12 +35,19 @@ cd /home/kkondo/code/mighty_ws
 
 # Default values
 MODE="${MODE:-multiagent}"
-GOAL_X="${GOAL_X:-305.0}"
-GOAL_Y="${GOAL_Y:-0.0}"
-GOAL_Z="${GOAL_Z:-3.0}"
 NUM_AGENTS="${NUM_AGENTS:-10}"
 ENV="${ENV:-hard_forest}"
 GROUND_ROBOT="${GROUND_ROBOT:-false}"
+
+# Whether the caller pinned a goal. Deliberately checked BEFORE any default is
+# applied: run_sim.py picks a goal from the size of the world being used
+# (305 for hard_forest, 105 for easy_forest, ...), and hardcoding a default
+# here would override that and silently desync the Docker commands from their
+# native equivalents. Only pass --goal when the user actually asked for one.
+GOAL_SET=false
+if [ -n "${GOAL_X}" ] || [ -n "${GOAL_Y}" ] || [ -n "${GOAL_Z}" ]; then
+    GOAL_SET=true
+fi
 
 # Build arguments
 ARGS="--mode $MODE -s /home/kkondo/code/mighty_ws/install/setup.bash"
@@ -53,10 +60,16 @@ if [ "${USE_FOXGLOVE}" = "true" ] || [ "${NO_RVIZ}" = "true" ]; then
 fi
 
 if [ "$MODE" = "gazebo" ]; then
-    ARGS="$ARGS --goal $GOAL_X $GOAL_Y $GOAL_Z --env $ENV"
+    ARGS="$ARGS --env $ENV"
     # Single-agent ground robot (Pioneer 3-AT) instead of the UAV
     if [ "$GROUND_ROBOT" = "true" ]; then
         ARGS="$ARGS --ground-robot"
+    fi
+    if [ "$GOAL_SET" = "true" ]; then
+        # Fill in whichever components were left out. A ground robot's goal sits
+        # at ground level; a UAV's at cruise altitude.
+        if [ "$GROUND_ROBOT" = "true" ]; then DEFAULT_GOAL_Z=0.0; else DEFAULT_GOAL_Z=3.0; fi
+        ARGS="$ARGS --goal ${GOAL_X:-305.0} ${GOAL_Y:-0.0} ${GOAL_Z:-$DEFAULT_GOAL_Z}"
     fi
 elif [ "$MODE" = "interactive" ]; then
     : # interactive mode needs no extra args

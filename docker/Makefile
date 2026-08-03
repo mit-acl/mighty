@@ -85,11 +85,20 @@ build-no-cache:
 # DEV=1 cannot, because it only bind-mounts config/launch/rviz over an image
 # whose binaries were compiled from the tag.
 # Usage: make build-local [JOBS=8]
+# NOTE: build-local still builds the base layers first, and those clone
+# MIGHTY_VERSION from GitHub before the working tree replaces the package. So it
+# needs a ref that RESOLVES, even though none of that tag's mighty code survives
+# into the final image. Right after bumping MIGHTY_VERSION to a tag that has not
+# been pushed yet, every build fails with
+#     git clone --branch <tag> ... exit code 128
+# until the tag exists. Point it at the last real ref meanwhile:
+#     make build-local MIGHTY_VERSION=v0.0.6      (or a pushed branch)
 .PHONY: build-local
 build-local:
 	docker build \
 	  $(PLATFORM_FLAG) \
 	  $(BUILD_ARGS) \
+	  $(VERSION_ARG) \
 	  -f Dockerfile \
 	  --build-arg MIGHTY_SOURCE=local \
 	  --build-arg MIGHTY_LOCAL_REV=`date +%s` -t mighty ..
@@ -132,10 +141,10 @@ run-gazebo:
 				--env="QT_X11_NO_MITSHM=1" \
 				$(DEV_MOUNTS) \
 				-e MODE=gazebo \
-				-e GOAL_X=$(or $(GOAL_X),305.0) \
-				-e GOAL_Y=$(or $(GOAL_Y),0.0) \
-				-e GOAL_Z=$(or $(GOAL_Z),3.0) \
-				-e ENV=$(or $(ENV),hard_forest) \
+				$(if $(GOAL_X),-e GOAL_X=$(GOAL_X),) \
+				$(if $(GOAL_Y),-e GOAL_Y=$(GOAL_Y),) \
+				$(if $(GOAL_Z),-e GOAL_Z=$(GOAL_Z),) \
+				$(if $(ENV),-e ENV=$(ENV),) \
 				--rm mighty
 
 # Run single-agent ground robot (Pioneer 3-AT) autonomous frontier exploration
@@ -156,10 +165,15 @@ run-ground-exploration:
 
 # Run single-agent ground robot (Pioneer 3-AT) crossing a forest world to a
 # fixed goal — the ground-robot counterpart of run-gazebo. Exploration is turned
-# off at launch, so GOAL_X/GOAL_Y/GOAL_Z are honoured even though
+# off at launch, so the goal is honoured even though
 # config/mighty_ground_robot.yaml enables exploration. For frontier exploration
-# use run-ground-exploration instead (ENV selects the world there too).
-# Usage: make run-ground-robot [GOAL_X=30 GOAL_Y=0 GOAL_Z=0] [ENV=easy_forest] [DEV=1]
+# use run-ground-exploration instead.
+#
+# GOAL_* and ENV are passed through ONLY when set, so with no arguments this is
+# byte-for-byte the native default: hard_forest, goal (305, 0, 0), chosen by
+# run_sim.py from the world's own size. Hardcoding defaults here is what used to
+# make the Docker and native commands disagree.
+# Usage: make run-ground-robot [GOAL_X=90 GOAL_Y=0 GOAL_Z=0] [ENV=easy_forest] [DEV=1]
 run-ground-robot:
 	$(XHOST_CMD) && docker run $(PLATFORM_FLAG) -it \
 				$(GPU_FLAGS) \
@@ -170,10 +184,10 @@ run-ground-robot:
 				$(DEV_MOUNTS) \
 				-e MODE=gazebo \
 				-e GROUND_ROBOT=true \
-				-e GOAL_X=$(or $(GOAL_X),30.0) \
-				-e GOAL_Y=$(or $(GOAL_Y),0.0) \
-				-e GOAL_Z=$(or $(GOAL_Z),0.0) \
-				-e ENV=$(or $(ENV),easy_forest) \
+				$(if $(GOAL_X),-e GOAL_X=$(GOAL_X),) \
+				$(if $(GOAL_Y),-e GOAL_Y=$(GOAL_Y),) \
+				$(if $(GOAL_Z),-e GOAL_Z=$(GOAL_Z),) \
+				$(if $(ENV),-e ENV=$(ENV),) \
 				--rm mighty
 
 # Run with Xpra (macOS visualization via browser at http://localhost:8080)
@@ -216,10 +230,10 @@ run-mac-gazebo:
 				$(DEV_MOUNTS) \
 				-e USE_XPRA=true \
 				-e MODE=gazebo \
-				-e GOAL_X=$(or $(GOAL_X),305.0) \
-				-e GOAL_Y=$(or $(GOAL_Y),0.0) \
-				-e GOAL_Z=$(or $(GOAL_Z),3.0) \
-				-e ENV=$(or $(ENV),hard_forest) \
+				$(if $(GOAL_X),-e GOAL_X=$(GOAL_X),) \
+				$(if $(GOAL_Y),-e GOAL_Y=$(GOAL_Y),) \
+				$(if $(GOAL_Z),-e GOAL_Z=$(GOAL_Z),) \
+				$(if $(ENV),-e ENV=$(ENV),) \
 				-p 8080:8080 \
 				--rm mighty
 
@@ -251,10 +265,10 @@ run-mac-ground-robot:
 				-e USE_XPRA=true \
 				-e MODE=gazebo \
 				-e GROUND_ROBOT=true \
-				-e GOAL_X=$(or $(GOAL_X),30.0) \
-				-e GOAL_Y=$(or $(GOAL_Y),0.0) \
-				-e GOAL_Z=$(or $(GOAL_Z),0.0) \
-				-e ENV=$(or $(ENV),easy_forest) \
+				$(if $(GOAL_X),-e GOAL_X=$(GOAL_X),) \
+				$(if $(GOAL_Y),-e GOAL_Y=$(GOAL_Y),) \
+				$(if $(GOAL_Z),-e GOAL_Z=$(GOAL_Z),) \
+				$(if $(ENV),-e ENV=$(ENV),) \
 				-p 8080:8080 \
 				--rm mighty
 
