@@ -280,6 +280,24 @@ struct parameters {
   double esdf_d_safe{1.0};             // [m] Safety distance threshold
   int esdf_truncation_distance{10};    // [voxels] Must match mapper config
 
+  // Persistent global planning map (ground robot only). When true, the global
+  // A* plans over the accumulated visited_map_ (whole mission history) instead
+  // of the sliding occ_2d window, so the route is stable frame-to-frame and can
+  // target the true goal. Requires exploration enabled (visited_map_ exists);
+  // falls back to the sliding grid otherwise. See docs/plans/persistent_global_map_plan.md.
+  bool use_persistent_global_map{false};
+
+  // Global-path reuse gate (ground robot + persistent map only). When true, the
+  // replan loop REUSES the cached route (re-anchored to the current pose and
+  // re-truncated at the horizon) instead of re-running A* every tick — the A*
+  // search only runs when the cached route is invalid: goal moved, route now
+  // collides with the current map, robot strayed > max_deviation_m, or the route
+  // is older than max_age_sec. This is the Nav2-style "plan slow, control fast"
+  // split. Set max_age_sec / max_deviation_m <= 0 to disable that check.
+  bool   reuse_global_path{false};
+  double global_path_max_age_sec{2.0};
+  double global_path_max_deviation_m{1.0};
+
   // Bend pre-alignment (ground robot only).
   // At each sharp HGP bend, back off the subgoal along the incoming direction
   // by corridor_backoff_m so the robot stops short of the inside corner,
@@ -316,11 +334,45 @@ struct parameters {
   bool   expl_enabled{false};
   double expl_select_rate_hz{1.0};
   double expl_default_goal_z{0.0};
+  // Selection policy. When expl_select_nearest is true, the planner ignores the
+  // utility weights entirely and always drives to the geometrically closest
+  // selectable frontier. expl_select_commit_margin_m adds hysteresis: it keeps
+  // the current goal unless another frontier is closer by more than this many
+  // meters, preventing flip-flop between near-equidistant frontiers. 0 = strict
+  // nearest every tick.
+  bool   expl_select_nearest{false};
+  double expl_select_commit_margin_m{0.5};
+  // Grace period before concluding exploration is done and returning home. The
+  // "no selectable frontier" condition must hold continuously for this long
+  // before the agent gives up — this absorbs transient gaps (a frontier briefly
+  // INVALIDATED by a one-off HGP failure / ESDF filter / dwell, or a lull
+  // between detection cycles) so the agent keeps exploring reachable frontiers
+  // instead of prematurely heading home. 0 disables (give up on the first gap).
+  double expl_home_grace_sec{3.0};
+  // Exploration stall watchdog. If the agent has an active exploration goal but
+  // has neither moved more than expl_stall_eps_m nor switched frontier for
+  // expl_stall_timeout_sec, the pursued frontier is invalidated so selection can
+  // advance. This is the only escape that runs on the select timer: every other
+  // one depends on map updates, the replan loop, or the drone status machine, so
+  // if any of those wedges the robot is stranded. 0 disables.
+  double expl_stall_timeout_sec{30.0};
+  double expl_stall_eps_m{0.15};
   // Detector
   int    expl_cluster_min_cells{6};
   int    expl_border_margin_cells{2};
   int    expl_obstacle_clearance_cells{1};
   double expl_robot_snap_radius_m{1.0};
+  // Max run of consecutive UNKNOWN cells the detector's reachability BFS may
+  // step through to consider two known-free regions connected. Bridges the
+  // sensor near-field seam that otherwise strands the robot in its own cleared
+  // pocket at startup (0 = strict free-only WFD).
+  int    expl_unknown_bridge_cells{0};
+  // Re-validate persistent frontier records against the detector's own frontier
+  // definition each map update, retiring (VISITED) any ACTIVE/DORMANT record
+  // whose location no longer holds a frontier of >= cluster_min_cells cells.
+  // Stops phantom frontiers lingering on cells that were a border earlier but
+  // have since been explored (or left only a sub-threshold / occluded speck).
+  bool   expl_reconcile_stale{true};
   // ESDF-based obstacle clearance for frontier centroids. Frontiers whose
   // centroid is within this distance of any obstacle (per the 2D ESDF) are
   // dropped and existing records are invalidated. Set to 0 (or no ESDF
@@ -356,6 +408,10 @@ struct parameters {
   double expl_pursuit_timeout_factor{10.0};
   double expl_pursuit_timeout_v_ref{0.5};
   double expl_pursuit_timeout_min_sec{10.0};
+  // After a frontier location times out this many times, its keep-out becomes
+  // permanent so it stops reappearing every cooldown. <= 0 disables (legacy
+  // indefinite respawn).
+  int    expl_pursuit_timeout_max_strikes{3};
   // Invalidation keep-out — drop fresh clusters that fall within radius_m of
   // any INVALIDATED record whose invalidation is still inside the cooldown
   // window. Set radius_m <= 0 to disable; cooldown_sec <= 0 = permanent.

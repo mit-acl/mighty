@@ -106,8 +106,6 @@ mighty_node:
 
         # Dynamic obstacle parameters
         traj_lifetime: 7.0                          # [s] Time to keep the trajectory
-        dynamic_obstacle_base_inflation: 0.5        # [m] Inflation for the dynamic obstacles
-        max_dynamic_obstacle_inflation: 1.0         # [m] Inflation for the dynamic obstacles
         freq_dynamic_obstacle_update_to_tmap: 10.0  # [Hz] Frequency to update the dynamic obstacles to the tmap
 
         # Dynamic k_value parameters

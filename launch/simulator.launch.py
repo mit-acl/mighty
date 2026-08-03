@@ -14,7 +14,7 @@ from launch_ros.actions import Node
 import launch_ros.actions
 import launch_ros.descriptions
 from ament_index_python.packages import get_package_share_directory
-from launch.conditions import UnlessCondition
+from launch.conditions import IfCondition, UnlessCondition
 
 def generate_launch_description():
 
@@ -85,9 +85,18 @@ def generate_launch_description():
         condition = UnlessCondition(use_mockamap)
     )
 
+    # use_rviz:=false runs the fake_sim scenarios fully headless, which is what
+    # the automated campaign (scripts/exploration_test.py) needs: RViz on a
+    # shared display just contends for the GPU during long unattended runs.
+    use_rviz = LaunchConfiguration('use_rviz', default='true')
+    use_rviz_arg = DeclareLaunchArgument(
+        'use_rviz', default_value='true',
+        description='Launch RViz (set false for headless / unattended runs)')
+
     rviz_node = launch_ros.actions.Node(
             package='rviz2', executable='rviz2', output='screen',
-            arguments=['--display-config', rviz_config])
+            arguments=['--display-config', rviz_config],
+            condition=IfCondition(use_rviz))
 
     # Create LaunchDescription
     ld = LaunchDescription()
@@ -107,6 +116,7 @@ def generate_launch_description():
     ld.add_action(use_mockamap_arg)
     ld.add_action(use_dynamic_arg)
     ld.add_action(rviz_config_arg)
+    ld.add_action(use_rviz_arg)
 
     ld.add_action(random_forest_node)
     ld.add_action(rviz_node)

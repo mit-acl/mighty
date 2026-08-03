@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <queue>
+#include <unordered_set>
 
 #include "mighty/visited_map.hpp"
 
@@ -71,93 +73,50 @@ std::vector<FrontierCluster> FrontierDetector::detect(
   const size_t N = static_cast<size_t>(W) * H;
   std::vector<uint8_t> visited(N, 0);
   std::vector<uint8_t> is_frontier(N, 0);
-
-  auto onBorder = [&](int ix, int iy) {
-    const int m = params_.border_margin_cells;
-    return ix < m || ix >= W - m || iy < m || iy >= H - m;
-  };
+  // Remaining UNKNOWN-bridging budget each cell was reached with. Stepping onto
+  // a known-free cell refills it; stepping onto an UNKNOWN cell spends one.
+  // With unknown_bridge_cells == 0 this degenerates to the free-only BFS.
+  const int bridge = std::max(0, params_.unknown_bridge_cells);
+  std::vector<int8_t> budget(N, 0);
 
   std::queue<std::pair<int, int>> q;
   q.push({seed_x, seed_y});
   visited[flatIdx(seed_x, seed_y, W)] = 1;
+  budget[flatIdx(seed_x, seed_y, W)] = static_cast<int8_t>(std::min(bridge, 127));
 
   while (!q.empty()) {
     auto [cx, cy] = q.front();
     q.pop();
 
-    // Tag as frontier seed if any 8-neighbor is *in-bounds* and UNKNOWN, and
-    // this cell is not on the border ring. We deliberately do NOT count
-    // out-of-bounds neighbors as unknown — OOB is "outside the mapper window"
-    // and is handled by border_margin_cells, not by the per-cell tag check.
-    // Without this restriction, edge cells of an otherwise-free grid would
-    // all be flagged as frontiers because their OOB neighbors look unknown.
-    //
-    // VisitedMap filter: if the unknown neighbor is already in the persistent
-    // visited bitmap, treat it as known — it just slid out of the local
-    // window in a past observation. Without this check, the robot would
-    // re-create frontiers along the seam every time it revisits an explored
-    // area, because the sliding window re-blanks those cells to UNKNOWN.
-    bool has_unknown_nbr = false;
+    // Tag this cell as a frontier seed if it matches the shared per-cell
+    // frontier predicate. Keeping the definition in one place (isFrontierCell)
+    // guarantees record re-validation (isStillFrontier) can never drift from
+    // what detection considers a frontier. Bridged UNKNOWN cells fail the
+    // predicate's isFree() gate, so they can never become seeds.
+    const size_t cidx = flatIdx(cx, cy, W);
+    const bool cur_free = grid.isFree(cx, cy);
+    if (cur_free && isFrontierCell(grid, cx, cy, visited_map)) {
+      is_frontier[cidx] = 1;
+    }
+
+    // Expand BFS through known-free cells, plus short UNKNOWN seams when
+    // bridging is enabled. OCCUPIED always blocks, so bridging can only
+    // reconnect free space the sensor simply hasn't filled in yet.
+    const int cur_budget = cur_free ? bridge : budget[cidx];
     for (int i = 0; i < 8; ++i) {
       const int nx = cx + kDx8[i];
       const int ny = cy + kDy8[i];
       if (!grid.inBounds(nx, ny)) continue;
-      if (!grid.isUnknown(nx, ny)) continue;
-      if (visited_map != nullptr) {
-        double wx_n, wy_n;
-        grid.gridToWorld(nx, ny, wx_n, wy_n);
-        if (visited_map->isVisitedWorld(wx_n, wy_n)) continue;
-      }
-      has_unknown_nbr = true;
-      break;
-    }
-    bool is_seed = has_unknown_nbr && !onBorder(cx, cy);
-
-    // Reject frontier cells that have any OCCUPIED neighbor within
-    // obstacle_clearance_cells. Frontiers hugging walls are usually noise
-    // (wall-thickness slop, raycast endpoints) and not worth visiting.
-    // NOTE: this only filters seed-tagging — the BFS expansion below still
-    // runs through every free cell, so disqualified cells don't sever the
-    // BFS frontier and the rest of the reachable region is still explored.
-    if (is_seed && params_.obstacle_clearance_cells > 0) {
-      const int rcells = params_.obstacle_clearance_cells;
-      bool near_obstacle = false;
-      for (int dy = -rcells; dy <= rcells && !near_obstacle; ++dy) {
-        for (int dx = -rcells; dx <= rcells && !near_obstacle; ++dx) {
-          if (dx == 0 && dy == 0) continue;
-          const int nx = cx + dx;
-          const int ny = cy + dy;
-          if (!grid.inBounds(nx, ny)) continue;
-          if (grid.isOccupied(nx, ny)) near_obstacle = true;
-        }
-      }
-      if (near_obstacle) is_seed = false;
-    }
-
-    // Bounding-box filter: drop seeds outside the user-specified exploration
-    // box. Uses world coords so it stays correct as the local mapper window
-    // slides. Like obstacle_clearance_cells above, this only gates seed-
-    // tagging; BFS expansion below still walks the entire reachable region.
-    if (is_seed && params_.bounds_enabled) {
-      double wx_seed, wy_seed;
-      grid.gridToWorld(cx, cy, wx_seed, wy_seed);
-      if (wx_seed < params_.bounds_min_x || wx_seed > params_.bounds_max_x ||
-          wy_seed < params_.bounds_min_y || wy_seed > params_.bounds_max_y) {
-        is_seed = false;
-      }
-    }
-
-    if (is_seed) is_frontier[flatIdx(cx, cy, W)] = 1;
-
-    // Expand BFS through known-free cells only.
-    for (int i = 0; i < 8; ++i) {
-      const int nx = cx + kDx8[i];
-      const int ny = cy + kDy8[i];
-      if (!grid.inBounds(nx, ny)) continue;
+      if (grid.isOccupied(nx, ny)) continue;
       const size_t nidx = flatIdx(nx, ny, W);
-      if (visited[nidx]) continue;
-      if (!grid.isFree(nx, ny)) continue;
+      const bool nfree = grid.isFree(nx, ny);
+      const int nbudget = nfree ? bridge : cur_budget - 1;
+      if (nbudget < 0) continue;  // out of bridging budget — seam too wide
+      // Revisit only when we arrive with strictly more budget to spend, so a
+      // cell first reached mid-seam can still expand once free space is found.
+      if (visited[nidx] && budget[nidx] >= nbudget) continue;
       visited[nidx] = 1;
+      budget[nidx] = static_cast<int8_t>(std::min(nbudget, 127));
       q.push({nx, ny});
     }
   }
@@ -226,4 +185,128 @@ std::vector<FrontierCluster> FrontierDetector::detect(
             });
 
   return out;
+}
+
+bool FrontierDetector::isFrontierCell(const OccGrid2D& grid, int cx, int cy,
+                                      const VisitedMap* visited_map) const {
+  // Must be a known-FREE cell (the detector's outer BFS only ever walks free
+  // cells; enforce it here so the predicate is safe to call on any cell).
+  if (!grid.isFree(cx, cy)) return false;
+
+  // Not on the border ring. Cells near the window edge may have just slid in
+  // and not been observed yet; their out-of-bounds neighbors would otherwise
+  // look UNKNOWN and spuriously flag the whole edge as a frontier.
+  const int m = params_.border_margin_cells;
+  if (cx < m || cx >= grid.width() - m ||
+      cy < m || cy >= grid.height() - m) {
+    return false;
+  }
+
+  // At least one *in-bounds* UNKNOWN 8-neighbor. Out-of-bounds neighbors are
+  // "outside the mapper window", handled by border_margin_cells, not counted
+  // as unknown here. VisitedMap filter: an UNKNOWN neighbor already in the
+  // persistent visited bitmap is stale slid-out area, not genuine unexplored
+  // space, so it does not generate a frontier.
+  bool has_unknown_nbr = false;
+  for (int i = 0; i < 8; ++i) {
+    const int nx = cx + kDx8[i];
+    const int ny = cy + kDy8[i];
+    if (!grid.inBounds(nx, ny)) continue;
+    if (!grid.isUnknown(nx, ny)) continue;
+    if (visited_map != nullptr) {
+      double wx_n, wy_n;
+      grid.gridToWorld(nx, ny, wx_n, wy_n);
+      if (visited_map->isVisitedWorld(wx_n, wy_n)) continue;
+    }
+    has_unknown_nbr = true;
+    break;
+  }
+  if (!has_unknown_nbr) return false;
+
+  // Reject cells hugging an obstacle (usually wall-thickness slop / raycast
+  // endpoints, not worth visiting).
+  if (params_.obstacle_clearance_cells > 0) {
+    const int rcells = params_.obstacle_clearance_cells;
+    for (int dy = -rcells; dy <= rcells; ++dy) {
+      for (int dx = -rcells; dx <= rcells; ++dx) {
+        if (dx == 0 && dy == 0) continue;
+        const int nx = cx + dx;
+        const int ny = cy + dy;
+        if (!grid.inBounds(nx, ny)) continue;
+        if (grid.isOccupied(nx, ny)) return false;
+      }
+    }
+  }
+
+  // Drop cells outside the optional exploration bounds box (world frame).
+  if (params_.bounds_enabled) {
+    double wx, wy;
+    grid.gridToWorld(cx, cy, wx, wy);
+    if (wx < params_.bounds_min_x || wx > params_.bounds_max_x ||
+        wy < params_.bounds_min_y || wy > params_.bounds_max_y) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool FrontierDetector::isStillFrontier(const OccGrid2D& grid,
+                                       const Eigen::Vector2d& world_xy,
+                                       int min_cells, int search_radius_cells,
+                                       const VisitedMap* visited_map) const {
+  const int W = grid.width();
+  const int H = grid.height();
+  if (W <= 0 || H <= 0) return false;
+  if (min_cells < 1) min_cells = 1;
+  if (search_radius_cells < 0) search_radius_cells = 0;
+
+  int cx, cy;
+  grid.worldToGrid(world_xy.x(), world_xy.y(), cx, cy);
+  if (!grid.inBounds(cx, cy)) return false;
+
+  // Find a frontier-cell seed within search_radius_cells, scanning outward ring
+  // by ring so a centroid nudged off the frontier by EMA blending still binds
+  // to its frontier. First match wins (nearest seed).
+  int sx = -1, sy = -1;
+  for (int r = 0; r <= search_radius_cells && sx < 0; ++r) {
+    for (int dy = -r; dy <= r && sx < 0; ++dy) {
+      for (int dx = -r; dx <= r; ++dx) {
+        if (std::max(std::abs(dx), std::abs(dy)) != r) continue;  // ring only
+        const int nx = cx + dx;
+        const int ny = cy + dy;
+        if (isFrontierCell(grid, nx, ny, visited_map)) {
+          sx = nx;
+          sy = ny;
+          break;
+        }
+      }
+    }
+  }
+  if (sx < 0) return false;  // no frontier cell nearby -> no longer a frontier
+
+  // BFS the connected frontier-cell component from the seed, early-exiting the
+  // moment it reaches min_cells. A local hash set bounds memory: the walk stops
+  // at min_cells (still a real frontier) or exhausts a sub-threshold remnant.
+  std::unordered_set<size_t> seen;
+  std::queue<std::pair<int, int>> q;
+  q.push({sx, sy});
+  seen.insert(flatIdx(sx, sy, W));
+  int count = 0;
+  while (!q.empty()) {
+    auto [x, y] = q.front();
+    q.pop();
+    if (++count >= min_cells) return true;  // enough cells -> still a frontier
+    for (int i = 0; i < 8; ++i) {
+      const int nx = x + kDx8[i];
+      const int ny = y + kDy8[i];
+      if (!grid.inBounds(nx, ny)) continue;
+      const size_t nidx = flatIdx(nx, ny, W);
+      if (seen.count(nidx)) continue;
+      if (!isFrontierCell(grid, nx, ny, visited_map)) continue;
+      seen.insert(nidx);
+      q.push({nx, ny});
+    }
+  }
+  return count >= min_cells;  // component smaller than min_cells -> retire it
 }

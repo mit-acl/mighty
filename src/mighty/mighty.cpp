@@ -7,6 +7,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "mighty/mighty.hpp"
+#include "mighty/path_utils.hpp"
 
 using namespace mighty;
 using namespace termcolor;
@@ -849,6 +850,17 @@ bool MIGHTY::generateGlobalPath(vec_Vecf<3>& global_path, double current_time,
   // backward HGP path.
   getG(local_G);
 
+  // Persistent global map (ground robot): plan the A* all the way to the TRUE
+  // terminal goal instead of the horizon-projected subgoal computeG just wrote.
+  // The horizon-limited local subgoal is derived AFTER the solve by truncating
+  // the returned path (below), so the route is a stable slice of a full-length
+  // plan over the accumulated map rather than a chase of a moving projection.
+  const bool plan_to_true_goal =
+      par_.use_persistent_global_map && par_.vehicle_type == "ground_robot";
+  if (plan_to_true_goal) {
+    local_G = local_G_term;
+  }
+
   // Set up the HGP planner (since updateVmax() needs to be called after setupHGPPlanner, we use
   // v_max_ from the last replan)
   // Pass ESDF and occ grids to HGP manager for ground robot A* planning
@@ -902,26 +914,77 @@ bool MIGHTY::generateGlobalPath(vec_Vecf<3>& global_path, double current_time,
 
   Vec3f start_dir_hint(dir_hint.x(), dir_hint.y(), dir_hint.z());
 
-  // Solve HGP
+  // Solve HGP — unless the cached route can be reused (ground-robot persistent
+  // map). Reuse re-anchors the last full route to the current pose and skips the
+  // A* search entirely; a fresh solve runs only when the cached route is invalid
+  // (goal moved / now collides / robot strayed / stale). This is the Nav2-style
+  // "plan slow, control fast" split — the local trajectory still replans every
+  // tick over the (reused) global route.
   MyTimer timer_solve(true);
   vec_Vecf<3> raw_global_path;
-  if (!hgp_manager_.solveHGP(local_A.pos, start_dir_hint, local_G.pos, final_g_,
-                             par_.global_planner_heuristic_weight, A_time, global_path,
-                             raw_global_path)) {
-    if (par_.debug_verbose)
-      printf("[TIMING]   HGP solve (FAILED): %.2f ms\n", timer_solve.getElapsedMicros() / 1000.0);
-    hgp_failure_count_++;
-    replanning_failure_count_++;
-    return false;
+  bool reused_route = false;
+  if (plan_to_true_goal) {
+    vec_Vecf<3> reanchored;
+    if (tryReuseCachedRoute(local_A, current_time, reanchored)) {
+      global_path = reanchored;
+      raw_global_path = reanchored;  // for original_global_path_ visualization
+      reused_route = true;
+      if (par_.debug_verbose)
+        printf("[TIMING]   HGP solve: REUSED cached route (skipped A*)\n");
+    }
   }
-  if (par_.debug_verbose)
-    printf("[TIMING]   HGP solve: %.2f ms\n", timer_solve.getElapsedMicros() / 1000.0);
+  if (!reused_route) {
+    if (!hgp_manager_.solveHGP(local_A.pos, start_dir_hint, local_G.pos, final_g_,
+                               par_.global_planner_heuristic_weight, A_time, global_path,
+                               raw_global_path)) {
+      if (par_.debug_verbose)
+        printf("[TIMING]   HGP solve (FAILED): %.2f ms\n", timer_solve.getElapsedMicros() / 1000.0);
+      hgp_failure_count_++;
+      replanning_failure_count_++;
+      return false;
+    }
+    if (par_.debug_verbose)
+      printf("[TIMING]   HGP solve: %.2f ms\n", timer_solve.getElapsedMicros() / 1000.0);
+  }
 
   // Bend pre-alignment (ground robot only). Detects sharp bends on the raw
   // A* path using a windowed direction average (robust to resample phase),
   // then replaces global_path with a truncated version ending at a backed-
   // off subgoal so L-BFGS stops short of each inside corner. UAVs unaffected.
-  if (par_.vehicle_type == "ground_robot" && par_.corridor_hop_enabled) {
+  if (plan_to_true_goal) {
+    // On a FRESH solve, cache the full route (pre-truncation) so later ticks can
+    // reuse it. On reuse, keep the original cache and its plan time so the
+    // staleness check still forces a periodic real replan.
+    if (!reused_route) {
+      cached_route_ = global_path;
+      cached_route_goal_ = local_G_term;
+      cached_route_time_ = current_time;
+    }
+    // Derive the horizon-limited local subgoal by truncating the (full-length,
+    // true-goal) global path at the planning horizon around A. L-BFGS then
+    // optimizes only over the next `horizon` meters of a STABLE route; the full
+    // route to G_term is still stored for visualization (original_global_path_).
+    // NOTE: corridor_hop is the alternative subgoal policy for the sliding-
+    // window path; combining it with the persistent map is future work — the
+    // two are mutually-exclusive opt-ins.
+    Eigen::Vector3d subgoal;
+    if (mighty_utils::truncateGlobalPathAtHorizon(global_path, local_A.pos,
+                                                  par_.horizon, subgoal)) {
+      state local_G_sub;
+      local_G_sub.pos = subgoal;
+      // Yaw along the last committed segment of the (possibly truncated) path.
+      Eigen::Vector3d ydir = subgoal - local_A.pos;
+      if (global_path.size() >= 2) {
+        ydir = global_path.back() - global_path[global_path.size() - 2];
+      }
+      local_G_sub.yaw = (ydir.head<2>().norm() > 1e-6)
+                            ? std::atan2(ydir.y(), ydir.x())
+                            : local_G.yaw;
+      if (par_.vehicle_type != "uav") local_G_sub.pos[2] = par_.default_goal_z;
+      setG(local_G_sub);
+      getG(local_G);
+    }
+  } else if (par_.vehicle_type == "ground_robot" && par_.corridor_hop_enabled) {
     computeG_corridorHop(local_A, local_G_term, global_path, raw_global_path);
     // Refresh local_G with the (possibly) new subgoal; local_G is read again
     // later in this function and fed into the safe-corridor / local-traj
@@ -952,6 +1015,59 @@ bool MIGHTY::generateGlobalPath(vec_Vecf<3>& global_path, double current_time,
   hgp_manager_.getComputationTime(global_planning_time_, hgp_static_jps_time_, hgp_check_path_time_,
                                   hgp_dynamic_astar_time_, hgp_recover_path_time_);
 
+  return true;
+}
+
+// ----------------------------------------------------------------------------
+
+bool MIGHTY::tryReuseCachedRoute(const state& local_A, double current_time,
+                                 vec_Vecf<3>& reanchored_out) {
+  if (!par_.reuse_global_path) return false;
+  if (cached_route_.size() < 2 || cached_route_time_ < 0.0) return false;
+
+  // Staleness: force a fresh solve once the cache is older than the budget.
+  if (par_.global_path_max_age_sec > 0.0 &&
+      (current_time - cached_route_time_) > par_.global_path_max_age_sec) {
+    return false;
+  }
+
+  // Goal unchanged? (compare in the ground plane; a new term_goal invalidates.)
+  state local_G_term;
+  getGterm(local_G_term);
+  if ((local_G_term.pos.head<2>() - cached_route_goal_.pos.head<2>()).norm() >
+      par_.goal_radius) {
+    return false;
+  }
+
+  // Re-anchor the cached route to the current pose; reject if the robot has
+  // strayed farther than the deviation budget.
+  vec_Vecf<3> route = cached_route_;
+  double deviation = 0.0;
+  if (!mighty_utils::reanchorPathToStart(route, local_A.pos, deviation)) return false;
+  if (par_.global_path_max_deviation_m > 0.0 &&
+      deviation > par_.global_path_max_deviation_m) {
+    return false;
+  }
+
+  // Collision-free against the CURRENT map? A newly-observed obstacle on the
+  // committed route forces a fresh solve. Sample each segment at the map
+  // resolution; UNKNOWN counts as free, matching the A* plan-through-unknown
+  // admission (only truly OCCUPIED cells block).
+  if (occ_grid_2d_) {
+    const double step = std::max(1e-2, map_res_);
+    for (size_t i = 0; i + 1 < route.size(); ++i) {
+      const Eigen::Vector3d a = route[i];
+      const Eigen::Vector3d b = route[i + 1];
+      const double len = (b - a).head<2>().norm();
+      const int n = std::max(1, static_cast<int>(std::ceil(len / step)));
+      for (int k = 0; k <= n; ++k) {
+        const Eigen::Vector3d p = a + (b - a) * (static_cast<double>(k) / n);
+        if (occ_grid_2d_->isOccupiedWorld(p.x(), p.y())) return false;
+      }
+    }
+  }
+
+  reanchored_out = route;
   return true;
 }
 
@@ -1243,8 +1359,8 @@ bool MIGHTY::generateLocalTrajectory(const state& local_A, double A_time, vec_Ve
   // If no solution is found, return.
   if (status < 0 || fopt_ > par_.fopt_threshold) {
     // do the same output in red with printf
-    printf("\033[1;31mLocal Optimization Failed with status: %d, fopt: %.2f\033[0m\n", status,
-           fopt_);
+    // printf("\033[1;31mLocal Optimization Failed with status: %d, fopt: %.2f\033[0m\n", status,
+    //        fopt_);
     return false;
   }
 

@@ -185,15 +185,15 @@ bool GraphSearch::static_jps_plan(StatePtr& currNode_ptr, int max_expand, int st
     auto current_time = std::chrono::steady_clock::now();
     if (std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time) >
         timeout_duration) {
-      std::cerr << "astar_heat: timeout after " << expand_iteration
-                << " expansions, recovering partial path\n";
+      // std::cerr << "astar_heat: timeout after " << expand_iteration
+      //           << " expansions, recovering partial path\n";
       path_ = recoverPath(best_node, start_id);
       return !path_.empty() && path_.size() > 1;
     }
 
     if (pq_.empty()) {
-      std::cerr << "astar_heat: priority queue empty after " << expand_iteration
-                << " expansions, recovering partial path\n";
+      // std::cerr << "astar_heat: priority queue empty after " << expand_iteration
+      //           << " expansions, recovering partial path\n";
       path_ = recoverPath(best_node, start_id);
       return !path_.empty() && path_.size() > 1;
     }
@@ -261,8 +261,8 @@ bool GraphSearch::static_jps_plan(StatePtr& currNode_ptr, int max_expand, int st
     }    // Process successors
 
     if (max_expand > 0 && expand_iteration >= max_expand) {
-      std::cerr << "astar_heat: max_expand [" << max_expand
-                << "] reached, recovering partial path\n";
+      // std::cerr << "astar_heat: max_expand [" << max_expand
+      //           << "] reached, recovering partial path\n";
       path_ = recoverPath(best_node, start_id);
       return !path_.empty() && path_.size() > 1;
     }

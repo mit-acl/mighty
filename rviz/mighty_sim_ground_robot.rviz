@@ -9,7 +9,7 @@ Panels:
         - /NX011/Planning1/NX01 Traj1/Topic1
         - /NX011/Mapping1/NX01 D435 PointCloud1/Topic1
         - /NX011/Mapping1/NX01 Lidar PointCloud1/Topic1
-        - /NX011/Others1
+        - /NX011/Ground 2D1
       Splitter Ratio: 0.5
     Tree Height: 864
   - Class: rviz_common/Selection
@@ -619,6 +619,7 @@ Visualization Manager:
                 exploration_bounds: true
                 exploration_bounds_label: true
                 frontier_centroids: true
+                frontier_goal_line: false
                 frontier_labels: true
               Topic:
                 Depth: 10
@@ -805,7 +806,7 @@ Visualization Manager:
               Enabled: true
               Name: NX01 tracked obstacles
               Namespaces:
-                "": true
+                {}
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
@@ -817,8 +818,7 @@ Visualization Manager:
               Enabled: true
               Name: NX01 Cluster Bbox
               Namespaces:
-                centroid: true
-                wireframe: true
+                {}
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
@@ -3150,25 +3150,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 55.961273193359375
+      Distance: 52.49315643310547
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 3.5094504356384277
-        Y: -2.488492488861084
-        Z: -3.0566675662994385
+        X: -9.558324813842773
+        Y: 8.338339805603027
+        Z: -3.045783281326294
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.4647964239120483
+      Pitch: 0.7897970676422119
       Target Frame: NX01/base_link
       Value: Orbit (rviz_default_plugins)
-      Yaw: 4.70740270614624
+      Yaw: 5.697419166564941
     Saved: ~
 Window Geometry:
   Displays:

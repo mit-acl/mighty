@@ -1,0 +1,30 @@
+# Build context for `make build-local` is the repository root (see docker/Makefile).
+# Keep it small: .git alone is ~3x the size of the actual source.
+.git
+.github
+
+# colcon output, in case anyone builds inside the package directory
+build/
+install/
+log/
+
+# Documentation media: 63 MB of README GIFs, referenced by neither CMakeLists.txt
+# nor package.xml.
+imgs/
+
+# Analysis notebooks: all 46 MB of benchmarking/ is .ipynb files. Exclude the
+# notebooks only — do NOT exclude the directory, because CMakeLists.txt installs
+# benchmarking/unc_benchmark_node.py via install(PROGRAMS) and the build fails
+# without it.
+**/*.ipynb
+
+# Python / editor cruft
+**/__pycache__/
+**/*.pyc
+.vscode/
+.idea/
+*.swp
+
+# Test artifacts produced by scripts/exploration_test.py
+**/campaign_*/
+**/*.bag

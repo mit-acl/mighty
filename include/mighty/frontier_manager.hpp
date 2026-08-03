@@ -52,6 +52,11 @@ struct FrontierRecord {
   // re-spawning a brand-new ACTIVE record right next to a frontier we just
   // gave up on. See invalidation_keep_out_radius_m / cooldown_sec params.
   double          invalidated_at_t = -1.0;
+  // How many times a frontier at this location has been pursued and hit the
+  // pursuit timeout. Incremented on each timeout and carried onto respawns
+  // (via the keep-out scan) so repeated failures escalate to a permanent
+  // keep-out. See pursuit_timeout_max_strikes.
+  int             timeout_count = 0;
 };
 
 struct FrontierManagerParams {
@@ -88,6 +93,16 @@ struct FrontierManagerParams {
   double pursuit_timeout_factor  = 10.0;
   double pursuit_timeout_v_ref   = 0.5;   // reference velocity (m/s)
   double pursuit_timeout_min_sec = 10.0;  // floor, regardless of distance
+
+  // Escalating blacklist for chronically-unreachable frontiers. Each pursuit
+  // timeout increments the record's timeout_count; the count is carried onto
+  // any respawn near the same spot. Once a location's count reaches this many
+  // strikes, the keep-out around it becomes PERMANENT (ignores the cooldown
+  // below), so a frontier the robot keeps failing to reach stops reappearing
+  // every cooldown. Set <= 0 to disable (frontiers may respawn indefinitely,
+  // the legacy behavior). The first (max_strikes - 1) timeouts still respawn
+  // after the normal cooldown, preserving retries for transient failures.
+  int    pursuit_timeout_max_strikes = 3;
 
   // Spatial keep-out around INVALIDATED records. A fresh cluster whose
   // centroid is within this radius of any INVALIDATED record (and inside
@@ -149,6 +164,14 @@ class FrontierManager {
       const OccGrid2D& current_grid,
       const std::vector<PeerPose>& peers,
       double min_dist_to_peers_m = 0.0) const;
+
+  /** @brief Pick the geometrically nearest selectable frontier (ACTIVE or
+   *  DORMANT), by Euclidean distance to the centroid, ignoring the utility
+   *  function entirely. Returns nullopt if none are selectable. This is the
+   *  "always go to the closest frontier" policy — immune to the utility
+   *  weights and to dist_norm saturation at dist_ref_m. */
+  std::optional<FrontierRecord> selectNearest(
+      const Eigen::Vector3d& robot_pose) const;
 
   void markVisited(uint64_t id);
   void markInvalidated(uint64_t id, double t_now);

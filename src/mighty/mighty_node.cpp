@@ -329,6 +329,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
       dp.border_margin_cells     = par_.expl_border_margin_cells;
       dp.obstacle_clearance_cells = par_.expl_obstacle_clearance_cells;
       dp.robot_snap_radius_m     = par_.expl_robot_snap_radius_m;
+      dp.unknown_bridge_cells    = par_.expl_unknown_bridge_cells;
       dp.bounds_enabled          = par_.expl_bounds_enabled;
       dp.bounds_min_x            = par_.expl_bounds_min_x;
       dp.bounds_max_x            = par_.expl_bounds_max_x;
@@ -355,6 +356,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
       mp.pursuit_timeout_factor  = par_.expl_pursuit_timeout_factor;
       mp.pursuit_timeout_v_ref   = par_.expl_pursuit_timeout_v_ref;
       mp.pursuit_timeout_min_sec = par_.expl_pursuit_timeout_min_sec;
+      mp.pursuit_timeout_max_strikes = par_.expl_pursuit_timeout_max_strikes;
       mp.invalidation_keep_out_radius_m = par_.expl_invalidation_keep_out_radius_m;
       mp.invalidation_cooldown_sec      = par_.expl_invalidation_cooldown_sec;
       mp.peer_visit_radius_m            = par_.expl_peer_visit_radius_m;
@@ -442,6 +444,8 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
               return;
             }
             home_return_requested_ = true;
+            // External command: come home and stay parked (do not auto-resume).
+            home_return_resume_on_arrival_ = false;
             geometry_msgs::msg::PoseStamped home;
             home.header.frame_id    = par_.map_frame_id;
             home.header.stamp       = this->now();
@@ -723,6 +727,10 @@ void MIGHTY_NODE::declareParameters() {
 
   // ESDF-based obstacle avoidance (ground robot only)
   this->declare_parameter("use_esdf_cost", false);
+  this->declare_parameter("use_persistent_global_map", false);
+  this->declare_parameter("reuse_global_path", false);
+  this->declare_parameter("global_path_max_age_sec", 2.0);
+  this->declare_parameter("global_path_max_deviation_m", 1.0);
   this->declare_parameter("esdf_weight", 1e+3);
   this->declare_parameter("esdf_d_safe", 1.0);
   this->declare_parameter("esdf_truncation_distance", 10);
@@ -745,10 +753,17 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.enabled", false);
   this->declare_parameter("exploration.select_rate_hz", 1.0);
   this->declare_parameter("exploration.default_goal_z", 0.0);
+  this->declare_parameter("exploration.select_nearest", false);
+  this->declare_parameter("exploration.select_commit_margin_m", 0.5);
+  this->declare_parameter("exploration.home_grace_sec", 3.0);
+  this->declare_parameter("exploration.stall_timeout_sec", 30.0);
+  this->declare_parameter("exploration.stall_eps_m", 0.15);
   this->declare_parameter("exploration.detector.cluster_min_cells", 6);
   this->declare_parameter("exploration.detector.border_margin_cells", 2);
   this->declare_parameter("exploration.detector.obstacle_clearance_cells", 1);
   this->declare_parameter("exploration.detector.robot_snap_radius_m", 1.0);
+  this->declare_parameter("exploration.detector.unknown_bridge_cells", 0);
+  this->declare_parameter("exploration.detector.reconcile_stale", true);
   this->declare_parameter("exploration.bounds.enabled", false);
   this->declare_parameter("exploration.bounds.min_x", -50.0);
   this->declare_parameter("exploration.bounds.max_x",  50.0);
@@ -774,6 +789,7 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.manager.pursuit_timeout_factor", 10.0);
   this->declare_parameter("exploration.manager.pursuit_timeout_v_ref", 0.5);
   this->declare_parameter("exploration.manager.pursuit_timeout_min_sec", 10.0);
+  this->declare_parameter("exploration.manager.pursuit_timeout_max_strikes", 3);
   this->declare_parameter("exploration.manager.invalidation_keep_out_radius_m", 1.5);
   this->declare_parameter("exploration.manager.invalidation_cooldown_sec", 30.0);
   this->declare_parameter("exploration.visited_map.center_x", 0.0);
@@ -1084,6 +1100,10 @@ void MIGHTY_NODE::setParameters() {
   par_.ground_slab_margin = this->get_parameter("ground_slab_margin").as_double();
 
   par_.use_esdf_cost = this->get_parameter("use_esdf_cost").as_bool();
+  par_.use_persistent_global_map = this->get_parameter("use_persistent_global_map").as_bool();
+  par_.reuse_global_path = this->get_parameter("reuse_global_path").as_bool();
+  par_.global_path_max_age_sec = this->get_parameter("global_path_max_age_sec").as_double();
+  par_.global_path_max_deviation_m = this->get_parameter("global_path_max_deviation_m").as_double();
   par_.esdf_weight = this->get_parameter("esdf_weight").as_double();
   par_.esdf_d_safe = this->get_parameter("esdf_d_safe").as_double();
   par_.esdf_truncation_distance = this->get_parameter("esdf_truncation_distance").as_int();
@@ -1105,11 +1125,19 @@ void MIGHTY_NODE::setParameters() {
   par_.expl_enabled              = this->get_parameter("exploration.enabled").as_bool();
   par_.expl_select_rate_hz       = this->get_parameter("exploration.select_rate_hz").as_double();
   par_.expl_default_goal_z       = this->get_parameter("exploration.default_goal_z").as_double();
+  par_.expl_select_nearest       = this->get_parameter("exploration.select_nearest").as_bool();
+  par_.expl_select_commit_margin_m = this->get_parameter("exploration.select_commit_margin_m").as_double();
+  par_.expl_home_grace_sec = this->get_parameter("exploration.home_grace_sec").as_double();
+  par_.expl_stall_timeout_sec = this->get_parameter("exploration.stall_timeout_sec").as_double();
+  par_.expl_stall_eps_m = this->get_parameter("exploration.stall_eps_m").as_double();
   par_.expl_cluster_min_cells    = this->get_parameter("exploration.detector.cluster_min_cells").as_int();
   par_.expl_border_margin_cells  = this->get_parameter("exploration.detector.border_margin_cells").as_int();
   par_.expl_obstacle_clearance_cells =
       this->get_parameter("exploration.detector.obstacle_clearance_cells").as_int();
   par_.expl_robot_snap_radius_m  = this->get_parameter("exploration.detector.robot_snap_radius_m").as_double();
+  par_.expl_unknown_bridge_cells =
+      this->get_parameter("exploration.detector.unknown_bridge_cells").as_int();
+  par_.expl_reconcile_stale      = this->get_parameter("exploration.detector.reconcile_stale").as_bool();
   par_.expl_bounds_enabled       = this->get_parameter("exploration.bounds.enabled").as_bool();
   par_.expl_bounds_min_x         = this->get_parameter("exploration.bounds.min_x").as_double();
   par_.expl_bounds_max_x         = this->get_parameter("exploration.bounds.max_x").as_double();
@@ -1140,6 +1168,8 @@ void MIGHTY_NODE::setParameters() {
       this->get_parameter("exploration.manager.pursuit_timeout_v_ref").as_double();
   par_.expl_pursuit_timeout_min_sec =
       this->get_parameter("exploration.manager.pursuit_timeout_min_sec").as_double();
+  par_.expl_pursuit_timeout_max_strikes =
+      this->get_parameter("exploration.manager.pursuit_timeout_max_strikes").as_int();
   par_.expl_invalidation_keep_out_radius_m =
       this->get_parameter("exploration.manager.invalidation_keep_out_radius_m").as_double();
   par_.expl_invalidation_cooldown_sec =
@@ -2106,11 +2136,22 @@ void MIGHTY_NODE::convertDynTrajMsg2DynTraj(const dynus_interfaces::msg::DynTraj
   // Get terminal goal
   if (traj->is_agent) traj->goal << msg.goal[0], msg.goal[1], msg.goal[2];
 
-  // Get communication delay
+  // Get communication delay.
+  //
+  // NOTE: this value is currently WRITTEN BUT NEVER READ — nothing in the
+  // planner consumes traj->communication_delay, so comm-delay inflation is not
+  // actually applied despite use_comm_delay_inflation /
+  // comm_delay_inflation_alpha / comm_delay_inflation_max existing as
+  // parameters. Fixing the arithmetic anyway so the field is meaningful if it is
+  // ever wired up.
+  //
+  // The previous form ended the statement after now().seconds(), leaving
+  // "-msg.header.stamp.sec + ..." as a discarded expression, so the field got
+  // the full epoch (~1.79e9 s) instead of a delay of a few milliseconds.
   if (traj->is_agent && par_.use_comm_delay_inflation) {
-    // Get the delay (current time - msg time)
-    traj->communication_delay = this->now().seconds();
-    -msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9;
+    const double msg_stamp = static_cast<double>(msg.header.stamp.sec)
+                           + static_cast<double>(msg.header.stamp.nanosec) * 1e-9;
+    traj->communication_delay = this->now().seconds() - msg_stamp;
 
     // Sanity check - if the delay is negative, set it to 0 - send warning message: it's probably
     // due to the clock synchronization issue
@@ -3244,7 +3285,30 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
   }
 
   occ_grid_2d_ = OccGrid2D::fromOccupancyGrid(*msg);
-  mighty_ptr_->setOccGrid2D(occ_grid_2d_);
+
+  // Choose the grid handed to the GLOBAL planner. By default it's the sliding
+  // occ_2d window (legacy). When use_persistent_global_map is on (ground robot),
+  // feed the accumulated visited_map_ instead, so the A* plans over the whole
+  // mission history — a stable route that doesn't churn as the window slides.
+  // The node keeps `occ_grid_2d_` (the sliding grid) for exploration/frontier
+  // use; only the core planner's copy is swapped. Falls back to the sliding grid
+  // until the persistent map exists and is non-empty (e.g. exploration disabled
+  // -> no visited_map_). absorb() here folds in the newest observation first;
+  // the exploration block below may absorb the same (small) sliding grid again,
+  // which is idempotent and negligible.
+  std::shared_ptr<const OccGrid2D> planner_grid = occ_grid_2d_;
+  if (par_.use_persistent_global_map && par_.vehicle_type == "ground_robot"
+      && visited_map_) {
+    visited_map_->absorb(*occ_grid_2d_);
+    if (!visited_map_->empty()) {
+      planner_grid = OccGrid2D::fromTristate(
+          visited_map_->width(), visited_map_->height(),
+          visited_map_->resolution(),
+          visited_map_->originX(), visited_map_->originY(),
+          visited_map_->data());
+    }
+  }
+  mighty_ptr_->setOccGrid2D(planner_grid);
 
   // Frontier-based exploration: detect frontiers in the new grid, update the
   // persistent global database, then immediately try to issue an exploration
@@ -3323,6 +3387,35 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
       }
     }
 
+    // Re-validate persistent records against the detector's own frontier
+    // definition. update()'s Step-d keeps a record ACTIVE as long as a single
+    // UNKNOWN cell sits within verify_radius_cells of its centroid, which
+    // disagrees with the detector's cluster_min_cells threshold and leaves
+    // phantom frontiers on cells that were a border earlier but got explored
+    // (sub-threshold remnants, or permanently-occluded specks that never
+    // clear). Ask the detector "is this still a frontier here?" and retire
+    // (VISITED) any ACTIVE/DORMANT record whose location no longer qualifies.
+    // Uses the same grid + visited filter detection just ran on, so it is
+    // exactly consistent with what the detector would (not) emit.
+    if (par_.expl_reconcile_stale && frontier_detector_) {
+      const int min_cells = frontier_detector_->params().cluster_min_cells;
+      const double res = detect_grid.resolution();
+      // Search out to the manager's merge radius: anything within matching
+      // distance of a live frontier is "the same" frontier, so only records
+      // with no qualifying frontier within that radius are retired.
+      const int search_cells = std::max(1, static_cast<int>(std::ceil(
+          frontier_manager_->params().merge_radius_m / std::max(1e-6, res))));
+      for (const auto& r : frontier_manager_->records()) {
+        if (r.state != FrontierState::ACTIVE &&
+            r.state != FrontierState::DORMANT) continue;
+        if (!frontier_detector_->isStillFrontier(
+                detect_grid, r.centroid_xy, min_cells, search_cells,
+                visited_filter)) {
+          frontier_manager_->markVisited(r.id);
+        }
+      }
+    }
+
     // Publish the persistent occupancy map ~1 Hz so RViz can layer it behind
     // the sliding occ_2d. Throttling matters because each publish copies the
     // full persistent buffer (~444 KB at the 100×100 m default; bigger if the
@@ -3397,28 +3490,84 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
 void MIGHTY_NODE::exploreSelectCallback() {
   if (!par_.expl_enabled) return;
   if (manual_goal_active_) return;
-  // Once a global return-home has been requested, stop issuing frontier goals
-  // so the agent commits to going home and doesn't get yanked back out by a
-  // newly-detected frontier mid-return.
-  if (home_return_requested_) return;
   if (!occ_grid_2d_ || !frontier_manager_) return;
   if (!current_detect_grid_) return;
   if (!state_initialized_) return;
 
-  // If we still have an in-progress exploration goal that hasn't been
-  // marked VISITED/INVALIDATED yet, leave it alone.
-  if (exploration_active_) {
-    auto* r = frontier_manager_->find(current_explore_id_);
-    if (r && (r->state == FrontierState::ACTIVE ||
-              r->state == FrontierState::DORMANT)) {
-      return;
-    }
-    // Otherwise (record gone or already terminal) fall through and pick a new one.
+  // Return-home handling. While returning home, suppress frontier selection so
+  // the agent isn't yanked back out mid-return by a newly-detected frontier.
+  // But once it actually REACHES home, if the latch came from the internal
+  // "nothing left to explore" path, lift it and fall through to re-check
+  // frontiers — so a frontier discovered during the return (or a leftover that
+  // reappeared) gets explored instead of sitting drawn-but-unexplored forever.
+  // An external /exploration/return_home command leaves the latch set (the
+  // operator asked the agent to come home and stay parked).
+  if (home_return_requested_) {
+    if (!home_return_resume_on_arrival_) return;  // external command: stay parked
+    state cur_home;
+    mighty_ptr_->getState(cur_home);
+    const double d_home = std::hypot(cur_home.pos.x() - exploration_start_pos_.x(),
+                                     cur_home.pos.y() - exploration_start_pos_.y());
+    if (d_home > par_.goal_radius) return;  // still en route home — keep the latch
+    // Reached home: lift the latch and re-evaluate for remaining frontiers.
+    home_return_requested_ = false;
+    exploration_active_ = false;
+    unreachable_consec_count_ = 0;
+    RCLCPP_INFO(this->get_logger(),
+                "Exploration: reached home — re-evaluating for remaining frontiers");
   }
 
   state cur;
   mighty_ptr_->getState(cur);
   Eigen::Vector3d robot_pose(cur.pos.x(), cur.pos.y(), cur.yaw);
+
+  // If we still have an in-progress exploration goal that hasn't been
+  // marked VISITED/INVALIDATED yet, leave it alone — unless we have stopped
+  // making progress towards it.
+  //
+  // WATCHDOG. Every other way out of a pursued frontier depends on something
+  // that can itself stop happening:
+  //   * the pursuit timeout and the dwell/visited checks live in
+  //     FrontierManager::update(), which only runs from occ2DCallback, so they
+  //     stop firing if map updates stop;
+  //   * goalReachedCheck() needs drone_status_ == GOAL_REACHED *and*
+  //     checkReadyToReplan();
+  //   * the HGP-unreachable path needs the replan loop to keep failing.
+  // If none of them fires, this branch returns early forever and the robot sits
+  // still — observed once in a 10-run campaign, stranded 26.8 m from home with
+  // 99.3% coverage and no further goals issued. This check runs on the
+  // select timer, so it is independent of all of the above.
+  if (exploration_active_) {
+    auto* r = frontier_manager_->find(current_explore_id_);
+    if (r && (r->state == FrontierState::ACTIVE ||
+              r->state == FrontierState::DORMANT)) {
+      const double t_now = this->now().seconds();
+      const Eigen::Vector2d pos_xy(cur.pos.x(), cur.pos.y());
+      // Progress = the robot moved, or we are pursuing a different frontier
+      // than when the timer was last reset.
+      if (explore_stall_id_ != current_explore_id_ ||
+          (pos_xy - explore_stall_pos_).norm() > par_.expl_stall_eps_m) {
+        explore_stall_id_  = current_explore_id_;
+        explore_stall_pos_ = pos_xy;
+        explore_stall_t_   = t_now;
+      } else if (par_.expl_stall_timeout_sec > 0.0 &&
+                 t_now - explore_stall_t_ > par_.expl_stall_timeout_sec) {
+        RCLCPP_WARN(this->get_logger(),
+                    "Exploration watchdog: no progress towards frontier %lu for "
+                    "%.0f s at (%.2f, %.2f) — invalidating so selection can move on",
+                    static_cast<unsigned long>(current_explore_id_),
+                    t_now - explore_stall_t_, pos_xy.x(), pos_xy.y());
+        // markInvalidated() also counts a strike, so a spot that repeatedly
+        // stalls escalates to a permanent keep-out instead of being re-picked.
+        frontier_manager_->markInvalidated(current_explore_id_, t_now);
+        exploration_active_ = false;
+        unreachable_consec_count_ = 0;
+        explore_stall_t_ = t_now;
+      }
+      if (exploration_active_) return;
+    }
+    // Otherwise (record gone or already terminal) fall through and pick a new one.
+  }
 
   // Multi-agent timing guard: peer-shared maps can populate frontiers before
   // this agent's own state has settled past the (0,0,0) default, causing the
@@ -3444,7 +3593,28 @@ void MIGHTY_NODE::exploreSelectCallback() {
   }
 
   std::optional<FrontierRecord> next;
-  if (par_.expl_use_minpos) {
+  if (par_.expl_select_nearest) {
+    // Strict "always go to the closest frontier" policy (utility-independent).
+    // Commitment: keep pursuing the current frontier while it stays selectable
+    // unless a different one is closer by more than select_commit_margin_m.
+    // Without this, two near-equidistant frontiers make the robot flip-flop,
+    // which reads as "not going to the closest one".
+    next = frontier_manager_->selectNearest(robot_pose);
+    if (next && exploration_active_) {
+      const FrontierRecord* cur = frontier_manager_->find(current_explore_id_);
+      if (cur && (cur->state == FrontierState::ACTIVE ||
+                  cur->state == FrontierState::DORMANT)) {
+        const Eigen::Vector2d rxy = robot_pose.head<2>();
+        const double d_cur  = (rxy - cur->centroid_xy).norm();
+        const double d_near = (rxy - next->centroid_xy).norm();
+        if (d_cur <= d_near + par_.expl_select_commit_margin_m) {
+          FrontierRecord keep = *cur;
+          keep.cached_utility = -d_cur;
+          next = keep;  // stick with the current goal
+        }
+      }
+    }
+  } else if (par_.expl_use_minpos) {
     auto peers = peer_tracker_.getActivePeers(
         this->now().seconds(), par_.expl_peer_timeout_sec);
     next = frontier_manager_->selectNextGoalMinPos(
@@ -3454,7 +3624,56 @@ void MIGHTY_NODE::exploreSelectCallback() {
     next = frontier_manager_->selectNextGoal(robot_pose, *current_detect_grid_);
   }
   if (!next) {
-    if (exploration_active_) {
+    // Having nothing to pursue is what triggers the return home — NOT whether a
+    // goal happened to be active when selection came up empty.
+    //
+    // This used to be gated on exploration_active_, which stranded the robot.
+    // The unreachable-frontier path (5 consecutive HGP failures) clears
+    // exploration_active_, so on the next tick selection returns nothing, this
+    // whole block was skipped, and the callback returned silently — every tick,
+    // forever. Observed with 322 frontier records still in the database and the
+    // detector reporting fresh=10 per cycle: the agent simply stopped acting,
+    // 26.7 m from home, until the harness killed the run.
+    //
+    // exploration_start_captured_ keeps this from firing before exploration has
+    // actually begun, when an empty selection just means the map is still
+    // filling in.
+    if (exploration_start_captured_) {
+      // Grace period: don't conclude "exploration finished" on the first empty
+      // tick. selectNearest can momentarily return nothing while a real frontier
+      // is transiently INVALIDATED (one-off HGP failure / ESDF filter / dwell)
+      // or between detection cycles. Require the empty condition to persist for
+      // expl_home_grace_sec so the detector/reconcile can resurface any
+      // remaining reachable frontier — the agent keeps exploring instead of
+      // heading home prematurely.
+      const double t_now_grace = this->now().seconds();
+      if (no_frontier_since_t_ < 0.0) no_frontier_since_t_ = t_now_grace;
+      if (par_.expl_home_grace_sec > 0.0 &&
+          (t_now_grace - no_frontier_since_t_) < par_.expl_home_grace_sec) {
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+            "Exploration: no selectable frontier — waiting %.1fs grace before home "
+            "(%.1fs elapsed)", par_.expl_home_grace_sec,
+            t_now_grace - no_frontier_since_t_);
+        return;  // stay in exploration; wait for a frontier to (re)appear
+      }
+      // Already parked at the captured start with nothing selectable: we are
+      // simply finished. Do NOT issue a return-home goal here — it would be
+      // satisfied on the spot, the arrival check on the next tick would lift the
+      // return-home latch, selection would come up empty again, and this branch
+      // would re-enter. Measured at 102 give-up/resume cycles in a single run,
+      // several per second, once the give-up path stopped being gated on
+      // exploration_active_.
+      const double d_home_now =
+          (Eigen::Vector2d(cur.pos.x(), cur.pos.y())
+           - exploration_start_pos_.head<2>()).norm();
+      if (d_home_now <= par_.goal_radius) {
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 10000,
+            "Exploration complete — parked at the start (%.2f, %.2f) with nothing "
+            "left to explore", cur.pos.x(), cur.pos.y());
+        exploration_active_ = false;
+        return;
+      }
+
       std::cout << "[mighty] No frontiers left. Robot now at ("
                 << cur.pos.x() << ", " << cur.pos.y() << ", " << cur.pos.z()
                 << "). Returning to captured start ("
@@ -3487,6 +3706,9 @@ void MIGHTY_NODE::exploreSelectCallback() {
       // pop-up mid-transit can't yank the agent back out. Same flag the
       // /exploration/return_home topic uses — single source of truth.
       home_return_requested_ = true;
+      // Internal give-up: once home is reached, re-evaluate so a frontier that
+      // reappears/gets discovered during the return still gets explored.
+      home_return_resume_on_arrival_ = true;
     }
     exploration_active_ = false;
     // Note: exploration_start_captured_ is intentionally NOT reset here.
@@ -3497,6 +3719,9 @@ void MIGHTY_NODE::exploreSelectCallback() {
     // Only a manual user goal (true session boundary) resets the flag.
     return;
   }
+
+  // A selectable frontier exists — reset the give-up grace timer.
+  no_frontier_since_t_ = -1.0;
 
   geometry_msgs::msg::PoseStamped g;
   g.header.frame_id    = par_.map_frame_id;

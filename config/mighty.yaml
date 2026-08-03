@@ -223,8 +223,6 @@ mighty_node:
         delta: 1.0e-6                                   # [-] Function improvement convergence threshold
 
         # --- Dynamic Obstacle Internals ---
-        dynamic_obstacle_base_inflation: 0.5            # [m] Inflation for dynamic obstacles
-        max_dynamic_obstacle_inflation: 1.0             # [m] Max inflation for dynamic obstacles
         freq_dynamic_obstacle_update_to_tmap: 10.0      # [Hz] Dynamic obstacle update frequency
 
         # --- K-Value Adaptation ---

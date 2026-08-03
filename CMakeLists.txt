@@ -184,6 +184,12 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_occ_grid_2d_unknown
     rclcpp Eigen3 nav_msgs)
 
+  # Header-only path helper (truncateGlobalPathAtHorizon) — Eigen only.
+  ament_add_gtest(test_path_utils
+    src/test/test_path_utils.cpp)
+  ament_target_dependencies(test_path_utils
+    Eigen3)
+
   ament_add_gtest(test_frontier_detector
     src/test/test_frontier_detector.cpp
     src/mighty/frontier_detector.cpp)

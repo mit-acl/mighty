@@ -43,6 +43,7 @@ def generate_launch_description():
     odom_topic_arg    = DeclareLaunchArgument('odom_topic', default_value='visual_slam/odom')
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='map')
     sim_env_arg = DeclareLaunchArgument('sim_env', default_value='', description='Simulation environment: gazebo or fake_sim (empty = use mighty.yaml default)')
+    log_level_arg = DeclareLaunchArgument('log_level', default_value='error', description="mighty_node ROS log level. Default 'error' keeps the terminal quiet; use 'info' to see planner diagnostics such as the [expl] frontier-detection counters")
     config_file_arg = DeclareLaunchArgument('config_file', default_value='', description='Override planner config yaml (bare filename in mighty/config, or absolute path; empty = auto-select mighty.yaml / mighty_ground_robot.yaml)')
     use_ground_robot_arg = DeclareLaunchArgument('use_ground_robot', default_value='false', description='Enable ground robot mode (spawns p3at, uses cmd_vel control)')
     use_onboard_localization_arg = DeclareLaunchArgument('use_onboard_localization', default_value='false', description='Use onboard localization (DLIO) vs Vicon')
@@ -52,6 +53,12 @@ def generate_launch_description():
     external_selector_arg = DeclareLaunchArgument(
         'external_selector', default_value='false',
         description='Set exploration.external_selector=true so mighty_node yields term_goal control (used by --use-vlm)')
+    exploration_enabled_arg = DeclareLaunchArgument(
+        'exploration_enabled', default_value='',
+        description="Override exploration.enabled (empty = use the config value). "
+                    "Set false to drive to a fixed goal instead of exploring — "
+                    "mighty_ground_robot.yaml enables exploration, so without this "
+                    "a goal-navigation run is silently taken over by the frontier loop")
     map_frame_id_arg = DeclareLaunchArgument('map_frame_id', default_value='',
         description='Override map frame ID (empty = auto from use_hardware)')
     use_frame_alignment_arg = DeclareLaunchArgument('use_frame_alignment', default_value='',
@@ -106,6 +113,7 @@ def generate_launch_description():
         use_onboard_localization = convert_str_to_bool(LaunchConfiguration('use_onboard_localization').perform(context))
         depth_camera_name = LaunchConfiguration('depth_camera_name').perform(context)
         robot_type = LaunchConfiguration('robot_type').perform(context)
+        log_level = LaunchConfiguration('log_level').perform(context)
         num_agents = int(LaunchConfiguration('num_agents').perform(context))
         map_frame_id_override = LaunchConfiguration('map_frame_id').perform(context)
         use_frame_alignment_str = LaunchConfiguration('use_frame_alignment').perform(context)
@@ -165,6 +173,13 @@ def generate_launch_description():
         external_selector_str = LaunchConfiguration('external_selector').perform(context)
         if external_selector_str:
             parameters['exploration.external_selector'] = convert_str_to_bool(external_selector_str)
+        # Let the caller turn exploration off for a goal-navigation run.
+        # mighty_ground_robot.yaml ships exploration.enabled:true, so any
+        # ground-robot launch was previously an exploration run no matter what
+        # goal was published — the frontier loop simply retargeted the robot.
+        exploration_enabled_str = LaunchConfiguration('exploration_enabled').perform(context)
+        if exploration_enabled_str:
+            parameters['exploration.enabled'] = convert_str_to_bool(exploration_enabled_str)
         if use_frame_alignment_str:
             parameters['use_frame_alignment'] = convert_str_to_bool(use_frame_alignment_str)
         if sim_frame_offset_qz_str:
@@ -210,7 +225,12 @@ def generate_launch_description():
                     parameters=[parameters],
                     remappings=[('lidar_cloud_in', lidar_point_cloud_topic),
                                 ('depth_camera_cloud_in', f'{depth_camera_name}/depth/color/points')],
-                    arguments=['--ros-args', '--log-level', 'error'],
+                    # Default 'error' keeps the terminal quiet, but it also hides
+                    # the planner's own diagnostics — including the throttled
+                    # "[expl] grid ... fresh=N db=M" line, which is the fastest way
+                    # to tell whether frontier detection is finding anything.
+                    # Raise with log_level:=info when debugging exploration.
+                    arguments=['--ros-args', '--log-level', log_level],
                     # prefix='xterm -e gdb -q -ex run --args', # gdb debugging
         )
 
@@ -394,6 +414,7 @@ def generate_launch_description():
         map_size_z_arg,
         odometry_topic_arg,
         sim_env_arg,
+        log_level_arg,
         config_file_arg,
         use_ground_robot_arg,
         use_onboard_localization_arg,
@@ -401,6 +422,7 @@ def generate_launch_description():
         robot_type_arg,
         num_agents_arg,
         external_selector_arg,
+        exploration_enabled_arg,
         map_frame_id_arg,
         use_frame_alignment_arg,
         sim_frame_offset_qz_arg,

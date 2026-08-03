@@ -227,6 +227,88 @@ TEST(FrontierManagerTest, EvictionPrefersVisitedOverDormant) {
   }
 }
 
+TEST(FrontierManagerTest, RepeatedTimeoutsEscalateToPermanentBlacklist) {
+  // A frontier the robot keeps failing to reach should stop reappearing after
+  // pursuit_timeout_max_strikes timeouts (instead of respawning every cooldown).
+  auto grid = MakeHalfUnknownGrid();
+  FrontierManagerParams p = DefaultParams();
+  p.pursuit_timeout_factor         = 1.0;
+  p.pursuit_timeout_v_ref          = 1.0;
+  p.pursuit_timeout_min_sec        = 1.0;   // budget ~ 1.0 s (dist is < 1 m)
+  p.pursuit_timeout_max_strikes    = 2;     // give up after 2 timeouts
+  p.invalidation_keep_out_radius_m = 0.5;
+  p.invalidation_cooldown_sec      = 1.0;
+  FrontierManager mgr(p);
+
+  const Eigen::Vector3d robot(0.5, 1.0, 0.0);
+  const Eigen::Vector2d robot_xy = robot.head<2>();
+  auto cluster = [] {
+    return std::vector<FrontierCluster>{MakeCluster(0.95, 1.0, 10)};
+  };
+  auto countActive = [&]() {
+    int n = 0;
+    for (const auto& r : mgr.records())
+      if (r.state == FrontierState::ACTIVE) ++n;
+    return n;
+  };
+  auto activeTimeoutCount = [&]() -> int {
+    for (const auto& r : mgr.records())
+      if (r.state == FrontierState::ACTIVE) return r.timeout_count;
+    return -1;
+  };
+
+  // --- Strike 1: insert, select, let the pursuit deadline elapse. ---
+  mgr.update(cluster(), *grid, robot, 1.0);
+  ASSERT_EQ(countActive(), 1);
+  mgr.markSelected(mgr.records()[0].id, robot_xy, 1.0);  // deadline = 2.0
+  mgr.update(cluster(), *grid, robot, 2.5);              // past deadline
+  ASSERT_EQ(countActive(), 0);
+  ASSERT_EQ(mgr.records()[0].state, FrontierState::INVALIDATED);
+  EXPECT_EQ(mgr.records()[0].timeout_count, 1);
+
+  // --- Cooldown elapses -> respawns (retry), carrying the strike forward. ---
+  mgr.update(cluster(), *grid, robot, 4.0);
+  ASSERT_EQ(countActive(), 1);
+  EXPECT_EQ(activeTimeoutCount(), 1) << "strike count must survive respawn";
+
+  // --- Strike 2: select and time out again -> count reaches max_strikes. ---
+  uint64_t id2 = 0;
+  for (const auto& r : mgr.records())
+    if (r.state == FrontierState::ACTIVE) id2 = r.id;
+  mgr.markSelected(id2, robot_xy, 4.0);                  // deadline = 5.0
+  mgr.update(cluster(), *grid, robot, 5.5);
+  ASSERT_EQ(countActive(), 0);
+
+  // --- Cooldown elapses again -> now PERMANENTLY blacklisted, no respawn. ---
+  mgr.update(cluster(), *grid, robot, 7.0);
+  EXPECT_EQ(countActive(), 0)
+      << "frontier reappeared after reaching max strikes";
+}
+
+TEST(FrontierManagerTest, SelectNearestIgnoresSizeAndRetiredRecords) {
+  auto grid = MakeAllFreeGrid();
+  FrontierManager mgr(DefaultParams());
+
+  // Near+small vs far+big. The utility function would prefer the big one;
+  // selectNearest must ignore size and pick the geometrically closest.
+  mgr.update({MakeCluster(0.3, 0.0, 5),      // near, small
+              MakeCluster(1.8, 0.0, 100)},   // far, big
+             *grid, Eigen::Vector3d(0.0, 0.0, 0.0), 1.0);
+  ASSERT_EQ(mgr.size(), 2u);
+
+  auto pick = mgr.selectNearest(Eigen::Vector3d(0.0, 0.0, 0.0));
+  ASSERT_TRUE(pick.has_value());
+  EXPECT_NEAR(pick->centroid_xy.x(), 0.3, 1e-6);  // the near one
+  const uint64_t near_id = pick->id;
+
+  // Retiring the near frontier -> nearest falls back to the far one (VISITED
+  // and INVALIDATED are never selectable).
+  mgr.markVisited(near_id);
+  auto pick2 = mgr.selectNearest(Eigen::Vector3d(0.0, 0.0, 0.0));
+  ASSERT_TRUE(pick2.has_value());
+  EXPECT_NEAR(pick2->centroid_xy.x(), 1.8, 1e-6);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

@@ -10,6 +10,10 @@ If you like this project, please consider starring ⭐ the repo!
 
 <video src="https://github.com/user-attachments/assets/25ebadb2-050c-4762-81df-80c962d652d5" width="100%" autoplay loop muted playsinline controls></video>
 
+**Ground Robot Deployment** — a single Pioneer 3-AT on hardware and in simulation, both autonomously exploring an unknown space and navigating to a commanded goal:
+
+<video src="https://github.com/user-attachments/assets/15bed70e-f922-44c7-9df2-51693ad33bb7" width="100%" autoplay loop muted playsinline controls></video>
+
 | **Trajectory** | **Forest** |
 | ------------------------- | ------------------------- |
 <a target="_blank" href="https://youtu.be/Pvb-VPUdLvg"><img src="./imgs/mighty_gifs_complex_benchmarks.gif" width="360" height="240" alt="Complex Benchmarks"></a> | <a target="_blank" href="https://youtu.be/Pvb-VPUdLvg"><img src="./imgs/mighty_gifs_hard_forest.gif" width="360" height="240" alt="Static Forest"></a> |
@@ -50,6 +54,37 @@ The full video is available at [https://youtu.be/Pvb-VPUdLvg](https://youtu.be/P
 
 ---
 
+## Running the Simulations
+
+Every scenario, and the one command that starts it. Native commands assume the
+workspace is built and run from `~/code/mighty_ws`; Docker commands run from
+`mighty/docker`. See [Installation](#installation) first.
+
+| Scenario | Native | Docker |
+|----------|--------|--------|
+| **Ground robot, autonomous exploration** (Pioneer 3-AT explores `ACL_office` and returns to its start) | `python3 src/mighty/scripts/run_sim.py --mode exploration-singleagent-ground -s ~/code/mighty_ws/install/setup.bash` | `make run-ground-exploration` |
+| Ground robot in a forest world | `python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot -s ~/code/mighty_ws/install/setup.bash` | `make run-ground-robot` |
+| Single UAV, goals clicked in RViz | `python3 src/mighty/scripts/run_sim.py --mode interactive -s ~/code/mighty_ws/install/setup.bash` | `make run-interactive` |
+| Multi-agent UAVs swapping on a circle | `python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/install/setup.bash` | `make run-multiagent` |
+| Single UAV through a Gazebo forest | `python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash` | `make run-gazebo` |
+
+Useful flags (native): `--no-rviz` for headless, `--env <world>` to pick a world,
+`--num-agents N`, `--goal X Y Z`, `--gazebo-gui`, and `--log-level info` to see
+the planner's own diagnostics. `python3 src/mighty/scripts/run_sim.py --help`
+lists them all, and the "All Simulation Options" block under
+[Native Installation](#native-installation-linux) documents each one. Docker
+equivalents are environment variables — `ENV=`, `NUM_AGENTS=`, `GOAL_X/Y/Z=`,
+`NO_RVIZ=true`, `GPU=false`.
+
+> **Ground robot users:** the ground-robot scenarios need the
+> [`mpc`](https://github.com/kotakondo/mpc) path-tracking controller. It is
+> listed in `mighty.repos`, so `setup.sh` and the Docker build fetch it
+> automatically — but if you assembled the workspace by hand and see
+> `PackageNotFoundError: mpc`, that is the missing piece. UAV scenarios do not
+> need it.
+
+---
+
 ## Installation
 
 MIGHTY has been tested on Ubuntu 22.04 with ROS 2 Humble. Four installation methods are available:
@@ -86,6 +121,38 @@ make build
 # Or build without cache (useful when dependencies change)
 make build-no-cache
 ```
+
+`make build` clones MIGHTY at the pinned release tag (`MIGHTY_VERSION` in
+`docker/Dockerfile`) and imports every dependency at the commit pinned in
+`mighty.repos`, so the image is reproducible and independent of your working
+tree. Override the tag with `make build MIGHTY_VERSION=v0.0.7`.
+
+<details>
+  <summary><b>Testing local changes in Docker</b></summary>
+
+  Two mechanisms, and the difference matters:
+
+  | | What it picks up | Cost |
+  |---|---|---|
+  | `DEV=1` on any `run-*` target | Bind-mounts your local `config/`, `launch/`, `rviz/` and `src/` over the image's. **C++ changes are NOT picked up** — the binaries in the image were compiled from the tag. | free |
+  | `make build-local` | Rebuilds the image from your **working tree**, recompiling the mighty package. | minutes |
+
+  ```bash
+  # Iterate on parameters / launch files / RViz configs — no rebuild
+  make run-ground-exploration DEV=1
+
+  # Test uncommitted C++ against the image
+  make build-local
+  make run-ground-exploration
+  ```
+
+  `build-local` reuses every cached dependency layer and recompiles only the
+  mighty package, so it takes minutes rather than the hours a full `make build`
+  needs. It requires a prior `make build` to populate those layers. Note that
+  `mighty.repos` still comes from the pinned tag: if your change needs a *new
+  dependency version*, bump the pin, push a tag, and use
+  `make build MIGHTY_VERSION=<tag>` instead.
+</details>
 
 **4. Run Simulations**
 
@@ -131,7 +198,7 @@ In `run-interactive` mode, send goals from the RViz2 toolbar:
   | `make build-no-cache` | Build without cache (forces fresh build) | - |
   | `make run-interactive` | Run single agent with manual goal (RViz2 2D Goal Pose) | - |
   | `make run-multiagent` | Run multi-agent aerial simulation (agents swap positions on a circle) | `NUM_AGENTS` (default: 10) |
-  | `make run-gazebo` | Run single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z` (default: 305, 0, 3), `ENV` (default: hard_forest) |
+  | `make run-gazebo` | Run single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` — all optional; unset means the same defaults as the native command (hard_forest, goal 305 0 3) |
   | `make run-mac` | Run multi-agent aerial simulation on Mac (Xpra, browser at localhost:8080) | `NUM_AGENTS` (default: 10) |
   | `make run-mac-interactive` | Run single agent on Mac with manual goal (Xpra, browser at localhost:8080) | - |
   | `make run-mac-gazebo` | Run Gazebo on Mac (Xpra) | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
@@ -264,10 +331,28 @@ cd mighty_ws/src/mighty
 This automated script will:
 - Install ROS 2 Humble (if not already installed)
 - Install all system dependencies
+- Install the Python packages the ground-robot controller needs
+  (`casadi`, `do-mpc`) — see the note below
 - Import all repositories from `mighty.repos` at tested commits
 - Build DecompROS2, Livox-SDK2, and livox_ros_driver2
 - Build MIGHTY and all ROS dependencies
 - Configure your `~/.bashrc` for future use
+
+> **If you installed before this note existed**, or you set the workspace up by
+> hand, install the two Python dependencies of the `mpc` ground-robot
+> controller explicitly:
+>
+> ```bash
+> pip install casadi==3.6.7 do-mpc==5.1.1
+> ```
+>
+> They are imported by `mpc_node.py` but not declared in `mpc/package.xml`
+> (which lists only ROS packages), so `rosdep` will not install them and the
+> build still succeeds — `mpc` is pure Python and nothing is compiled. Without
+> them the ground robot simply never moves: `mpc_node` exits immediately with
+> `ModuleNotFoundError`, while every other node starts normally, so the
+> terminal looks healthy. If your robot sits motionless in the exploration sim,
+> check this first.
 
 **Notes:**
 - You'll be prompted for sudo password once at the start
@@ -308,19 +393,40 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/
   <summary><b>All Simulation Options</b></summary>
 
   ```
-  --mode, -m          Required. 'interactive', 'multiagent', or 'gazebo'
+  --mode, -m          Required. One of:
+                        interactive                     single UAV, goals clicked in RViz
+                        multiagent                      N UAVs swapping on a circle (fake_sim)
+                        gazebo                          single UAV (or --ground-robot) in Gazebo
+                        exploration-singleagent-ground  ground robot, autonomous exploration
+                        exploration-multiagent-ground   multiple ground robots, MinPos exploration
+                        multiagent-ground               N ground robots with MPC
+                        swap-multiagent-ground          ground robots swapping positions
+                        dyn-test, dyn-test-ground, dyn-test-ground-mpc
+                                                        dynamic-obstacle test scenarios
   --setup-bash, -s    Required. Path to setup.bash
-  --num-agents, -n    Number of agents for multiagent mode (default: 10)
-  --radius            Circle radius for the multiagent formation (default: 10.0)
-  --goal, -g          Goal position X Y Z for gazebo mode (default: 305 0 3)
+  --num-agents, -n    Number of agents for multiagent modes (default: 10)
+  --radius, -r        Circle radius for the multiagent formation (default: 10.0)
+  --goal, -g          Goal position X Y Z for gazebo mode (default: depends on --env —
+                      305 for hard_forest, 105 for easy_forest/forest, 30 for the
+                      small worlds; z drops to 0 for --ground-robot)
   --start, -p         Start position X Y Z for gazebo mode (default: 0 0 3)
   --start-yaw         Start yaw in radians (default: 1.57)
   --env, -e           Gazebo environment (default: hard_forest)
-  --ros-domain-id     ROS_DOMAIN_ID (default: 20)
-  --no-rviz           Disable RViz
+  --ros-domain-id     ROS_DOMAIN_ID (default: 30)
+  --ground-robot      Use the Pioneer 3-AT ground robot instead of the UAV
+  --no-rviz           Disable RViz (headless; required for unattended runs)
   --gazebo-gui        Enable Gazebo GUI
+  --no-goal           Do not auto-publish a terminal goal
+  --use-vlm           Use the VLM frontier selector (exploration-singleagent-ground only)
+  --follow            Also spawn the YOLOv8 person tracker (needs --use-vlm)
   --dry-run           Print generated YAML without launching
+  --emit-yaml PATH    Write the generated YAML to PATH and exit (used by the test harness)
   ```
+
+  > The goal default is chosen from the world's actual extent, so the agent
+  > crosses it rather than stopping partway. `hard_forest` runs to x=301.6
+  > (hence 305, matching the Docker entrypoint), while `easy_forest` ends at
+  > x=100. Pass `--goal X Y Z` to override.
 </details>
 
 ---
@@ -405,9 +511,276 @@ Use RViz2's **"2D Goal Pose"** tool to send goals and confirm the planner is run
 
 ---
 
+## Ground Robot Simulation (Single Agent)
+
+Besides the aerial vehicle, MIGHTY drives a single wheeled ground robot (Pioneer
+3-AT) in Gazebo. Two single-agent ground-robot scenarios are available:
+
+| Scenario | What it does | Goal |
+|----------|--------------|------|
+| **Autonomous exploration** | Robot explores an unknown `ACL_office` map on its own using frontier detection. | None — self-driven |
+| **Forest navigation** | Robot drives through a forest world (e.g. `easy_forest`). | Frontier exploration by default; a fixed goal after a one-line config change (see note) |
+
+> **Exploring vs. driving to a goal.** The two ground-robot scenarios differ
+> only in who picks the goal:
+>
+> - `--mode exploration-singleagent-ground` / `make run-ground-exploration` —
+>   the frontier loop drives, no goal needed.
+> - `--mode gazebo --ground-robot` / `make run-ground-robot` — crosses the world
+>   to the `--goal` / `GOAL_*` you give it, exactly like the UAV Gazebo
+>   scenario. Exploration is switched off at launch
+>   (`exploration_enabled:=false`), so it is honoured even though
+>   `config/mighty_ground_robot.yaml` enables exploration.
+>
+> Both accept `--env` / `ENV`, so either behaviour is available in either world.
+> The goal's z is forced to 0 for a ground robot when left at the UAV default.
+
+### What a healthy exploration run looks like
+
+The robot spawns at `(0, 2)` in `ACL_office`, explores until no reachable
+frontiers remain, then drives back to its spawn point and parks.
+
+| Stage | What you should see |
+|-------|---------------------|
+| ~10–30 s after launch | `Exploration start captured at (0, 2, 0)` in the planner pane; the robot starts moving |
+| While exploring | Grey/blue frontier spheres with `id=N` labels, a yellow `Exploration Area` rectangle, and a yellow line from the robot to its current target |
+| Finish | `No frontiers left. Robot now at (...). Returning to captured start (0, 2, 0)` followed by `MPC: goal reached` |
+
+A full run maps ~99% of the exploration bounds (~1000 m² of free space). Expect
+**9–20 minutes** — the robot uses greedy nearest-frontier selection, so it
+sometimes finishes a dead end and drives all the way back across the map. That
+is inefficient but normal, not a stall.
+
+### Troubleshooting
+
+**The robot never moves and `mpc_node` is missing from the node list.** Check
+the launch terminal for:
+
+```
+[mpc_node-5] ModuleNotFoundError: No module named 'casadi'
+[ERROR] [mpc_node-5]: process has died [exit code 1]
+```
+
+The `mpc` controller imports `casadi` and `do_mpc`, which are not declared in
+its `package.xml`, so neither `rosdep` nor the build installs them. Everything
+else starts cleanly, so the only symptom is a stationary robot. Fix with:
+
+```bash
+pip install casadi==3.6.7 do-mpc==5.1.1
+```
+
+`setup.sh` and the Docker image now install these automatically; this affects
+workspaces created before that change.
+
+**No frontier markers appear and the robot never moves.** The frontier detector
+flood-fills outward from the robot over *known-free* cells. Sensors have a
+near-field blind zone, so the mapper's small cleared cylinder around the robot
+can be ringed by UNKNOWN and disconnected from everything the robot can see —
+the flood fill then finds a single "frontier" on top of the robot, the dwell
+check retires it within a second, and exploration ends before it starts.
+`exploration.detector.unknown_bridge_cells` (default `4` for the ground robot)
+lets the search step across that many UNKNOWN cells. Raise it if your sensor's
+blind zone is wider; OCCUPIED cells always block, so it never bridges walls.
+
+**The robot explores but never returns home.** Return-home is triggered by
+frontier exhaustion. If `exploration.bounds.*` is larger than the reachable
+space, unreachable frontiers keep it exploring — shrink the bounds to the area
+you actually want covered.
+
+**Seeing the planner's diagnostics.** `onboard_mighty.launch.py` runs
+`mighty_node` at `--log-level error` by default, which keeps the terminal quiet
+but also hides the planner's own INFO output. The most useful line for anything
+frontier-related is throttled to 1 Hz and looks like:
+
+```
+[expl] grid 133x133  free=6521  occ=209  unknown=10959  fresh=12  db=27
+```
+
+`fresh` is how many frontier clusters the detector just found and `db` is how
+many the persistent manager is tracking — `fresh=0 db=0` means detection is
+finding nothing, which is a different problem from selection or navigation.
+Enable it with:
+
+```bash
+ros2 launch mighty onboard_mighty.launch.py log_level:=info ...
+```
+
+Note that `std::cout` output (`No frontiers left`, `Changing DroneStatus`) is
+never suppressed, so its presence does not tell you the log level is high enough.
+
+### Docker (Linux)
+
+```bash
+cd mighty/docker
+
+# Autonomous frontier exploration (ACL_office world)
+make run-ground-exploration
+
+# Ground robot in a forest world (explores by default; see note above for goal nav)
+make run-ground-robot
+
+# Forest navigation with a fixed goal
+make run-ground-robot GOAL_X=90 GOAL_Y=0 GOAL_Z=0 ENV=easy_forest
+```
+
+> If you hit GPU errors, append `GPU=false` (see the Docker section above).
+
+### Docker (Mac)
+
+Uses Xpra — after launching, open **http://localhost:8080** in your browser.
+
+```bash
+cd mighty/docker
+
+make run-mac-ground-exploration      # autonomous exploration
+make run-mac-ground-robot            # forest world
+```
+
+### Native (Linux)
+
+```bash
+cd ~/code/mighty_ws
+
+# Autonomous frontier exploration (ACL_office world)
+python3 src/mighty/scripts/run_sim.py --mode exploration-singleagent-ground \
+  -s ~/code/mighty_ws/install/setup.bash
+
+# Ground robot in a forest world (explores by default; see note above for goal nav)
+python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot \
+  -s ~/code/mighty_ws/install/setup.bash
+
+# Forest navigation with a fixed goal
+python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot \
+  --env easy_forest --goal 30 0 0 -s ~/code/mighty_ws/install/setup.bash
+```
+
+<details>
+  <summary><b>Ground Robot Make Targets Reference</b></summary>
+
+  | Target | Description | Options |
+  |--------|-------------|---------|
+  | `make run-ground-exploration` | Single ground robot, autonomous frontier exploration (ACL_office) | `ENV` (default: ACL_office) |
+  | `make run-ground-robot` | Single ground robot crossing a forest world to a fixed goal | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` — all optional; unset means the same defaults as the native command (hard_forest, goal 305 0 0) |
+  | `make run-mac-ground-exploration` | Autonomous exploration on Mac (Xpra, browser at localhost:8080) | `ENV` (default: ACL_office) |
+  | `make run-mac-ground-robot` | Forest world on Mac (Xpra, browser at localhost:8080) | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
+
+</details>
+
+---
+
+## Known Issues
+
+Measured with `scripts/exploration_test.py` (see below). Listed so you know what
+you're looking at rather than discovering it mid-demo.
+
+**The ground robot occasionally brushes a wall.** Contacts occurred in 8 of 15
+exploration runs (two campaigns of 10 and 5). The robot always recovered and
+completed the mission — 15/15 reached full coverage and returned home — so this
+costs appearance, not success.
+
+It is not uniformly distributed. Taking each run's closest approach to an
+obstacle as the proxy for where it happened, they cluster at two spots in
+`ACL_office`:
+
+| Closest-approach point | Runs |
+|------------------------|------|
+| ~(12.6, −11.4)         | 4    |
+| ~(2.6, −11.6)          | 4    |
+| ~(−4.2, −23.1)         | 1    |
+| ~(1.7, −21.3)          | 1    |
+
+Note that which corner dominates shifts between campaigns — the first campaign
+after the cornering fix hit (12.6, −11.4) repeatedly and never touched (2.6,
+−11.6), while the next campaign did the opposite. Treat the specific
+coordinates as "the tight corners of this map", not as a fixed list.
+
+The cause is a speed/accuracy trade rather than a clearance one. A
+differential-drive robot's tightest arc while moving is `v_max / w_max` (see
+`mpc_sim.yaml`); at those two corners the achievable arc plus path-tracking error
+still doesn't quite fit. Widening the planner's clearance does **not** help — we
+measured that directly: raising the safe-corridor inflation from 0.30 m to 0.45 m
+left contacts unchanged while dropping coverage from 0.991 to 0.948 and causing
+the robot to stop returning home. Lowering `v_max` further would trade run time
+for accuracy everywhere to fix two corners, which didn't seem worth it for a demo.
+
+**Multi-agent UAVs pass closer than their own bounding box.** In the antipodal
+swap scenario the closest approach between two agents was 0.451 m with 5 agents
+and 0.329 m with 10, against `drone_bbox: [0.5, 0.5, 0.5]` — two 0.5 m boxes
+overlap below 0.5 m centre-to-centre. `fake_sim` has no collision physics so
+nothing visibly goes wrong, but the margin is real and would matter on hardware,
+where that 0.5 m figure is documented as already including prop guards.
+
+The obvious knob is not the cause: raising `dyn_base_inflation_m` from 0.2 to 0.4
+moved the mean closest approach from 0.394 m to 0.393 m over two runs each at 5
+and 10 agents (10 agents improved, 5 agents got worse — i.e. noise), so it was
+reverted. Whatever bounds inter-agent spacing lives in the local trajectory
+optimisation rather than in the dynamic-obstacle inflation, and chasing it was
+out of scope here. Everything else about the scenario is healthy: all agents
+launch, each completes 20–21 crossings in 8 minutes, altitude holds, nothing
+crashes.
+
+**`spawn_entity` can fail at startup.** Occasionally the robot is never spawned
+into Gazebo ("Spawn service failed. Exiting."), so there is no sensor data — yet
+the run still looks successful, because `fake_sim` integrates the commanded
+trajectory whether or not anything is perceiving. If a Gazebo run reaches its
+goal implausibly smoothly, check the launch log for that message.
+
+**`Default goal z is lower than the ground level`** is logged at ERROR severity
+on healthy `--mode interactive` runs. It is one of the few messages loud enough
+to survive the default `--log-level error`, so it is usually the first thing a
+new user sees; it does not appear to affect the flight.
+
+## Automated Simulation Tests
+
+`scripts/exploration_test.py` runs a scenario headless, watches it over the ROS
+graph, and judges it against explicit gates. It exists because these are
+stochastic, minutes-long, closed-loop simulations: a single successful run
+proves very little, so the interesting question is how often a scenario succeeds.
+
+```bash
+source ~/code/mighty_ws/install/setup.bash    # required: monitors dynus_interfaces topics
+
+# What can be tested
+python3 src/mighty/scripts/exploration_test.py scenarios
+
+# One run
+python3 src/mighty/scripts/exploration_test.py run --scenario ground-exploration
+
+# Ten runs, with a summary table
+python3 src/mighty/scripts/exploration_test.py campaign \
+    --scenario ground-exploration --runs 10 --out /tmp/campaign
+```
+
+Each run writes `run<NN>.json` (metrics, per-gate verdicts, and position/goal
+traces for offline reconstruction) plus complete per-pane logs; a campaign also
+writes `summary.md` and `summary.json`.
+
+**A run can never hang.** Three independent stoppers bound every run: a per-run
+wall-clock cap enforced by the harness (not by the simulation behaving itself),
+early abort the moment a stall is detected, and a campaign-wide deadline after
+which remaining runs are reported as *not run* rather than assumed passing.
+
+Stalls are classified rather than lumped together, because the fix differs:
+
+| Class | Meaning |
+|-------|---------|
+| `STUCK_NO_PROGRESS` | Not translating at all while a goal is active — wedged or motors stalled |
+| `STUCK_NO_COVERAGE` | Learned nothing new for four minutes and hasn't met the coverage gate |
+| `STUCK_OSCILLATING` | Same, but the evidence shows repeated retargeting and lots of driving with no net progress |
+| `TIMEOUT` | Hit the wall-clock cap with no terminal state |
+
+Stall detection is deliberately tuned to be *specific* rather than sensitive: a
+false alarm sends you chasing a phantom bug, while a slow catch costs at most one
+wall-clock cap. In particular, greedy nearest-frontier exploration legitimately
+makes long round trips, so motion alone is never treated as evidence of a stall.
+
+---
+
 ## Acknowledgments
 
 The L-BFGS solver implementation in this repository (`src/mighty/lbfgs_solver.cpp`, `include/mighty/lbfgs_solver.hpp`) is adapted from [ZJU-FAST-Lab/GCOPTER](https://github.com/ZJU-FAST-Lab/GCOPTER/blob/main/gcopter/include/gcopter/lbfgs.hpp). We thank the authors for making their implementation publicly available.
+
+The ground robot's MPC path-tracking controller ([kotakondo/mpc](https://github.com/kotakondo/mpc), pulled in via `mighty.repos`) was originally developed by **[Lucas Jia (@lucas-yyy000)](https://github.com/lucas-yyy000)**. The ground-robot simulation depends on it.
 
 ---
 

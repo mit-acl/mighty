@@ -84,18 +84,34 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
       // skipped INVALIDATED so we wouldn't revive a bad record; without this
       // check we'd just spawn a brand-new ACTIVE ghost in the same place and
       // the agent would re-pursue the goal it just gave up on.
+      //
+      // Two suppression regimes per nearby tombstone:
+      //   * permanent — once its timeout_count has reached max_strikes, the
+      //     frontier has been retried enough; never respawn it again.
+      //   * temporary — otherwise honor the cooldown window, then allow a
+      //     respawn but CARRY the strike count forward so repeated timeouts
+      //     eventually escalate to the permanent regime above.
+      int carry_strikes = 0;
       if (params_.invalidation_keep_out_radius_m > 0.0) {
         bool suppressed = false;
         const double r2 = params_.invalidation_keep_out_radius_m
                         * params_.invalidation_keep_out_radius_m;
         for (const auto& rec : records_) {
           if (rec.state != FrontierState::INVALIDATED) continue;
-          if (params_.invalidation_cooldown_sec > 0.0) {
-            if (rec.invalidated_at_t < 0.0) continue;
-            if (t_now - rec.invalidated_at_t
-                > params_.invalidation_cooldown_sec) continue;
+          if ((c.centroid - rec.centroid_xy).squaredNorm() >= r2) continue;
+          // Worst strike count among nearby tombstones carries onto the respawn.
+          carry_strikes = std::max(carry_strikes, rec.timeout_count);
+          // Permanent keep-out: retried too many times, give up for good.
+          if (params_.pursuit_timeout_max_strikes > 0 &&
+              rec.timeout_count >= params_.pursuit_timeout_max_strikes) {
+            suppressed = true;
+            break;
           }
-          if ((c.centroid - rec.centroid_xy).squaredNorm() < r2) {
+          // Temporary keep-out: honor the cooldown (<= 0 means permanent).
+          if (params_.invalidation_cooldown_sec <= 0.0 ||
+              (rec.invalidated_at_t >= 0.0 &&
+               t_now - rec.invalidated_at_t
+                   <= params_.invalidation_cooldown_sec)) {
             suppressed = true;
             break;
           }
@@ -111,6 +127,7 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
       r.first_seen_t = t_now;
       r.last_seen_t  = t_now;
       r.state        = FrontierState::ACTIVE;
+      r.timeout_count = carry_strikes;  // persist strikes across respawn
       records_.push_back(r);
       // The new record is implicitly "matched" — don't classify it as
       // unmatched-in-window in step d. Mark its slot as matched.
@@ -227,6 +244,7 @@ void FrontierManager::update(const std::vector<FrontierCluster>& fresh,
       if (t_now >= r.pursuit_deadline_t) {
         r.state = FrontierState::INVALIDATED;
         r.invalidated_at_t = t_now;
+        ++r.timeout_count;  // strike: enough of these -> permanent keep-out
         r.pursuit_deadline_t = -1.0;
         r.pursuit_budget_sec = 0.0;
       }
@@ -380,6 +398,30 @@ std::optional<FrontierRecord> FrontierManager::selectNextGoalMinPos(
   return std::nullopt;
 }
 
+std::optional<FrontierRecord> FrontierManager::selectNearest(
+    const Eigen::Vector3d& robot_pose) const {
+  const Eigen::Vector2d robot_xy = robot_pose.head<2>();
+  double best_d = std::numeric_limits<double>::infinity();
+  int best_idx = -1;
+  // Global nearest across ALL selectable frontiers — no ACTIVE-before-DORMANT
+  // tiering, so a nearer DORMANT frontier is never passed over for a farther
+  // ACTIVE one. VISITED/INVALIDATED are skipped.
+  for (size_t i = 0; i < records_.size(); ++i) {
+    const auto& r = records_[i];
+    if (r.state != FrontierState::ACTIVE &&
+        r.state != FrontierState::DORMANT) continue;
+    const double d = (robot_xy - r.centroid_xy).norm();
+    if (d < best_d) {
+      best_d = d;
+      best_idx = static_cast<int>(i);
+    }
+  }
+  if (best_idx < 0) return std::nullopt;
+  FrontierRecord r = records_[best_idx];
+  r.cached_utility = -best_d;  // negative distance, so "higher = better" holds
+  return r;
+}
+
 void FrontierManager::markVisited(uint64_t id) {
   for (auto& r : records_) {
     if (r.id == id) {
@@ -397,6 +439,13 @@ void FrontierManager::markInvalidated(uint64_t id, double t_now) {
     if (r.id == id) {
       r.state = FrontierState::INVALIDATED;
       r.invalidated_at_t = t_now;
+      // Count this as a strike. Repeated invalidations (HGP-unreachable, ESDF-
+      // too-close) at the same location escalate to a PERMANENT keep-out once
+      // timeout_count reaches pursuit_timeout_max_strikes — see update()'s
+      // keep-out scan. Without this, an unreachable frontier cycles forever
+      // (INVALIDATED -> cooldown expiry -> respawn ACTIVE -> fail -> ...),
+      // never letting exploration settle to zero frontiers.
+      ++r.timeout_count;
       r.pursuit_deadline_t = -1.0;
       r.pursuit_budget_sec = 0.0;
       return;

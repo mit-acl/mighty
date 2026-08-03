@@ -121,7 +121,7 @@ mighty_node:
         heat_alpha0: 0.5                                # [-] Weight for reachability blob
         heat_alpha1: 2.0                                # [-] Weight for trajectory tube
         heat_Hmax: 3.0                                  # [-] Maximum dynamic heat value
-        dyn_base_inflation_m: 0.2                       # [m] Base inflation for dynamic obstacle bboxes
+        dyn_base_inflation_m: 0.2                       # [m] Base inflation for dynamic obstacle bboxes. NOTE: this does not govern inter-agent separation — raising it to 0.4 was measured over 2 runs each at 5 and 10 agents and moved the mean closest approach 0.394 -> 0.393 m (10 agents improved, 5 agents worsened, i.e. run-to-run noise). See the multi-agent separation entry in README Known Issues.
         dyn_heat_tube_radius_m: 1.0                     # [m] Heat corridor radius
 
         # --- Static Obstacle Heat (boundary halo) ---
@@ -223,8 +223,6 @@ mighty_node:
         delta: 1.0e-6                                   # [-] Function improvement convergence threshold
 
         # --- Dynamic Obstacle Internals ---
-        dynamic_obstacle_base_inflation: 0.5            # [m] Inflation for dynamic obstacles
-        max_dynamic_obstacle_inflation: 1.0             # [m] Max inflation for dynamic obstacles
         freq_dynamic_obstacle_update_to_tmap: 10.0      # [Hz] Dynamic obstacle update frequency
 
         # --- K-Value Adaptation ---

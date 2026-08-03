@@ -31,6 +31,19 @@ struct FrontierDetectorParams {
                                         // Filters noisy frontiers hugging walls.
   double robot_snap_radius_m     = 1.0; // spiral search if robot is not on FREE
 
+  // Max run of consecutive UNKNOWN cells the reachability BFS may step through
+  // to treat two known-free regions as connected (0 = strictly free-only, the
+  // textbook WFD behavior). Sensors have a near-field blind zone: the mapper
+  // clears a small cylinder around the robot, but the first ray-cleared cells
+  // sit farther out, so the robot's own free pocket is ringed by UNKNOWN and
+  // is not 8-connected to anything it can see. A free-only BFS then reaches
+  // only that pocket, the sole cluster it finds is centred on the robot, the
+  // dwell check retires it as VISITED within a second, and exploration
+  // deadlocks before the robot ever moves. Bridging a couple of cells closes
+  // that seam. OCCUPIED cells always block, so this never leaks through walls,
+  // and bridged UNKNOWN cells are never tagged as frontier seeds themselves.
+  int    unknown_bridge_cells    = 0;
+
   // Optional axis-aligned bounding box that confines exploration. When
   // bounds_enabled is true, frontier seeds outside [min_x,max_x]×[min_y,max_y]
   // are dropped, so the robot never receives exploration goals outside the
@@ -73,8 +86,31 @@ class FrontierDetector {
       const Eigen::Vector2d& robot_xy,
       const VisitedMap* visited_map = nullptr) const;
 
+  /** @brief Re-validate a persistent frontier record against the current grid.
+   *  Returns true iff `world_xy` lies on — or within `search_radius_cells` of —
+   *  a connected frontier-cell component of at least `min_cells` cells, using
+   *  the SAME per-cell definition as detect(). The search radius absorbs the
+   *  EMA drift of a record's centroid so a frontier that merely shifted a little
+   *  is not falsely retired.
+   *
+   *  Lets the frontier manager retire records whose unknown area has since been
+   *  explored (or shrank below the detection threshold, or is a permanently
+   *  occluded speck) so they stop lingering as phantom frontiers on known cells.
+   *  Walk early-exits once `min_cells` is reached, so cost is O(min_cells).
+   */
+  bool isStillFrontier(const OccGrid2D& grid, const Eigen::Vector2d& world_xy,
+                       int min_cells, int search_radius_cells,
+                       const VisitedMap* visited_map = nullptr) const;
+
   const FrontierDetectorParams& params() const { return params_; }
 
  private:
+  // Shared per-cell frontier predicate: a known-FREE cell (off the border ring)
+  // with at least one in-bounds, not-yet-visited UNKNOWN neighbor, that is not
+  // hugging an obstacle and lies inside the optional exploration bounds. Single
+  // source of truth for both detect() seed-tagging and isStillFrontier().
+  bool isFrontierCell(const OccGrid2D& grid, int cx, int cy,
+                      const VisitedMap* visited_map) const;
+
   FrontierDetectorParams params_;
 };

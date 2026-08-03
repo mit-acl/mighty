@@ -86,9 +86,13 @@ def find_workspace_root() -> Path:
 
 def exploration_enabled_in_yaml(config_path: Path) -> bool:
     """Return True if `exploration.enabled: true` appears in the given YAML.
-    Tolerant to the dotted-key form used by ROS 2 parameter files. Used to
-    auto-skip goal_sender when frontier-based exploration would drive the
-    robot itself.
+
+    Tolerant to the dotted-key form used by ROS 2 parameter files. No longer
+    used by gazebo mode — that used to consult the config and silently drop the
+    goal_sender when exploration was on, which made `--mode gazebo
+    --ground-robot` an exploration run that ignored --goal. Gazebo mode now
+    turns exploration off at launch instead. Kept because it is the only
+    reader of the dotted-key form and is useful for the same check elsewhere.
     """
     if not config_path.exists():
         return False
@@ -105,6 +109,30 @@ def exploration_enabled_in_yaml(config_path: Path) -> bool:
     except OSError:
         pass
     return False
+
+
+# Default goal x per world, measured from the <pose> extents of each
+# worlds/*.world file. A fixed default cannot work: hard_forest runs to x=301.6
+# while easy_forest ends at x=100, so the old flat 105 stopped a third of the way
+# into hard_forest (the Docker path already used 305 for exactly this reason)
+# and anything near 305 would be outside easy_forest entirely.
+#
+# Values sit a few metres past the last obstacle, so the agent crosses the whole
+# world and finishes in free space.
+GOAL_X_BY_WORLD = {
+    'hard_forest': 305.0,   # obstacles to x=301.6
+    'easy_forest': 105.0,   # obstacles to x=100.0
+    'forest':      105.0,   # obstacles to x=97.1
+    'big_forest':   30.0,   # obstacles to x=24.9
+    'ACL_office':   30.0,   # obstacles to x=25.2
+}
+DEFAULT_GOAL_X = 105.0      # unknown world: keep the historical default
+
+
+def default_goal_for_env(env: str, ground_robot: bool) -> list:
+    """Goal that crosses `env`, at an altitude the vehicle can actually reach."""
+    return [GOAL_X_BY_WORLD.get(env, DEFAULT_GOAL_X), 0.0,
+            0.0 if ground_robot else 3.0]
 
 
 def find_rviz_config(name: str = 'mighty.rviz') -> Path:
@@ -136,7 +164,7 @@ def generate_multiagent_positions(num_agents: int, radius: float = 10.0, z: floa
     return agents
 
 
-def generate_multiagent_yaml(setup_bash: Path, agents: list, sim_env: str, ros_domain_id: int = 20, radius: float = 10.0, no_goal: bool = False, rviz_config: Path = None, use_ground_robot: bool = False, agent_prefix: str = 'NX', config_file: Path = None) -> str:
+def generate_multiagent_yaml(setup_bash: Path, agents: list, sim_env: str, ros_domain_id: int = 30, radius: float = 10.0, no_goal: bool = False, rviz_config: Path = None, use_ground_robot: bool = False, agent_prefix: str = 'NX', config_file: Path = None, use_rviz: bool = True) -> str:
     """Generate YAML for multi-agent fake simulation."""
     panes = []
 
@@ -144,6 +172,8 @@ def generate_multiagent_yaml(setup_bash: Path, agents: list, sim_env: str, ros_d
     sim_cmd = 'ros2 launch mighty simulator.launch.py'
     if rviz_config:
         sim_cmd += f' rviz_config:={rviz_config}'
+    if not use_rviz:
+        sim_cmd += ' use_rviz:=false'
     panes.append({
         'shell_command': [sim_cmd]
     })
@@ -192,11 +222,15 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRA
     return yaml.dump(yaml_content, default_flow_style=False, sort_keys=False)
 
 
-def generate_interactive_yaml(setup_bash: Path, ros_domain_id: int = 20, rviz_config: Path = None) -> str:
+def generate_interactive_yaml(setup_bash: Path, ros_domain_id: int = 30, rviz_config: Path = None, use_rviz: bool = True) -> str:
     """Generate YAML for single-agent interactive simulation (click goals in RViz)."""
     sim_cmd = 'ros2 launch mighty simulator.launch.py'
     if rviz_config:
         sim_cmd += f' rviz_config:={rviz_config}'
+    if not use_rviz:
+        # Headless: goals must then be published straight to /NX01/term_goal
+        # (or /goal_pose via scripts/repub_rviz_2Dgoal.py) instead of clicked.
+        sim_cmd += ' use_rviz:=false'
     panes = [
         # Base station (random forest map + RViz)
         {
@@ -234,7 +268,7 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRA
 
 
 def generate_multiagent_ground_yaml(setup_bash: Path, agents: list, radius: float,
-                                    ros_domain_id: int = 20) -> str:
+                                    ros_domain_id: int = 30) -> str:
     """Generate YAML for multi-agent ground robot simulation in Gazebo with MPC."""
     panes = []
 
@@ -311,10 +345,11 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRA
 
 
 def generate_exploration_multiagent_ground_yaml(
-        setup_bash: Path, agents: list, ros_domain_id: int = 20,
+        setup_bash: Path, agents: list, ros_domain_id: int = 30,
         rviz_config: Path = None, sim_env: str = 'fake_sim',
         env: str = 'ACL_office', use_vlm: bool = False,
-        use_follow: bool = False) -> str:
+        use_follow: bool = False, use_rviz: bool = True,
+        log_level: str = 'error') -> str:
     """Generate YAML for multi-agent ground robot exploration.
 
     Each agent runs:  onboard_mighty (ground robot, exploration enabled)
@@ -322,9 +357,31 @@ def generate_exploration_multiagent_ground_yaml(
                     + convert_odom_to_state (Gazebo only)
     No goal monitor — frontier-based exploration is self-driven.
     MinPos + visited-map sharing coordinate the agents.
+
+    use_rviz=False runs fully headless (no RViz, Gazebo GUI already off), which
+    is what the automated campaign in scripts/exploration_test.py uses: RViz on
+    a shared display contends for the GPU and makes long unattended runs lag.
     """
     panes = []
     use_gazebo = (sim_env == 'gazebo')
+
+    # NOTE — a Gazebo readiness gate was tried here and reverted.
+    #
+    # The idea was to replace the fixed `sleep 12` before onboard_mighty (which
+    # spawns the robot) with a wait for the world to finish loading, to close
+    # the spawn race that shows up as
+    #     SetEntityState: entity [NX01] does not exist
+    # and as the intermittent UAV hard-forest clean_logs failure.
+    #
+    # It was reverted because it is not needed and not validated. The Docker
+    # ground robot's empty map turned out to be a linker problem, not a spawn
+    # race (see docker/Dockerfile's ld.so.conf.d/livox.conf step), and 2 native
+    # runs with the gate gave 1 DONE / 1 STUCK_NO_PROGRESS against a 10/10 DONE
+    # baseline without it. That is n=2, so it is not proof of harm — but the
+    # gate perturbs exactly the startup timing the 10-run campaign validated,
+    # and buying an unvalidated change into a release to fix a documented
+    # intermittent flake is the wrong trade. Worth revisiting with its own
+    # campaign.
 
     # Base station
     if use_gazebo:
@@ -332,13 +389,16 @@ def generate_exploration_multiagent_ground_yaml(
             'shell_command': [
                 'source /usr/share/gazebo/setup.bash',
                 f'ros2 launch mighty base_mighty.launch.py '
-                f'use_gazebo_gui:=false use_rviz:=true env:={env} use_ground_robot:=true'
+                f'use_gazebo_gui:=false use_rviz:={str(use_rviz).lower()} '
+                f'env:={env} use_ground_robot:=true'
             ]
         })
     else:
         sim_cmd = 'ros2 launch mighty simulator.launch.py'
         if rviz_config:
             sim_cmd += f' rviz_config:={rviz_config}'
+        if not use_rviz:
+            sim_cmd += ' use_rviz:=false'
         panes.append({
             'shell_command': [sim_cmd]
         })
@@ -383,7 +443,8 @@ def generate_exploration_multiagent_ground_yaml(
                 f"ros2 launch mighty onboard_mighty.launch.py namespace:={ns} "
                 f"x:={agent['x']} y:={agent['y']} z:={agent['z']} yaw:={agent['yaw']} "
                 f"sim_env:={sim_env} use_ground_robot:=true "
-                f"num_agents:={len(agents)}{external_selector_arg}"
+                f"num_agents:={len(agents)}{external_selector_arg} "
+                f"log_level:={log_level}"
             ]
         })
 
@@ -429,7 +490,7 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRA
 
 def generate_swap_multiagent_ground_yaml(
         setup_bash: Path, agents: list, radius: float, angle_offset: float,
-        ros_domain_id: int = 20, env: str = 'ACL_office') -> str:
+        ros_domain_id: int = 30, env: str = 'ACL_office') -> str:
     """Generate YAML for multi-agent ground robot position swapping in Gazebo.
 
     Each agent swaps with its diametrically opposite peer on a circle.
@@ -681,8 +742,15 @@ def generate_gazebo_yaml(setup_bash: Path, goal: tuple, sim_env: str,
                          start_pos: tuple = (0, 0, 3.0), start_yaw: float = 1.57,
                          ros_domain_id: int = 7, use_rviz: bool = True,
                          use_gazebo_gui: bool = False, use_ground_robot: bool = False,
-                         no_goal: bool = False) -> str:
-    """Generate YAML for single-agent Gazebo simulation."""
+                         no_goal: bool = False, exploration_enabled: bool = None) -> str:
+    """Generate YAML for single-agent Gazebo simulation.
+
+    exploration_enabled=False is what makes this mode mean "drive to the goal"
+    for a ground robot. mighty_ground_robot.yaml enables exploration, so without
+    the override the frontier loop takes over and the published goal is ignored
+    — the robot wanders the world instead of crossing it. None leaves the config
+    value alone (UAVs, whose config has exploration off).
+    """
     goal_x, goal_y, goal_z = goal
     start_x, start_y, start_z = start_pos
 
@@ -719,16 +787,25 @@ def generate_gazebo_yaml(setup_bash: Path, goal: tuple, sim_env: str,
                 'sleep 3',
                 f'ros2 launch mighty onboard_mighty.launch.py x:={start_x} y:={start_y} z:={start_z} yaw:={start_yaw} '
                 f'sim_env:={sim_env} use_ground_robot:={str(use_ground_robot).lower()}'
+                + ('' if exploration_enabled is None
+                   else f' exploration_enabled:={str(exploration_enabled).lower()}')
             ]
         },
     ]
 
     if not no_goal:
-        # Goal sender
+        # Goal sender.
+        #
+        # goal_sender.launch.py reads default_goal_z from config/mighty.yaml —
+        # the UAV config — no matter what vehicle is running, and applies it
+        # over the z in list_goals. A ground robot therefore got a goal 1 m in
+        # the air. Pass the ground-level z explicitly; it is already a declared
+        # launch argument.
+        goal_z_arg = (f' default_goal_z:={goal_z}' if use_ground_robot else '')
         panes.append({
             'shell_command': [
                 'sleep 20',
-                f"ros2 launch mighty goal_sender.launch.py list_agents:=\"['NX01']\" list_goals:=\"['[{goal_x}, {goal_y}, {goal_z}]']\""
+                f"ros2 launch mighty goal_sender.launch.py list_agents:=\"['NX01']\" list_goals:=\"['[{goal_x}, {goal_y}, {goal_z}]']\"{goal_z_arg}"
             ]
         })
 
@@ -780,8 +857,10 @@ def main():
         type=float,
         nargs=3,
         metavar=('X', 'Y', 'Z'),
-        default=[105.0, 0.0, 3.0],
-        help='Goal position for gazebo mode (default: 105.0 0.0 3.0)'
+        default=None,
+        help='Goal position for gazebo mode. Default depends on --env, so the '
+             'goal is on the far side of the world being used: 305 for '
+             'hard_forest, 105 for easy_forest/forest, 20 for the small worlds'
     )
 
     parser.add_argument(
@@ -824,8 +903,8 @@ def main():
     parser.add_argument(
         '--ros-domain-id',
         type=int,
-        default=20,
-        help='ROS_DOMAIN_ID (default: 20)'
+        default=30,
+        help='ROS_DOMAIN_ID (default: 30)'
     )
 
     parser.add_argument(
@@ -866,6 +945,24 @@ def main():
     )
 
     parser.add_argument(
+        '--log-level',
+        default='error',
+        choices=['debug', 'info', 'warn', 'error', 'fatal'],
+        help="mighty_node ROS log level (default: error). Use 'info' to see the "
+             "planner's own diagnostics, notably the throttled '[expl] grid ... "
+             "fresh=N db=N' frontier counters and each 'Exploration: -> frontier' "
+             "selection, which are invisible at the default level."
+    )
+
+    parser.add_argument(
+        '--emit-yaml',
+        metavar='PATH',
+        default=None,
+        help='Write the generated tmuxp YAML to PATH and exit without launching '
+             '(machine-readable --dry-run; used by scripts/exploration_test.py)'
+    )
+
+    parser.add_argument(
         '--use-vlm',
         action='store_true',
         help='Use the VLM frontier selector (vlm_goal_selector). Only valid with exploration-singleagent-ground.'
@@ -903,7 +1000,9 @@ def main():
         print(f"[INFO] Ground robot at (0, 0, 0), MPC controller, obstacle at ~(3, 0, 0.3)")
         print(f"[INFO] Use '2D Goal Pose' in RViz to send goals")
     elif args.mode == 'interactive':
-        yaml_content = generate_interactive_yaml(setup_bash, args.ros_domain_id, rviz_config=rviz_config)
+        yaml_content = generate_interactive_yaml(
+            setup_bash, args.ros_domain_id, rviz_config=rviz_config,
+            use_rviz=(args.rviz and not args.no_rviz))
         print(f"[INFO] Mode: Interactive single-agent simulation (sim_env=fake_sim)")
         print(f"[INFO] Agent NX01 at (0, 0, 1.0) — use '2D Goal Pose' in RViz to send goals")
     elif args.mode == 'exploration-singleagent-ground':
@@ -923,7 +1022,9 @@ def main():
         yaml_content = generate_exploration_multiagent_ground_yaml(
             setup_bash, agents, args.ros_domain_id, rviz_config=rviz_config,
             sim_env=sim_env, env=env, use_vlm=args.use_vlm,
-            use_follow=args.follow)
+            use_follow=args.follow,
+            use_rviz=(args.rviz and not args.no_rviz),
+            log_level=args.log_level)
         print(f"[INFO] Mode: Single-agent ground robot exploration (Gazebo)")
         print(f"[INFO] Environment: {env}")
         print(f"[INFO]   {agents[0]['namespace']}: ({agents[0]['x']}, {agents[0]['y']}, {agents[0]['z']}) yaw={agents[0]['yaw']}")
@@ -954,7 +1055,9 @@ def main():
         env = args.env if args.env != 'hard_forest' else 'ACL_office'
         yaml_content = generate_exploration_multiagent_ground_yaml(
             setup_bash, agents, args.ros_domain_id, rviz_config=rviz_config,
-            sim_env=sim_env, env=env)
+            sim_env=sim_env, env=env,
+            use_rviz=(args.rviz and not args.no_rviz),
+            log_level=args.log_level)
         print(f"[INFO] Mode: Multi-agent ground robot exploration (Gazebo + MinPos) with {num} agents")
         print(f"[INFO] Environment: {env}")
         for a in agents:
@@ -992,7 +1095,11 @@ def main():
             print(f"[WARN] {config_file} not found; falling back to default planner config (mighty.yaml)")
             config_file = None
         agents = generate_multiagent_positions(args.num_agents, args.radius)
-        yaml_content = generate_multiagent_yaml(setup_bash, agents, sim_env, args.ros_domain_id, args.radius, no_goal=args.no_goal, rviz_config=rviz_config, config_file=config_file)
+        yaml_content = generate_multiagent_yaml(
+            setup_bash, agents, sim_env, args.ros_domain_id, args.radius,
+            no_goal=args.no_goal, rviz_config=rviz_config,
+            config_file=config_file,
+            use_rviz=(args.rviz and not args.no_rviz))
         print(f"[INFO] Mode: Multi-agent simulation with {args.num_agents} agents (sim_env={sim_env})")
         print(f"[INFO] Using multi-agent rviz config: {rviz_config}")
         if config_file:
@@ -1018,21 +1125,38 @@ def main():
             start_pos[2] = 0.0  # Ground robot base_link at z=0 (wheels at ground)
         start_pos = tuple(start_pos)
 
-        # If frontier-based exploration is enabled in the ground-robot config,
-        # auto-skip the goal_sender pane — the exploration loop will issue
-        # goals and a manual goal_sender publication would just preempt it.
+        # `--mode gazebo` means "cross the world to a fixed goal", the same
+        # thing it means for a UAV. mighty_ground_robot.yaml ships
+        # exploration.enabled:true, so a ground robot here used to be hijacked
+        # by the frontier loop: this code previously responded by suppressing
+        # the goal_sender entirely, which turned the mode into an exploration
+        # run that ignored --goal. Turn exploration off at launch instead and
+        # keep the goal.
+        #
+        # For frontier exploration on a ground robot, use
+        # --mode exploration-singleagent-ground (it honours --env, so forest
+        # exploration is still reachable).
+        exploration_enabled = False if use_ground_robot else None
         no_goal = args.no_goal
+
+        if args.goal is None:
+            goal = default_goal_for_env(world_name, use_ground_robot)
+            print(f"[INFO] No --goal given; using the default for "
+                  f"'{world_name}': ({goal[0]}, {goal[1]}, {goal[2]})")
+        else:
+            # A ground robot cannot reach the UAV's default goal altitude.
+            goal = list(args.goal)
+            if use_ground_robot and goal[2] == 3.0:
+                goal[2] = 0.0
+
         if use_ground_robot and not no_goal:
-            cfg_path = (Path(__file__).resolve().parent.parent
-                        / 'config' / 'mighty_ground_robot.yaml')
-            if exploration_enabled_in_yaml(cfg_path):
-                no_goal = True
-                print(f"[INFO] Exploration enabled in {cfg_path.name} — "
-                      f"skipping goal_sender (frontier loop drives the robot)")
+            print("[INFO] Ground robot in gazebo mode: exploration disabled, "
+                  f"driving to goal {tuple(goal)}. "
+                  "Use --mode exploration-singleagent-ground to explore instead.")
 
         yaml_content = generate_gazebo_yaml(
             setup_bash,
-            goal=tuple(args.goal),
+            goal=tuple(goal),
             sim_env=sim_env,
             env=world_name,
             start_pos=start_pos,
@@ -1041,7 +1165,8 @@ def main():
             use_rviz=use_rviz,
             use_gazebo_gui=args.gazebo_gui,
             use_ground_robot=use_ground_robot,
-            no_goal=no_goal
+            no_goal=no_goal,
+            exploration_enabled=exploration_enabled
         )
         print(f"[INFO] Mode: Single-agent Gazebo simulation (sim_env={sim_env})")
         print(f"[INFO] Environment: {args.env} (world: {world_name})")
@@ -1049,7 +1174,16 @@ def main():
             print(f"[INFO] Vehicle: Ground robot (Pioneer 3-AT)")
         print(f"[INFO] Start: ({start_pos[0]}, {start_pos[1]}, {start_pos[2]})")
         if not no_goal:
-            print(f"[INFO] Goal: ({args.goal[0]}, {args.goal[1]}, {args.goal[2]})")
+            # `goal`, not args.goal — the ground robot's z is lowered to 0.
+            print(f"[INFO] Goal: ({goal[0]}, {goal[1]}, {goal[2]})")
+
+    if args.emit_yaml:
+        # Machine-readable counterpart to --dry-run: write the tmuxp YAML to a
+        # file and exit without launching. scripts/exploration_test.py uses this
+        # so the test harness never has to scrape stdout for the config it runs.
+        Path(args.emit_yaml).write_text(yaml_content)
+        print(f"[INFO] Wrote tmuxp YAML to {args.emit_yaml} (not launching)")
+        return
 
     if args.dry_run:
         print("\n[DRY RUN] Generated YAML:")
