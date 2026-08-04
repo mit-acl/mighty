@@ -52,7 +52,8 @@ DECOMP_SETUP_BASH = Path('/home/swarm/code/decomp_ws/install/setup.bash')
 
 def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
                   two_d_only: bool = False,
-                  no_sensors: bool = False) -> str:
+                  no_sensors: bool = False,
+                  docker_exec: str = None) -> str:
     """Generate tmuxp YAML for hardware red rover."""
 
     source_ws = f'source {SETUP_BASH}'
@@ -256,6 +257,18 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
             if title not in dropped_titles
         ]))
 
+    if docker_exec:
+        # HOST-tmux mode: the pane's shell lives on the host, but every ROS
+        # command runs inside the idling container (which bakes the workspace at
+        # the same paths). One `docker exec` per pane, and the whole command list
+        # collapses into a single bash -c so Ctrl-C -> Up -> Enter in the pane
+        # restarts that node in-container — exactly drive_host_tmux.sh's idiom.
+        for p in panes:
+            inner = ' && '.join(p['shell_command'])
+            p['shell_command'] = [
+                f'docker exec -it {docker_exec} bash -c {shlex.quote(inner)}'
+            ]
+
     for p, title in zip(panes, pane_titles):
         p['shell_command'].insert(0, f'tmux select-pane -t "$TMUX_PANE" -T "{title}"')
 
@@ -268,7 +281,7 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
                 'pane-border-status': 'top',
                 'pane-border-format': ' #{pane_index}: #{pane_title} ',
             },
-            'shell_command_before': [
+            'shell_command_before': [] if docker_exec else [
                 f'source /opt/ros/humble/setup.bash',
             ],
             'panes': panes,
@@ -342,7 +355,8 @@ def main():
 
     yaml_content = generate_yaml(args.odom_type, rover_name, args.goal_type,
                                  two_d_only=args.two_d_only,
-                                 no_sensors=args.no_sensors)
+                                 no_sensors=args.no_sensors,
+                                 docker_exec=args.docker_exec)
 
     print(f'[INFO] Odom type: {args.odom_type}')
     print(f'[INFO] Rover: {rover_name}')
