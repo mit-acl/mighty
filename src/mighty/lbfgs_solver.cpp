@@ -1629,9 +1629,9 @@ void SolverLBFGS::getPieceWisePol(PieceWiseQuinticPol& pwp) {
         double c0v = (axis == 0) ? C0.x() : (axis == 1) ? C0.y() : C0.z();
         double c1v = (axis == 0) ? C1.x() : (axis == 1) ? C1.y() : C1.z();
         double c2v = (axis == 0) ? C2.x() : (axis == 1) ? C2.y() : C2.z();
-        double c = (10.0 * c0v - 4.0 * c1v + 0.5 * c2v) / T3;
-        double b = (-15.0 * c0v + 7.0 * c1v - c2v) / T4;
-        double a = (6.0 * c0v - 3.0 * c1v + 0.5 * c2v) / T5;
+        double c = (10.0 * c0v - 4.0 * c1v * T + 0.5 * c2v * T2) / T3;
+        double b = (-15.0 * c0v + 7.0 * c1v * T - c2v * T2) / T4;
+        double a = (6.0 * c0v - 3.0 * c1v * T + 0.5 * c2v * T2) / T5;
         Eigen::Matrix<double, 6, 1> coeff;
         coeff << a, b, c, d, e, f;
         return coeff;
