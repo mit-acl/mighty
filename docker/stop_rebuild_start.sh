@@ -1,1 +1,0 @@
-./mighty_hw.sh stop && make hw-build && ./mighty_hw.sh start --no-sensors

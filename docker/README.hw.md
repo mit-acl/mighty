@@ -1,78 +1,70 @@
-# hw-mighty container (hardware stack) — RR04
+# hw-mighty container (hardware stack)
 
-The MIGHTY hardware autonomy stack (planner + MPC + global mapper + DLIO + Livox
-driver) packaged as **one container** running the same attachable 7-pane tmux
-`hw_mighty` session inside it. It runs as closely as possible to the native
-`mighty` alias on RR04: same launcher
-(`run_hw_red_rover.py --odom-type dlio_in_mocap --two-d-only`), same 7 panes,
-per-pane Ctrl-C / Up / Enter restarts a single node.
+The MIGHTY hardware autonomy stack (planner + MPC + global mapper + DLIO)
+packaged as **one idling container** driven by **one script**: `mighty_hw.sh`
+builds a HOST tmux session `hw_mighty` in which every pane `docker exec`s its
+node into the container. Per-pane Ctrl-C / Up / Enter restarts a single node;
+Ctrl-b d detaches and the stack keeps running.
 
 Sources are **baked from the host checkouts** at their host paths
-(`/home/swarm/code/...`), so `run_hw_red_rover.py` (which hardcodes those paths)
-runs unmodified. The build context is `/home/swarm/code` because the image bakes
-four trees that are siblings — `mighty_ws/src`, `decomp_ws/src`, `livox_ws/src`,
-`Livox-SDK2` — not all under `mighty_ws`. See `Dockerfile.hw.dockerignore` for
-exactly what ships.
+(`/home/swarm/code/...`): the build context is `/home/swarm/code` because the
+image bakes four sibling trees — `mighty_ws/src`, `decomp_ws/src`,
+`livox_ws/src`, `Livox-SDK2`. See `Dockerfile.hw.dockerignore` for exactly what
+ships. The session builder lives on the host, so pane/flag changes need **no
+image rebuild** — only source changes do (`make hw-build` or
+`./mighty_hw.sh rebuild`, ~13 s warm thanks to the manifest cache pin).
 
-## Env & networking (RR04 specifics)
-
-- **No `/etc/rover/rover.env` on RR04** — identity/transport are set directly in
-  `compose.hw.yaml`'s `environment:` block: `ROVER_NAME=RR04`, `VEHTYPE=RR`,
-  `VEHNUM=04`, `ROS_DOMAIN_ID=22`, `RMW_IMPLEMENTATION=rmw_zenoh_cpp` (the native
-  values, from `~/config/roman_rover.sh` + `RR04.sh`). The image itself is
-  rover-agnostic; identity lives in the compose file.
-- **Zenoh:** the container runs the mighty **nodes only** and attaches to the
-  **host** Zenoh router over `network_mode: host`. **Start the host router first**
-  (native workflow): run the `zenoh_route` alias
-  (`ros2 run rmw_zenoh_cpp rmw_zenohd`) before starting the container. No config
-  is mounted — the nodes use the default router at `localhost:7447`, shared via
-  host networking.
-
-## Operate (manual — the native `mighty` alias is untouched and is the rollback)
+## Usage
 
 ```bash
-cd ~/code/mighty_ws/src/mighty/docker
-
-./mighty_hw.sh start                 # compose up -d + attach (detach: Ctrl-b d)
-./mighty_hw.sh start --odom-type mocap
-./mighty_hw.sh start --no-two-d      # disable DLIO 2D-only z pinning
-./mighty_hw.sh attach                # re-attach to a running stack
-./mighty_hw.sh status                # container + pane status
-./mighty_hw.sh stop                  # tear the whole stack down
-docker logs hw-mighty                # PID-1 wrapper output
+./mighty_hw.sh start [--odom-type dlio|dlio_in_mocap|mocap] [--two-d-only|--no-two-d]
+./mighty_hw.sh attach      # or: tmux attach -t hw_mighty
+./mighty_hw.sh status
+./mighty_hw.sh stop
+./mighty_hw.sh rebuild     # stop + image rebuild + start (start flags forwarded)
 ```
 
-Default run is `--odom-type dlio_in_mocap --two-d-only` (matches the `mighty`
-alias). Pane intervention is identical to native: Ctrl-C, ↑, Enter in any pane
-restarts that node. Detaching never stops the stack; the container exits when the
-`hw_mighty` session dies (or on `stop`).
+## Prerequisites (every mode)
 
-## Build
+- **`drive.service`** — hosts the zenoh router on `:7447`; every pane spin-waits
+  on it, and `start` fails fast if it is absent.
+- **`sensors.service`** — livox MID-360 + D455 + the `base_link->lidar` static
+  TF. This stack launches **no sensors, ever** (the old `--no-sensors` flag is
+  gone because it is the only behavior).
+- **`dlio.service` must be disabled** — this stack runs its own DLIO panes (the
+  same nodes; both running = double-publish). Rollback: re-enable
+  `dlio.service`, use the native `mighty` alias (`run_hw_red_rover.py`).
 
-```bash
-make hw-build        # docker compose -f compose.hw.yaml build → mighty-hw:local
-```
+## Odom types
 
-Layer caching: apt/pip and the dependency workspaces (decomp, Livox SDK + driver)
-only rebuild when their sources change; a mighty/mpc edit re-runs just the final
-colcon layer. The image is built with `-DBUILD_SIMULATION=OFF` (no Gazebo).
+| `--odom-type` | Panes beyond MIGHTY / RViz 2D goal / Global Mapper | Notes |
+|---|---|---|
+| `dlio` (default) | DLIO, seed pose, `tf map->odom` | Replicates what `dlio.service` ran: DLIO is told `initial_pose_topic:=world` and a 2 Hz constant `PoseStamped` spoof on `/<ns>/world` (z = `DLIO_SEED_Z`, default 0.4) anchors it. Works with no external infrastructure. |
+| `dlio_in_mocap` | DLIO, `tf map->odom` | A **real** mocap publishes `/<ns>/world`. No spoof pane — DLIO anchors to the **first** pose it receives, so a spoof would race the mocap and win. |
+| `mocap` | `tf mocap->base_link`, `tf world->map`, `tf map->odom` | No DLIO. Mighty runs `use_onboard_localization:=false` with `twist_topic:=mocap/twist`; the mapper consumes **raw** `livox/lidar` with `pose_topic:=world`. |
 
-Note: RR04's `mighty_ws/src` still contains a **duplicate `DecompROS2`** (decomp is
-built separately from `decomp_ws/src`); it is excluded in
-`Dockerfile.hw.dockerignore` to avoid a double-build/conflict.
+In the dlio modes the mapper consumes DLIO's deskewed cloud
+(`dlio/odom_node/pointcloud/deskewed`) and pose (`dlio/odom_node/pose`).
+DLIO runs a ~3 s stationary IMU calibration whenever its pane (re)starts — keep
+the rover still. `--two-d-only` (default ON) pins DLIO's published z to the
+seed; `--no-two-d` disables that.
 
-## Rollback to native
+## Env & networking
 
-The native flow is untouched — after `./mighty_hw.sh stop`, just use the `mighty`
-alias. Don't run both at once: two stacks would double-publish on the same topics.
+- Identity/transport come from **`/etc/rover/rover.env`** via compose
+  `env_file` (`ROBOT_NAME`, `VEHTYPE`/`VEHNUM`, `ROS_DOMAIN_ID`,
+  `RMW_IMPLEMENTATION`, optional `DLIO_SEED_Z`) — same as the
+  drive/sensors/dlio siblings, so this directory is rover-agnostic.
+- The container runs the mighty **nodes only** over `network_mode: host`,
+  attaching to the host zenoh router at `localhost:7447` (owned by
+  `drive.service`). No zenoh config is mounted; `ZENOH_ROUTER_CONFIG_URI` from
+  rover.env is ignored by plain sessions.
 
-## Notes
+## Startup ordering (/tf_static race)
 
-- `restart: "no"` — a dead node stays dead until hand-restarted in its pane
-  (native semantics). The container itself only dies with the session.
-- No `tty: true` in compose — a detached container pty reports width 0 and newer
-  libtmux fails with `new-session: width too small`; the launch command pins
-  `COLUMNS`/`LINES` instead.
-- **No bind-mounts and no dev-override compose file** — the image is the single
-  source of truth (control/repeatability). To pick up code edits, rebuild
-  (`make hw-build`).
+The static TF panes latch one transient-local sample; over rmw_zenoh a
+subscriber that forms before the publisher exists never receives it. Consumers
+therefore gate themselves with `ros2 run mighty wait_for_tf.py <pairs>` before
+launching (mighty waits for `map->odom`; the mapper additionally for
+`base_link->lidar`, plus `world->map` in mocap mode). `wait_for_tf.py` warns
+and continues on timeout, so the stack never deadlocks.

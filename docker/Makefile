@@ -165,14 +165,14 @@ shell:
 
 # ---------------------------------------------------------------------------
 # Hardware (rover) image: mighty-hw — see README.hw.md. Runs the mighty NODES in
-# one container, attaching to the HOST Zenoh router (start `zenoh_route` first).
+# one container, attaching to the HOST zenoh router (drive.service hosts it on :7447).
 # The SIM targets above are untouched. No bind-mounts / no dev override.
 # ---------------------------------------------------------------------------
 HW_COMPOSE = docker compose -f compose.hw.yaml
 
 .PHONY: hw-build hw-up hw-down hw-attach hw-status
 hw-build:  ; $(HW_COMPOSE) build
-hw-up:     ; $(HW_COMPOSE) up -d
-hw-down:   ; $(HW_COMPOSE) down
-hw-attach: ; docker exec -it hw-mighty tmux attach -t hw_mighty
+hw-up:     ; ./mighty_hw.sh start
+hw-down:   ; ./mighty_hw.sh stop
+hw-attach: ; tmux attach -t hw_mighty
 hw-status: ; ./mighty_hw.sh status

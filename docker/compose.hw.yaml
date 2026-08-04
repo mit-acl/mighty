@@ -1,25 +1,25 @@
-# hw-mighty — the MIGHTY hardware autonomy stack in ONE container, HOST-tmux
-# variant (mirrors the rover drive/sensors/dlio services): the container just
-# IDLES (`sleep infinity`) and every pane is a docker exec living in the HOST
-# tmux session 'hw_mighty', built by mighty_hw.sh via run_hw_red_rover.py
-# --docker-exec. Identity/env come from the `environment:` block below (RR04 has
-# no /etc/rover/rover.env), and the container runs the mighty NODES only — it
-# attaches to the HOST Zenoh router (rmw_zenohd, started via the `zenoh_route`
-# alias) over network_mode: host, exactly like the native `mighty` alias does.
+# hw-mighty — the MIGHTY hardware autonomy stack in ONE container, host-tmux
+# variant (sibling of the rover drive/sensors/dlio compose files): the container
+# just IDLES (`sleep infinity`) and every node is a docker exec living in the
+# HOST tmux session 'hw_mighty', built directly by mighty_hw.sh — the single
+# entrypoint (run_hw_red_rover.py/tmuxp is the NATIVE `mighty` alias path only).
 #
 # The container must NEVER launch the session itself: when its command also ran
-# run_hw_red_rover.py (pre-2026-07-30), every `mighty_hw.sh start` produced TWO
-# full stacks — an in-container session plus the host session — i.e. duplicate
+# run_hw_red_rover.py (pre-2026-07-30), every start produced TWO full stacks —
+# an in-container session plus the host session — i.e. duplicate
 # mighty/MPC/mapper nodes (two publishers on cmd_vel_auto).
 #
 #   build:   docker compose -f compose.hw.yaml build     (or: make hw-build)
-#   up:      ./mighty_hw.sh start                         (compose up -d + host session + attach)
-#   attach:  tmux attach -t hw_mighty                     (HOST session, no docker exec needed)
+#   up:      ./mighty_hw.sh start [--odom-type dlio|dlio_in_mocap|mocap]
+#   attach:  tmux attach -t hw_mighty                     (HOST session)
 #            (Ctrl-C / Up / Enter in a pane restarts just that node; Ctrl-b d detaches)
 #   down:    ./mighty_hw.sh stop
 #
-# PREREQ: the host Zenoh router must already be running (`zenoh_route`) — same as
-# native. Do NOT run this alongside the native `mighty` alias (they double-publish).
+# PREREQS: drive.service (hosts the zenoh router on :7447) and sensors.service
+# (livox + D455 + base_link->lidar TF). This stack launches NO sensors and NO
+# router — the nodes attach to the host router over network_mode: host. Do NOT
+# run alongside the native `mighty` alias (double-publish), nor with
+# dlio.service enabled (the DLIO panes here are the same nodes).
 name: hw-mighty
 services:
   hw-mighty:
@@ -33,28 +33,17 @@ services:
     image: mighty-hw:local
     container_name: hw-mighty
     network_mode: host            # share host net → reach the host rmw_zenohd on :7447
+    # Identity + ROS transport come from the rover's provisioned env, exactly like
+    # the drive/sensors/dlio siblings — nothing rover-specific in this directory.
+    # Provides ROBOT_NAME/VEHTYPE/VEHNUM/ROS_DOMAIN_ID/RMW_IMPLEMENTATION and the
+    # optional DLIO_SEED_Z. ZENOH_ROUTER_CONFIG_URI rides along harmlessly: no
+    # router runs in this container, the nodes are plain zenoh sessions.
+    env_file: /etc/rover/rover.env
     init: true
     stop_grace_period: 15s
     restart: "no"                 # manual stack; a dead pane stays dead (native semantics)
-    environment:
-      # RR04 identity + ROS transport. Native source is ~/config/roman_rover.sh +
-      # RR04.sh; baked here because RR04 has no /etc/rover/rover.env. To reuse this
-      # image on another rover, change ROVER_NAME/VEHTYPE/VEHNUM (and ROS_DOMAIN_ID
-      # if different) — nothing rover-specific is baked into the image itself.
-      ROVER_NAME: RR04
-      VEHTYPE: RR
-      VEHNUM: "04"
-      ROS_DOMAIN_ID: "22"
-      RMW_IMPLEMENTATION: rmw_zenoh_cpp
-      # NOTE: ZENOH_ROUTER_CONFIG_URI is intentionally NOT set — the nodes are
-      # Zenoh sessions that attach to the host's rmw_zenohd at localhost:7447.
-      #
-      # Match the `mighty` alias default: DLIO seeded in mocap + 2D-only z pinning.
-      ODOM_TYPE: ${ODOM_TYPE:-dlio_in_mocap}   # dlio | mocap | dlio_in_mocap
-      TWO_D_ONLY: ${TWO_D_ONLY-1}              # non-empty => --two-d-only (export TWO_D_ONLY= to disable)
-      NO_SENSORS: ${NO_SENSORS-}               # non-empty => --no-sensors (external sensor bringup owns them)
-    # Idle keep-alive: the nodes are started from the HOST tmux 'hw_mighty' session
-    # as docker execs (mighty_hw.sh -> run_hw_red_rover.py --docker-exec); the
-    # container only has to stay up. The launcher runs from the HOST checkout, so
-    # flag/pane changes need no image rebuild.
+    # Idle keep-alive: the nodes are started from the HOST tmux 'hw_mighty'
+    # session as docker execs (mighty_hw.sh start); the container only has to
+    # stay up. The session builder runs on the host, so flag/pane changes need
+    # no image rebuild.
     command: ["sleep", "infinity"]
