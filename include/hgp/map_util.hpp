@@ -687,6 +687,7 @@ class MapUtil {
         }
       }
     }
+    map_initialized_ = true;
   }
 
   // ---------------- Dynamic heat-map API ----------------
