@@ -7,7 +7,7 @@ repositories:
   direct_lidar_inertial_odometry:
     type: git
     url: git@github.com:blakete/direct_lidar_inertial_odometry.git
-    version: 2f304f6ed5e5807d843b5ccd505d8fee634eefdb
+    version: 73c24893eb3d2eb6baa9f75fdc905483b201255c
   dynus_interfaces:
     type: git
     url: https://github.com/kotakondo/dynus_interfaces.git
