@@ -14,20 +14,30 @@
 #   mighty_hw.sh rebuild [...]     # stop + compose build + start (start flags forwarded)
 #
 # Panes by --odom-type (default dlio; two_d_only defaults ON, --no-two-d disables):
-#   dlio           Onboard MIGHTY | RViz 2D goal | Global Mapper | DLIO | seed pose | tf map->odom
+#   dlio           Onboard MIGHTY | RViz 2D goal | DLIO | seed pose | tf map->odom
 #                  Replicates what dlio.service ran: DLIO anchored by a constant
 #                  seed-pose spoof on /<ns>/world at z=${DLIO_SEED_Z:-0.4}.
 #   dlio_in_mocap  same minus the seed pose pane — a REAL mocap publishes
 #                  /<ns>/world, and DLIO anchors to the FIRST pose it receives,
 #                  so a running spoof would race it and win.
 #   mocap          no DLIO at all: mighty flips to use_onboard_localization:=false
-#                  + twist from mocap/twist, the mapper consumes raw livox/lidar
-#                  with pose from /<ns>/world, and two extra static TFs bridge
+#                  + twist from mocap/twist, and two extra static TFs bridge
 #                  the mocap frames (<ns> -> <ns>/base_link, world -> <ns>/map).
 #
-# PREREQS in EVERY mode (this stack launches NO sensors and NO router):
+# NO MAPPER PANE. mighty_node subscribes to <ns>/occ_2d_topic + <ns>/esdf_2d_topic
+# (mighty_node.cpp:311-321, SensorDataQoS) and does not care who publishes them.
+# Those used to come from global_mapper_ros, which is NOT in mighty-hw:local —
+# the acl-mapping COPY/build is commented out in Dockerfile.hw, so launching it
+# here only ever produced a "package not found" pane. They now come from
+# elevation_mapping_cupy on the OX08 Orin (192.168.12.1), which needs a CUDA GPU
+# this NUC does not have. To go back to the onboard mapper, uncomment the
+# acl-mapping block in Dockerfile.hw, rebuild, and re-add a mapper pane.
+#
+# PREREQS in EVERY mode (this stack launches NO sensors, NO router, NO mapper):
 #   drive.service    hosts the zenoh router on :7447
 #   sensors.service  livox + D455 + the base_link->lidar static TF
+#   OX08 Orin        elevation_mapping_cupy -> <ns>/occ_2d_topic, <ns>/esdf_2d_topic
+#                    (without it MIGHTY runs but never plans: no occupancy grid)
 # dlio.service must be DISABLED wherever this stack runs — its nodes and the
 # DLIO panes here are the same nodes (double-publish). Rollback path: re-enable
 # dlio.service and use the native `mighty` alias.
@@ -106,13 +116,11 @@ start() {
     # Consumers gate on the TFs they need via wait_for_tf.py (the /tf_static
     # startup-race fix): the static publishers below latch one transient-local
     # sample, and a subscriber that forms too early would never receive it.
-    local mighty_cmd mapper_cmd
+    local mighty_cmd
     if [[ "${odom_type}" == mocap ]]; then
         mighty_cmd="${DECOMP}"' && ros2 run mighty wait_for_tf.py $ROBOT_NAME/map $ROBOT_NAME/odom && ros2 launch mighty onboard_mighty.launch.py x:=0.0 y:=0.0 z:=0.0 yaw:=0.0 namespace:=$ROBOT_NAME use_hardware:=true use_onboard_localization:=false robot_type:=red_rover depth_camera_name:=d455 twist_topic:=mocap/twist'
-        mapper_cmd='ros2 run mighty wait_for_tf.py $ROBOT_NAME/map $ROBOT_NAME/odom $ROBOT_NAME/base_link $ROBOT_NAME/lidar world $ROBOT_NAME/map && ros2 launch global_mapper_ros global_mapper_node.launch.py hardware:=true ground_robot:=true quad:=$ROBOT_NAME depth_pointcloud_topic:=livox/lidar pose_topic:=world pose_type:=pose_stamped use_obstacle_tracker:=false'
-    else  # dlio | dlio_in_mocap — identical mighty/mapper; only the seed differs
+    else  # dlio | dlio_in_mocap — identical mighty; only the seed differs
         mighty_cmd="${DECOMP}"' && ros2 run mighty wait_for_tf.py $ROBOT_NAME/map $ROBOT_NAME/odom && ros2 launch mighty onboard_mighty.launch.py x:=0.0 y:=0.0 z:=0.0 yaw:=0.0 namespace:=$ROBOT_NAME use_hardware:=true use_onboard_localization:=true robot_type:=red_rover depth_camera_name:=d455'
-        mapper_cmd='ros2 run mighty wait_for_tf.py $ROBOT_NAME/map $ROBOT_NAME/odom $ROBOT_NAME/base_link $ROBOT_NAME/lidar && ros2 launch global_mapper_ros global_mapper_node.launch.py hardware:=true ground_robot:=true quad:=$ROBOT_NAME depth_pointcloud_topic:=dlio/odom_node/pointcloud/deskewed use_sim_time:=false pose_topic:=dlio/odom_node/pose use_obstacle_tracker:=false'
     fi
     local dlio_cmd='ros2 launch direct_lidar_inertial_odometry dlio.launch.py namespace:=$ROBOT_NAME initial_pose_topic:=world two_d_only:='"${two_d}"
     local seed_cmd='ros2 topic pub -r 2 /$ROBOT_NAME/world geometry_msgs/msg/PoseStamped "{header: {frame_id: world}, pose: {position: {z: ${DLIO_SEED_Z:-0.4}}, orientation: {w: 1}}}"'
@@ -120,12 +128,16 @@ start() {
     local tf_mocap_base='ros2 run tf2_ros static_transform_publisher --frame-id $ROBOT_NAME --child-frame-id $ROBOT_NAME/base_link'
     local tf_world_map='ros2 run tf2_ros static_transform_publisher --frame-id world --child-frame-id $ROBOT_NAME/map'
 
+    # titles[i] LABELS cmds[i] — the two arrays are positional, so dropping an
+    # entry from one and not the other silently mislabels every pane after it
+    # (that is how the mapper removal once left pane 0 titled "Onboard MIGHTY"
+    # while running the goal republisher, and MIGHTY never started at all).
+    # The length check below turns any future mismatch into a startup error.
     local -a titles cmds
-    titles=('Onboard MIGHTY' 'RViz 2D goal' 'Global Mapper')
+    titles=('Onboard MIGHTY' 'RViz 2D goal')
     cmds=(
         "$(dx "${mighty_cmd}")"
         "$(dx 'ros2 run mighty repub_rviz_2Dgoal.py')"
-        "$(dx "${mapper_cmd}")"
     )
     case "${odom_type}" in
         dlio)
@@ -141,6 +153,11 @@ start() {
             cmds+=("$(dx "${tf_mocap_base}")" "$(dx "${tf_world_map}")" "$(dx "${tf_map_odom}")")
             ;;
     esac
+    if (( ${#titles[@]} != ${#cmds[@]} )); then
+        echo "[mighty_hw] BUG: ${#titles[@]} pane titles but ${#cmds[@]} commands —" \
+             "panes would be mislabeled; fix the titles/cmds arrays" >&2
+        exit 1
+    fi
 
     # ---- build the HOST session (drop any stale one first). -x/-y: a detached
     # session started from a non-tty needs an explicit size; an attaching

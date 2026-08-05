@@ -432,6 +432,11 @@ class MIGHTY {
    */
   void updateOccupancyMap(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pclptr_map);
 
+  // Decoupled 2D pipeline: rebuild the planner map from the 2D occupancy/ESDF
+  // grids alone, with no 3D PointCloud2 source (see mighty.cpp for why this
+  // exists and what it deliberately skips).
+  void updateMap2DOnly();
+
   /** @brief Update only the unknown-space cloud.
    *  @param pclptr_unk Unknown-space point cloud.
    */

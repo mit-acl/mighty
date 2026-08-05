@@ -3241,6 +3241,15 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
   occ_grid_2d_ = OccGrid2D::fromOccupancyGrid(*msg);
   mighty_ptr_->setOccGrid2D(occ_grid_2d_);
 
+  // Decoupled 2D pipeline: with global_mapper retired, this callback is the
+  // ONLY map trigger on hardware — occupancy_grid (PointCloud2) has no
+  // publisher, so the occupancyMapCallback path never fires. Rebuild the
+  // planner's 2D map here, at grid rate (~2.5 Hz). Gated on use_hardware so
+  // sim (where global_mapper still publishes the 3D cloud) is unchanged.
+  if (par_.use_hardware && par_.use_2d_planning && par_.vehicle_type == "ground_robot") {
+    mighty_ptr_->updateMap2DOnly();
+  }
+
   // Frontier-based exploration: detect frontiers in the new grid, update the
   // persistent global database, then immediately try to issue an exploration
   // goal so the robot starts moving the moment the first frontier appears

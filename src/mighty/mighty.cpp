@@ -1850,11 +1850,17 @@ void MIGHTY::changeDroneStatus(int new_status) {
  * @return bool
  */
 bool MIGHTY::checkReadyToReplan() {
+  // The kd-trees are fed only by the 3D occupancy_grid cloud. In 2D ground
+  // mode that topic may have no publisher at all (elevation_mapping_cupy
+  // publishes only the 2D grids; global_mapper is retired on the rovers), and
+  // the trees are never queried anywhere — no nearestKSearch/radiusSearch
+  // call sites exist — so do not gate replanning on them in that mode.
+  const bool is_2d_ground = par_.use_2d_planning && par_.vehicle_type == "ground_robot";
   bool is_ready = state_initialized_ && terminal_goal_initialized_ &&
                   hgp_manager_.isMapInitialized() &&
-                  (!par_.use_hardware || (kdtree_map_initialized_
-                                          // && kdtree_unk_initialized_
-                                          ));
+                  (!par_.use_hardware || is_2d_ground || (kdtree_map_initialized_
+                                                          // && kdtree_unk_initialized_
+                                                          ));
 
   return is_ready;
 }
@@ -2016,6 +2022,43 @@ void MIGHTY::updateOccupancyMap(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& 
     RCLCPP_WARN(rclcpp::get_logger("mighty"),
                 "updateMap: member pclptr_map_ was null or empty; skipping KD-tree update");
   }
+}
+
+// ----------------------------------------------------------------------------
+
+void MIGHTY::updateMap2DOnly() {
+  // Decoupled 2D pipeline (no 3D mapper): elevation_mapping_cupy publishes
+  // only occ_2d_topic/esdf_2d_topic, so nothing feeds occupancy_grid and the
+  // updateOccupancyMap() path above never runs — the 2D planner map was never
+  // built and map_initialized_ never flipped, so replanning never started.
+  // Reuse the full HGPManager::updateMap() machinery with an EMPTY cloud:
+  // readMap() still computes the sliding-window geometry (dim_/origin_d_)
+  // that buildMap2DFromOcc2D() rasterizes into — the geometry must come from
+  // readMap, nothing else sets it — and updateMap flips map_initialized_.
+  // The kd-trees stay unbuilt; checkReadyToReplan() waives them in 2D ground
+  // mode and they are never queried.
+  if (!state_initialized_) return;  // window centering needs a valid state
+
+  // Forward the freshest grids to HGP now. replan() also forwards them, but
+  // the FIRST updateMap() call must already see occ_grid_2d_ or its 2D build
+  // takes the wrong branch (ESDF/pointcloud fallback) for a whole cycle.
+  if (occ_grid_2d_) hgp_manager_.setOccGrid2D(occ_grid_2d_);
+  if (esdf_grid_) hgp_manager_.setEsdfGrid(esdf_grid_, par_.esdf_weight, par_.esdf_d_safe);
+
+  // Same window bookkeeping as updateOccupancyMap().
+  state local_state, local_G;
+  getState(local_state);
+  getG(local_G);
+  computeMapSize(local_state.pos, local_G.pos);
+
+  auto trajs = getTrajs();
+  vec_Vecf<3> obst_pos, obst_bbox;
+  double traj_max_time = 0.0;
+  extractDynamicHeatData(trajs, local_state.t, local_state.pos, obst_pos, obst_bbox, traj_max_time);
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr empty(new pcl::PointCloud<pcl::PointXYZ>());
+  hgp_manager_.updateMap(wdx_, wdy_, wdz_, map_center_, empty, empty, obst_pos, obst_bbox,
+                         traj_max_time);
 }
 
 // ----------------------------------------------------------------------------
