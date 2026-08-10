@@ -205,6 +205,18 @@ Visualization Manager:
                 Reliability Policy: Best Effort
                 Value: /NX01/hgp_path_marker
               Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: NX01 Mid360 FOV
+              Namespaces:
+                mid360_fov: true
+              Topic:
+                Depth: 5
+                Durability Policy: Transient Local
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /NX01/mid360_fov
+              Value: true
             - Alpha: 0.009999999776482582
               BoundColor: 38; 162; 105
               Class: decomp_rviz_plugins/PolyhedronArray

@@ -711,6 +711,7 @@ void MIGHTY_NODE::declareParameters() {
 
   // 2D ground robot planning parameters
   this->declare_parameter("use_2d_planning", false);
+  this->declare_parameter("perception_aware_planning", false);
   this->declare_parameter("robot_height", 0.5);
   this->declare_parameter("obstacle_min_height", 0.3);
   this->declare_parameter("use_column_any_occupied", true);
@@ -1072,6 +1073,7 @@ void MIGHTY_NODE::setParameters() {
 
   // 2D ground robot planning parameters
   par_.use_2d_planning = this->get_parameter("use_2d_planning").as_bool();
+  par_.perception_aware_planning = this->get_parameter("perception_aware_planning").as_bool();
   par_.robot_height = this->get_parameter("robot_height").as_double();
   par_.obstacle_min_height = this->get_parameter("obstacle_min_height").as_double();
   par_.use_column_any_occupied = this->get_parameter("use_column_any_occupied").as_bool();

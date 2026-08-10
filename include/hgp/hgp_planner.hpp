@@ -14,9 +14,12 @@
 
 #include <cmath>
 
+#include <memory>
+
 #include <hgp/data_type.hpp>
 #include <hgp/graph_search.hpp>
 #include <hgp/map_util.hpp>
+#include <hgp/perception_planner.hpp>  // hgp::PerceptionParams, SensorModel, Mid360FOV
 
 /** @brief Global path planner using A* and JPS on a 3D voxel map.
  *
@@ -260,6 +263,50 @@ class HGPPlanner {
     esdf_weight_astar_ = weight;
     esdf_d_safe_astar_ = d_safe;
   }
+
+  // --- Perception-aware planning (ground robot 2D only) ------------------------
+  /** @brief Enable/disable the perception-aware lattice A* and supply the tristate
+   *  belief it plans over. When enabled AND in 2D mode AND a belief is set, plan()
+   *  produces the global path via the sensor-coverage lattice search (see
+   *  hgp/perception_planner.hpp) instead of the plain grid A*. The Mid-360 sensor
+   *  model is constructed lazily on first enable. Pass a null belief (or enabled
+   *  = false) to fall back to the existing grid search. */
+  void configurePerceptionAware(bool enabled, std::shared_ptr<const OccGrid2D> belief,
+                                const hgp::PerceptionParams& params = hgp::PerceptionParams()) {
+    perception_aware_ = enabled;
+    perception_belief_ = std::move(belief);
+    perception_params_ = params;
+    if (perception_aware_ && !perception_sensor_) {
+      perception_sensor_ = std::make_shared<hgp::Mid360FOV>();
+    }
+  }
+
+  bool perceptionAwareActive() const {
+    return perception_aware_ && is_2d_mode_ && perception_belief_ != nullptr;
+  }
+
+  bool perception_aware_{false};
+  std::shared_ptr<const OccGrid2D> perception_belief_;
+  std::shared_ptr<hgp::SensorModel> perception_sensor_;
+  hgp::PerceptionParams perception_params_;
+
+  // Telemetry from the last perception-aware plan() that returned true. A behavior
+  // layer can poll these to distinguish a full solution from a receding-horizon
+  // partial and to detect "stuck creeping" (repeated small-residual partials).
+  bool perception_last_partial_{false};       ///< true if the accepted path stopped short of the goal
+  double perception_last_residual_m_{0.0};     ///< distance [m] from the path end to the goal (0 if reached)
+
+  /** @return true if the last successful perception-aware plan was a partial
+   *  (goal-not-reached) receding-horizon path rather than a full solution. */
+  bool perceptionLastPartial() const { return perception_last_partial_; }
+  /** @return residual distance [m] from the last perception-aware path's end to the
+   *  goal (0 when the goal was reached). Meaningful only after plan() returned true. */
+  double perceptionLastResidualToGoal() const { return perception_last_residual_m_; }
+
+  /** @brief Run the perception-aware lattice A* and fill path_/raw_path_.
+   *  @return true on success (a coverage-feasible path to the goal was found). */
+  bool planPerceptionAware(const Vecf<3>& start, const Vecf<3>& start_vel, const Vecf<3>& goal,
+                           double& final_g);
 
   /** @brief Configure corridor-center corner snap post-processing (ground robot only).
    *

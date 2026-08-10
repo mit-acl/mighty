@@ -266,6 +266,12 @@ struct parameters {
 
   // 2D ground robot planning parameters
   bool use_2d_planning{false};         // Master toggle for 2D ground planning
+  // Perception-aware frontier planning (ground robot 2D only). When enabled, the
+  // HGP global path is produced by the lattice A* with the sensor-coverage
+  // invariant (see hgp/perception_planner.hpp) instead of the plain grid A*, so
+  // the path only enters unknown space it could actually have observed. The
+  // lattice/sensor constants use the tuned defaults in PerceptionParams/Mid360FOV.
+  bool perception_aware_planning{false};
   double robot_height{0.5};            // [m] Robot height for obstacle column detection
   double obstacle_min_height{0.3};     // [m] Min height span in column to classify as obstacle
   bool use_column_any_occupied{true};  // [-] Any occupied voxel in column → 2D occupied

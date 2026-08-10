@@ -269,6 +269,7 @@ mighty_node:
 
         # --- 2D Ground Robot Planning (not used for UAV) ---
         use_2d_planning: true                          # [-] Enable 2D terrain-aware planning for ground robots
+        perception_aware_planning: false               # [-] Route HGP global path through the perception-aware lattice A* (sensor-coverage invariant; see hgp/perception_planner.hpp). Ground-robot 2D only.
         robot_height: 1.0                               # [m] Robot height for obstacle column detection
         obstacle_min_height: 0.3                        # [m] Min column height span to classify as obstacle
         use_column_any_occupied: true                    # [-] Any occupied voxel in column → 2D occupied
