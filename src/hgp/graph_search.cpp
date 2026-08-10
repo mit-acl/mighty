@@ -600,6 +600,23 @@ void GraphSearch::getSucc(const StatePtr& curr, std::vector<int>& succ_ids,
       }
     }
 
+    // NEW: prevent diagonal corner cutting -- a diagonal move whose two orthogonally-
+    // adjacent cells are occupied would clip an obstacle corner (or squeeze through a
+    // 1-cell diagonal gap between two obstacles), i.e. plan "through the wall". Reject
+    // the diagonal unless both side cells are free. (2D, 8-connected mode only.)
+    if (zDim_ == 1 && d[0] != 0 && d[1] != 0) {
+      const int side1_x = curr->x + d[0];
+      const int side1_y = curr->y;
+      const int side2_x = curr->x;
+      const int side2_y = curr->y + d[1];
+      if (map_util_ && map_util_->has2DMap()) {
+        if (map_util_->get2DOccupancy(side1_x, side1_y) != 0 ||
+            map_util_->get2DOccupancy(side2_x, side2_y) != 0) {
+          continue;
+        }
+      }
+    }
+
     // Hard heat cutoff: treat cells with heat > cutoff_ratio * Hmax as impassable
     if (use_heat && map_util_ && map_util_->staticHeatEnabled() && zDim_ == 1 &&
         map_util_->heat_cutoff_ratio_ > 0.0f) {
