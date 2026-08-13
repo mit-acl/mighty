@@ -67,7 +67,7 @@ mighty_node:
         y_max: 1000.0                                   # [m] Map y upper bound
         z_min: -0.4                                     # [m] Min altitude (matches global mapper z_ground)
         z_max: 1.0                                      # [m] Max altitude (must include real obstacle heights from lidar)
-        mighty_map_res: 0.15                             # [m] Voxel map resolution (coarser for ground robot)
+        mighty_map_res: 0.10                             # [m] Voxel map resolution (coarser for ground robot)
 
         # --- Goal ---
         force_goal_z: true                              # [-] Force goal to a fixed height (RViz GUI goals have z=0)
@@ -93,8 +93,8 @@ mighty_node:
 
         # --- Local Planning ---
         horizon: 30.0                                   # [m] Planning horizon
-        goal_radius: 1.0                                # [m] Goal reached threshold
-        goal_seen_radius: 2.0                           # [m] Distance to stop replanning
+        goal_radius: 0.5                                # [m] Goal reached threshold
+        goal_seen_radius: 0.75                           # [m] Distance to stop replanning
 
         # --- L-BFGS Optimization Weights ---
         dynamic_weight: 1e+2                         # [-] Dynamic obstacle avoidance weight
@@ -132,7 +132,7 @@ mighty_node:
         # --- Map Window ---
         initial_wdx: 30.0                               # [m] Initial map window width
         initial_wdy: 30.0                               # [m] Initial map window depth
-        initial_wdz: 0.15                               # [m] Match map res — 2D ground-robot mode only needs a single z-layer
+        initial_wdz: 0.10                               # [m] Match map res — 2D ground-robot mode only needs a single z-layer
 
         # --- Sensor ---
         depth_camera_depth_max: 10.0                    # [m] Max depth camera range (d435 in simulation)
@@ -236,7 +236,7 @@ mighty_node:
         center_shift_factor: 0.5                        # [-] Map center shift factor
         min_wdx: 30.0                                   # [m] Min map window width
         min_wdy: 30.0                                   # [m] Min map window depth
-        min_wdz: 0.15                                   # [m] Match map res — 2D ground-robot mode only needs a single z-layer
+        min_wdz: 0.10                                   # [m] Match map res — 2D ground-robot mode only needs a single z-layer
 
         # --- Communication Delay ---
         use_comm_delay_inflation: true                  # [-] Enable communication delay inflation
@@ -329,7 +329,7 @@ mighty_node:
         exploration.enabled: true
         exploration.select_rate_hz: 1.0
         exploration.default_goal_z: 0.0
-        exploration.detector.cluster_min_cells: 10
+        exploration.detector.cluster_min_cells: 6
         exploration.detector.border_margin_cells: 1
         exploration.detector.obstacle_clearance_cells: 1
         exploration.detector.min_obstacle_distance_m: 0.1
@@ -344,17 +344,27 @@ mighty_node:
         exploration.bounds.min_y: -17.5
         exploration.bounds.max_y:  0.0
         exploration.utility.w_size: 1.0
-        exploration.utility.w_dist: 20.0
+        exploration.utility.w_dist: 60.0
         exploration.utility.w_info: 1.0
         exploration.utility.w_revisit: 0.5
         exploration.utility.w_heading: 0.3
         exploration.utility.size_ref_m2: 5.0
-        exploration.utility.dist_ref_m: 25.0
+        # Distance normaliser: dist_norm = clamp01(dist / dist_ref_m), so this is a
+        # SATURATION point, not a scale -- every frontier at or beyond it is penalised
+        # identically and distance stops discriminating between them, leaving the much
+        # weaker size/info/heading terms to pick the winner (which can choose the farther
+        # one). Raised 25.0 -> 60.0 on 2026-08-13 to match the occ_2d/elevation map window
+        # (core_param.yaml map_length: 60.0) so distance stays meaningful across the whole
+        # local map. Side effect: the penalty gradient softens from w_dist/dist_ref_m =
+        # 2.4/m to 1.0/m, so the other terms (max ~2.3 total) can now outweigh ~2.3m of
+        # extra travel instead of ~1m -- i.e. they tiebreak among nearby frontiers rather
+        # than being irrelevant. Raise further if a mission ever spans more than 60m.
+        exploration.utility.dist_ref_m: 60.0
         exploration.utility.sensor_radius_m: 5.0
         exploration.utility.goal_select_threshold: -1.0e9
-        exploration.manager.merge_radius_m: 1.0
+        exploration.manager.merge_radius_m: 0.3
         exploration.manager.centroid_ema_alpha: 0.5
-        exploration.manager.visit_radius_m: 0.5
+        exploration.manager.visit_radius_m: 0.1
         exploration.manager.visit_dwell_sec: 3.0
         exploration.manager.verify_radius_cells: 2
         exploration.manager.max_frontiers: 1000
@@ -364,20 +374,32 @@ mighty_node:
         exploration.manager.pursuit_timeout_factor: 3.0
         exploration.manager.pursuit_timeout_v_ref: 0.5
         exploration.manager.pursuit_timeout_min_sec: 10.0
-        exploration.manager.invalidation_keep_out_radius_m: 1.0
-        exploration.manager.invalidation_cooldown_sec: 600.0
+        exploration.manager.invalidation_keep_out_radius_m: 0.3
+        exploration.manager.invalidation_cooldown_sec: 60.0
         exploration.visited_map.center_x: 0.0
         exploration.visited_map.center_y: 0.0
         exploration.visited_map.width_m: 100.0
         exploration.visited_map.height_m: 100.0
-        exploration.visited_map.resolution_m: 0.15
+        exploration.visited_map.resolution_m: 0.10
         exploration.visited_map.publish: true
         exploration.visited_map.fuse_into_local: true  # disabled to stop stale observations re-seeding phantom FREE inside closed rooms
         exploration.visited_map.detect_on_visited_map: true  # run frontier WFD on the persistent map so revisited corridors still surface their far-end frontier
-        # MinPos multi-robot frontier allocation. Solo HW today (RR04 only) so
-        # this no-ops to nearest-frontier when no peers are heard. Flip to true
-        # before running multi-rover HW so peers de-duplicate their frontiers.
-        exploration.minpos.enabled: true                   # [-] enable rank-based peer-aware allocation
+        # MinPos multi-robot frontier allocation: rank-based peer-aware assignment so
+        # several rovers de-duplicate their frontiers.
+        #
+        # DISABLED 2026-08-13. The previous comment here claimed this "no-ops to
+        # nearest-frontier when no peers are heard" -- it does not no-op, it swaps the
+        # SELECTOR. selectNextGoalMinPos() sorts candidates by (rank, distance, utility);
+        # solo, rank is 0 for everything, so the pick collapses to raw straight-line
+        # distance and utility is only consulted on an exact float tie (i.e. never).
+        # That silently bypasses the entire exploration.utility.* block above -- w_dist,
+        # w_heading, w_size, w_info and w_revisit all stop having any effect, which is
+        # not obvious from the parameter name or the old comment.
+        #
+        # With this false, selectNextGoal() picks argmax(utility) and those weights are
+        # live. Set it back to true before running multi-rover HW, and expect the utility
+        # weights to stop applying again when you do.
+        exploration.minpos.enabled: false                  # [-] enable rank-based peer-aware allocation
         exploration.minpos.peer_timeout_sec: 5.0            # [s] drop peer after this silence
         exploration.minpos.peer_publish_rate_hz: 5.0        # [Hz] pose broadcast throttle
         exploration.minpos.min_frontier_dist_to_peers_m: 3.0 # [m] reject frontier candidates within this radius of any active peer (0 disables)

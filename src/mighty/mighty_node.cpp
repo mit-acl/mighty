@@ -3402,8 +3402,8 @@ void MIGHTY_NODE::exploreSelectCallback() {
   if (manual_goal_active_) return;
   // Once a global return-home has been requested, stop issuing frontier goals
   // so the agent commits to going home and doesn't get yanked back out by a
-  // newly-detected frontier mid-return.
-  if (home_return_requested_) return;
+  // newly-detected frontier mid-return. The latch is released further down,
+  // once the trip has actually finished — see the return-home re-arm block.
   if (!occ_grid_2d_ || !frontier_manager_) return;
   if (!current_detect_grid_) return;
   if (!state_initialized_) return;
@@ -3422,6 +3422,31 @@ void MIGHTY_NODE::exploreSelectCallback() {
   state cur;
   mighty_ptr_->getState(cur);
   Eigen::Vector3d robot_pose(cur.pos.x(), cur.pos.y(), cur.yaw);
+
+  // --- Return-home re-arm ---------------------------------------------------
+  // home_return_requested_ commits the agent to its return trip so a frontier
+  // popping up mid-transit can't yank it back out. It used to be a one-way
+  // latch, which meant a single transient "no frontiers" tick ended the mission
+  // permanently: detection kept running and RViz kept drawing frontiers, but
+  // this callback short-circuited forever and no goal was ever issued again.
+  // The detector reaches frontiers only through free cells connected to the
+  // robot, so a momentary break in that connectivity is enough to trigger it.
+  //
+  // Release the latch once the trip has actually completed — the robot is
+  // parked within goal_radius of the captured start — so a new session can
+  // begin if frontiers remain. While still en route we keep the original
+  // commit-to-the-return behaviour and bail out.
+  if (home_return_requested_) {
+    const double d_home = (Eigen::Vector2d(cur.pos.x(), cur.pos.y())
+                           - exploration_start_pos_.head<2>()).norm();
+    if (d_home > par_.goal_radius) return;  // still en route — stay latched
+    home_return_requested_      = false;
+    exploration_start_captured_ = false;    // next goal opens a fresh session
+    RCLCPP_INFO(this->get_logger(),
+                "Exploration: return-home complete at (%.2f, %.2f) — re-arming; "
+                "will resume if frontiers reappear",
+                cur.pos.x(), cur.pos.y());
+  }
 
   // Multi-agent timing guard: peer-shared maps can populate frontiers before
   // this agent's own state has settled past the (0,0,0) default, causing the
