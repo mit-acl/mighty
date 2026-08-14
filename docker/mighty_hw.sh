@@ -72,7 +72,7 @@ usage() {
 }
 
 start() {
-    local odom_type=dlio two_d=true
+    local odom_type=dlio two_d=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --odom-type)  odom_type="${2:?--odom-type needs a value}"; shift ;;
