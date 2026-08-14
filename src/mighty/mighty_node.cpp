@@ -774,6 +774,9 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.manager.pursuit_timeout_min_sec", 10.0);
   this->declare_parameter("exploration.manager.invalidation_keep_out_radius_m", 1.5);
   this->declare_parameter("exploration.manager.invalidation_cooldown_sec", 30.0);
+  this->declare_parameter("exploration.manager.preempt_enabled", false);
+  this->declare_parameter("exploration.manager.preempt_margin", 2.0);
+  this->declare_parameter("exploration.manager.preempt_min_commit_sec", 2.0);
   this->declare_parameter("exploration.visited_map.center_x", 0.0);
   this->declare_parameter("exploration.visited_map.center_y", 0.0);
   this->declare_parameter("exploration.visited_map.width_m", 100.0);
@@ -1141,6 +1144,12 @@ void MIGHTY_NODE::setParameters() {
       this->get_parameter("exploration.manager.invalidation_keep_out_radius_m").as_double();
   par_.expl_invalidation_cooldown_sec =
       this->get_parameter("exploration.manager.invalidation_cooldown_sec").as_double();
+  par_.expl_preempt_enabled =
+      this->get_parameter("exploration.manager.preempt_enabled").as_bool();
+  par_.expl_preempt_margin =
+      this->get_parameter("exploration.manager.preempt_margin").as_double();
+  par_.expl_preempt_min_commit_sec =
+      this->get_parameter("exploration.manager.preempt_min_commit_sec").as_double();
   par_.expl_visited_map_center_x   = this->get_parameter("exploration.visited_map.center_x").as_double();
   par_.expl_visited_map_center_y   = this->get_parameter("exploration.visited_map.center_y").as_double();
   par_.expl_visited_map_width_m    = this->get_parameter("exploration.visited_map.width_m").as_double();
@@ -3409,12 +3418,66 @@ void MIGHTY_NODE::exploreSelectCallback() {
   if (!state_initialized_) return;
 
   // If we still have an in-progress exploration goal that hasn't been
-  // marked VISITED/INVALIDATED yet, leave it alone.
+  // marked VISITED/INVALIDATED yet, either leave it alone (legacy hard-commit)
+  // or — with preemption enabled — keep re-ranking every tick and switch when
+  // a different frontier beats the current one's FRESH utility by more than
+  // preempt_margin. Both utilities are recomputed against the robot's current
+  // pose and grid, so a frontier that was the right pick at commit time loses
+  // its seat once a newly-detected closer one overtakes it. The margin plus
+  // min-commit dwell provide hysteresis: with distance dominating the utility
+  // (w_dist/dist_ref_m = 1/m) a naive always-re-select would thrash between
+  // near-equal frontiers as the robot moves, resetting the planner each time.
   if (exploration_active_) {
     auto* r = frontier_manager_->find(current_explore_id_);
     if (r && (r->state == FrontierState::ACTIVE ||
               r->state == FrontierState::DORMANT)) {
-      return;
+      if (!par_.expl_preempt_enabled) return;
+
+      const double t_now = this->now().seconds();
+      if (explore_committed_at_t_ >= 0.0 &&
+          t_now - explore_committed_at_t_ < par_.expl_preempt_min_commit_sec) {
+        return;  // inside the commit dwell — no switching yet
+      }
+
+      state cur_p;
+      mighty_ptr_->getState(cur_p);
+      const Eigen::Vector3d pose_p(cur_p.pos.x(), cur_p.pos.y(), cur_p.yaw);
+
+      // Same selector the commit path below uses, so preemption and initial
+      // selection can never disagree about what "best" means.
+      std::optional<FrontierRecord> best;
+      if (par_.expl_use_minpos) {
+        auto peers = peer_tracker_.getActivePeers(
+            t_now, par_.expl_peer_timeout_sec);
+        best = frontier_manager_->selectNextGoalMinPos(
+            pose_p, *current_detect_grid_, peers,
+            par_.expl_min_frontier_dist_to_peers_m);
+      } else {
+        best = frontier_manager_->selectNextGoal(pose_p, *current_detect_grid_);
+      }
+      if (!best || best->id == current_explore_id_) return;
+
+      const auto u_cur = frontier_manager_->utilityOf(
+          current_explore_id_, pose_p, *current_detect_grid_);
+      if (!u_cur) return;  // record vanished between find() and here — next tick sorts it out
+      if (best->cached_utility < *u_cur + par_.expl_preempt_margin) return;
+
+      // Preempt: release the old pursuit WITHOUT invalidating it. Clearing
+      // the armed deadline matters — the pursuit-timeout sweep in update()
+      // fires on any ACTIVE/DORMANT record whose deadline elapsed, chased or
+      // not, and markSelected() refuses to re-arm an already-armed record.
+      // Without this clear, a frontier we merely glanced at gets blacklisted
+      // (plus its keep-out radius) minutes later for no reason.
+      RCLCPP_INFO(this->get_logger(),
+                  "Exploration: preempting frontier %lu (u=%.2f) for %lu "
+                  "(u=%.2f, margin %.2f)",
+                  static_cast<unsigned long>(current_explore_id_), *u_cur,
+                  static_cast<unsigned long>(best->id), best->cached_utility,
+                  par_.expl_preempt_margin);
+      frontier_manager_->clearPursuit(current_explore_id_);
+      exploration_active_ = false;
+      // Fall through to the normal selection path, which re-picks `best`
+      // (same selector, same inputs), publishes it, and arms its timeout.
     }
     // Otherwise (record gone or already terminal) fall through and pick a new one.
   }
@@ -3548,6 +3611,7 @@ void MIGHTY_NODE::exploreSelectCallback() {
 
   current_explore_id_       = next->id;
   exploration_active_       = true;
+  explore_committed_at_t_   = this->now().seconds();
   unreachable_consec_count_ = 0;
   frontier_manager_->markSelected(
       next->id, Eigen::Vector2d(robot_pose.x(), robot_pose.y()),

@@ -293,6 +293,7 @@ class MIGHTY_NODE : public rclcpp::Node {
   bool     manual_goal_active_     = false;  // user issued the current goal
   uint64_t current_explore_id_     = 0;
   int      unreachable_consec_count_ = 0;
+  double   explore_committed_at_t_ = -1.0;  // when current_explore_id_ was issued (preempt min-commit)
   Eigen::Vector3d exploration_start_pos_{0.0, 0.0, 0.0};
   bool exploration_start_captured_ = false;  // sticky for the whole exploration session
   rclcpp::TimerBase::SharedPtr timer_explore_select_;

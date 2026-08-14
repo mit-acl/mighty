@@ -423,6 +423,25 @@ void FrontierManager::markSelected(uint64_t id, const Eigen::Vector2d& robot_xy,
   }
 }
 
+void FrontierManager::clearPursuit(uint64_t id) {
+  for (auto& r : records_) {
+    if (r.id == id) {
+      r.pursuit_deadline_t = -1.0;
+      r.pursuit_budget_sec = 0.0;
+      return;
+    }
+  }
+}
+
+std::optional<double> FrontierManager::utilityOf(
+    uint64_t id, const Eigen::Vector3d& robot_pose,
+    const OccGrid2D& current_grid) const {
+  for (const auto& r : records_) {
+    if (r.id == id) return computeUtility(r, robot_pose, current_grid);
+  }
+  return std::nullopt;
+}
+
 const FrontierRecord* FrontierManager::find(uint64_t id) const {
   for (const auto& r : records_) {
     if (r.id == id) return &r;

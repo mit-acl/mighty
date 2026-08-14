@@ -159,6 +159,23 @@ class FrontierManager {
    */
   void markSelected(uint64_t id, const Eigen::Vector2d& robot_xy, double t_now);
 
+  /** @brief Release a pursuit without invalidating the record.
+   *  Clears the armed deadline/budget so the pursuit-timeout sweep in update()
+   *  doesn't later blacklist a frontier nobody is chasing anymore. Used by
+   *  goal preemption when the selector switches to a better frontier mid-run.
+   *  The record itself stays ACTIVE/DORMANT and can be re-selected (and
+   *  re-armed by markSelected) at any time.
+   */
+  void clearPursuit(uint64_t id);
+
+  /** @brief Utility of a specific record against the CURRENT robot pose/grid.
+   *  Same scoring as selectNextGoal(). nullopt if the id is unknown. Used by
+   *  goal preemption to compare the in-flight goal against a fresh candidate.
+   */
+  std::optional<double> utilityOf(uint64_t id,
+                                  const Eigen::Vector3d& robot_pose,
+                                  const OccGrid2D& current_grid) const;
+
   const FrontierRecord* find(uint64_t id) const;
   const std::vector<FrontierRecord>& records() const { return records_; }
   const FrontierManagerParams& params() const { return params_; }

@@ -361,6 +361,14 @@ struct parameters {
   // window. Set radius_m <= 0 to disable; cooldown_sec <= 0 = permanent.
   double expl_invalidation_keep_out_radius_m{1.5};
   double expl_invalidation_cooldown_sec{30.0};
+  // Goal preemption — while pursuing a frontier, keep re-ranking on each
+  // select tick and switch when a different frontier beats the current one's
+  // FRESH utility by more than margin. With w_dist/dist_ref_m = 1.0/m the
+  // margin is effectively meters-of-advantage. min_commit_sec suppresses
+  // thrash right after a switch. Disabled by default (legacy hard-commit).
+  bool   expl_preempt_enabled{false};
+  double expl_preempt_margin{2.0};
+  double expl_preempt_min_commit_sec{2.0};
   // Persistent visited bitmap (suppresses re-detection of revisited frontiers)
   double expl_visited_map_center_x{0.0};
   double expl_visited_map_center_y{0.0};
