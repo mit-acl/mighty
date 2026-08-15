@@ -286,6 +286,22 @@ bool HGPManager::solveHGP(const Vec3f& start_sent, const Vec3f& start_vel, const
   // Set collision checking function
   planner_ptr_->setMapUtil(map_util_for_planning_);
 
+  // Perception-aware planning: hand the planner the current tristate belief and
+  // the enable flag. It only takes effect in 2D ground-robot mode with a belief
+  // present (perceptionAwareActive()); otherwise this is a no-op and the standard
+  // grid search runs. The belief is the same occ_2d source the 2D map is built
+  // from, but tristate (FREE/OCC/UNK) as the coverage invariant needs.
+  {
+    const bool pa_enable = par_.perception_aware_planning && is_ground_robot_ && par_.use_2d_planning;
+    hgp::PerceptionParams pparams;
+    pparams.res = res_;  // = par_.res (planPerceptionAware re-aligns to the belief's own res)
+    if (par_.drone_bbox.size() >= 2) {
+      const double bx = par_.drone_bbox[0], by = par_.drone_bbox[1];
+      pparams.robot_radius = 0.5 * (bx > by ? bx : by);
+    }
+    planner_ptr_->configurePerceptionAware(pa_enable, occ_grid_2d_, pparams);
+  }
+
   // HGP Plan
   bool result = false;
 
