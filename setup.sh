@@ -184,7 +184,9 @@ if [ ! -d "$MIGHTY_WS/src/mighty" ]; then
 else
     echo "MIGHTY already exists, updating..."
     cd "$MIGHTY_WS/src/mighty"
-    git fetch
+    # Non-fatal: an SSH remote whose key is not registered (or no network) must not
+    # abort provisioning -- the existing checkout is already usable.
+    git fetch || echo "WARNING: could not fetch MIGHTY updates (check SSH keys / network); continuing with the existing checkout."
 fi
 
 # Import all dependencies using mighty.repos

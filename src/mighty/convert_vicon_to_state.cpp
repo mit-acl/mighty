@@ -22,6 +22,37 @@ PoseTwistToStateNode::PoseTwistToStateNode() : Node("pose_twist_to_state_node") 
   rclcpp::QoS state_qos(rclcpp::KeepLast(1));
   state_qos.reliable().durability_volatile();
   pub_state_ = this->create_publisher<dynus_interfaces::msg::State>("state", state_qos);
+
+  // 2D-only z pinning (see header). Off by default so nothing changes for
+  // vehicles that actually move in z.
+  this->declare_parameter("two_d_only", false);
+  this->declare_parameter("two_d_init_samples", 50);
+  two_d_only_ = this->get_parameter("two_d_only").as_bool();
+  two_d_init_samples_ = static_cast<int>(this->get_parameter("two_d_init_samples").as_int());
+  if (two_d_only_) {
+    RCLCPP_INFO(this->get_logger(),
+                "2D-only mode: mocap z will be pinned to the average of the first %d sample(s)",
+                two_d_init_samples_ > 0 ? two_d_init_samples_ : 1);
+  }
+}
+
+double PoseTwistToStateNode::effectivePublishZ(double raw_z) {
+  if (!two_d_only_) return raw_z;
+  if (two_d_z_locked_) return two_d_z_const_;
+
+  two_d_z_sum_ += raw_z;
+  two_d_z_count_ += 1;
+
+  const int needed = two_d_init_samples_ > 0 ? two_d_init_samples_ : 1;
+  if (two_d_z_count_ >= needed) {
+    two_d_z_const_ = two_d_z_sum_ / static_cast<double>(two_d_z_count_);
+    two_d_z_locked_ = true;
+    RCLCPP_INFO(this->get_logger(), "2D-only: pinned z to %.4f m (average of %d mocap sample(s))",
+                two_d_z_const_, two_d_z_count_);
+    return two_d_z_const_;
+  }
+  // Still collecting: publish the running average so z is already smooth.
+  return two_d_z_sum_ / static_cast<double>(two_d_z_count_);
 }
 
 void PoseTwistToStateNode::callback(
@@ -35,12 +66,14 @@ void PoseTwistToStateNode::callback(
   // Set position from PoseStamped
   state_msg.pos.x = pose_msg->pose.position.x;
   state_msg.pos.y = pose_msg->pose.position.y;
-  state_msg.pos.z = pose_msg->pose.position.z;
+  state_msg.pos.z = effectivePublishZ(pose_msg->pose.position.z);
 
   // Set velocity from TwistStamped
   state_msg.vel.x = twist_msg->twist.linear.x;
   state_msg.vel.y = twist_msg->twist.linear.y;
-  state_msg.vel.z = twist_msg->twist.linear.z;
+  // A pinned z is constant, so its derivative must be zero — leaving the raw
+  // vertical velocity would hand the planner a state that contradicts itself.
+  state_msg.vel.z = two_d_only_ ? 0.0 : twist_msg->twist.linear.z;
 
   // Set orientation from PoseStamped
   state_msg.quat.x = pose_msg->pose.orientation.x;

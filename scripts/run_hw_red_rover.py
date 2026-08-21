@@ -26,6 +26,9 @@ Usage:
     # downstream map) live in mocap world coords from the first scan.
     python3 scripts/run_hw_red_rover.py --odom-type dlio_in_mocap
 
+    # Mocap with z pinned to a constant (flat 2D environments)
+    python3 scripts/run_hw_red_rover.py --odom-type mocap_in_two_d
+
     # Mocap with diagonal goal type 2
     python3 scripts/run_hw_red_rover.py --odom-type mocap --goal-type 2
 
@@ -47,6 +50,9 @@ from pathlib import Path
 MIGHTY_WS = Path('/home/swarm/code/mighty_ws')
 SETUP_BASH = MIGHTY_WS / 'install' / 'setup.bash'
 DECOMP_SETUP_BASH = Path('/home/swarm/code/decomp_ws/install/setup.bash')
+# livox_ros_driver2 is built in its own workspace (setup.sh moves it out of
+# mighty_ws/src), so mighty_ws's setup.bash does not expose it.
+LIVOX_SETUP_BASH = Path('/home/swarm/code/livox_ws/install/setup.bash')
 
 
 def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
@@ -56,16 +62,25 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
     source_ws = f'source {SETUP_BASH}'
     timestamp = datetime.now().strftime('%Y%m%d%H%M')
 
+    # `mocap_in_two_d` is plain mocap with one knob flipped: convert_vicon_to_state
+    # pins the published z to a constant (the average of its first samples) instead
+    # of passing mocap's raw z through. Mocap z is the noisiest axis for a rover
+    # that never leaves the floor, and that noise reaches the planner state.
+    # Same idea as DLIO's --two-d-only; everything else is identical to `mocap`.
+    is_mocap = odom_type in ('mocap', 'mocap_in_two_d')
+    mocap_two_d = odom_type == 'mocap_in_two_d'
+
     # Mighty launch: mocap vs DLIO differ in use_onboard_localization and twist_topic.
     # `dlio_in_mocap` is a DLIO setup with one knob flipped (the DLIO seed),
     # so the mighty side is identical to plain `dlio`.
-    if odom_type == 'mocap':
+    if is_mocap:
         mighty_cmd = (
             f'ros2 launch mighty onboard_mighty.launch.py'
             f' x:=0.0 y:=0.0 z:=0.0 yaw:=0.0 namespace:={rover_name}'
             f' use_hardware:=true'
             f' use_onboard_localization:=false robot_type:=red_rover'
             f' depth_camera_name:=d455 twist_topic:=mocap/twist'
+            f' mocap_two_d_only:={"true" if mocap_two_d else "false"}'
         )
     else:  # 'dlio' or 'dlio_in_mocap'
         mighty_cmd = (
@@ -76,17 +91,26 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
             f' depth_camera_name:=d455'
         )
 
-    # DLIO pane: replaced by static TFs when using mocap; in `dlio_in_mocap`
-    # mode DLIO runs as usual but is told to seed its initial pose from the
-    # mocap PoseStamped on `<ns>/world`, so its odom frame is anchored to the
-    # mocap world from the first scan.
-    if odom_type == 'mocap':
-        dlio_cmd = (
-            f'ros2 run tf2_ros static_transform_publisher'
-            f' --frame-id {rover_name} --child-frame-id {rover_name}/base_link'
-            f' & ros2 run tf2_ros static_transform_publisher'
-            f' --frame-id world --child-frame-id {rover_name}/map'
-        )
+    # Localization panes. With DLIO running, DLIO itself publishes
+    # <ns>/odom -> <ns>/base_link, which is what joins the body frames to the
+    # rest of the tree. In mocap mode DLIO is not run, so that link is missing
+    # and the tree falls apart into three disconnected components:
+    #
+    #   world -> <ns>                     (from mocap)
+    #   <ns>/map -> <ns>/odom             (static TF pane below)
+    #   <ns>/base_link -> lidar, d455 ... (sensor TFs)
+    #
+    # Two identity static TFs stitch them into one tree rooted at `world`:
+    #
+    #   <ns>       -> <ns>/base_link   mocap body frame IS the robot body frame
+    #   world      -> <ns>/map         mocap world frame IS the planner map frame
+    #
+    # base_link's parent becomes <ns> (not <ns>/odom) — every frame still has
+    # exactly one parent, and map->base_link resolves by routing up through
+    # `world`. Each publisher gets its own pane so a failure is visible and can
+    # be restarted individually.
+    if is_mocap:
+        dlio_cmd = None
     elif odom_type == 'dlio_in_mocap':
         dlio_cmd = (
             f'ros2 launch direct_lidar_inertial_odometry dlio.launch.py'
@@ -103,7 +127,7 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
     # Global mapper: mocap uses pose_stamped on "world", DLIO (and dlio_in_mocap)
     # use dlio/odom_node/pose. Same mapper config in both DLIO modes — the
     # difference is solely whether DLIO's frame is anchored to mocap or to (0,0,0).
-    if odom_type == 'mocap':
+    if is_mocap:
         mapper_cmd = (
             f'ros2 launch global_mapper_ros global_mapper_node.launch.py'
             f' hardware:=true ground_robot:=true quad:={rover_name}'
@@ -125,9 +149,37 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
         f'ros2 run mighty goal_monitor_node.py --ros-args'
         f' -r __ns:=/{rover_name}'
         f' -p use_hardware:=true -p use_ground_robot:=true'
-        f' -p odom_type:={odom_type} -p goal_type:={goal_type}'
+        f' -p odom_type:={"mocap" if is_mocap else odom_type} -p goal_type:={goal_type}'
         f' -p goal_tolerance:=1.0 -p num_agents:=1 -p radius:=10.0'
     )
+
+    if is_mocap:
+        localization_panes = [
+            {
+                'shell_command': [
+                    source_ws,
+                    f'ros2 run tf2_ros static_transform_publisher'
+                    f' --frame-id {rover_name} --child-frame-id {rover_name}/base_link',
+                ]
+            },
+            {
+                'shell_command': [
+                    source_ws,
+                    f'ros2 run tf2_ros static_transform_publisher'
+                    f' --frame-id world --child-frame-id {rover_name}/map',
+                ]
+            },
+        ]
+    else:
+        localization_panes = [
+            {
+                'shell_command': [
+                    source_ws,
+                    'sleep 5',
+                    dlio_cmd,
+                ]
+            },
+        ]
 
     panes = [
         # Onboard mighty
@@ -139,20 +191,15 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
             ]
         },
         # Livox LiDAR
-        {
-            'shell_command': [
-                source_ws,
-                f'ros2 launch livox_ros_driver2 run_MID360_launch.py namespace:={rover_name}',
-            ]
-        },
-        # DLIO (dlio mode) or static TFs (mocap mode)
-        {
-            'shell_command': [
-                source_ws,
-                'sleep 5',
-                dlio_cmd,
-            ]
-        },
+        # {
+        #     'shell_command': [
+        #         source_ws,
+        #         f'source {LIVOX_SETUP_BASH}',
+        #         f'ros2 launch livox_ros_driver2 run_MID360_launch.py namespace:={rover_name}',
+        #     ]
+        # },
+        # DLIO (dlio / dlio_in_mocap) or the two identity static TFs (mocap)
+        *localization_panes,
         # Republish rviz 2D goal to term goal
         {
             'shell_command': [
@@ -161,13 +208,13 @@ def generate_yaml(odom_type: str, rover_name: str, goal_type: int,
             ]
         },
         # Static TF (lidar tilt)
-        {
-            'shell_command': [
-                source_ws,
-                'sleep 5',
-                f'ros2 run tf2_ros static_transform_publisher 0 0 0 0 0.3490659 0 {rover_name}/base_link {rover_name}/lidar',
-            ]
-        },
+        # {
+        #     'shell_command': [
+        #         source_ws,
+        #         'sleep 5',
+        #         f'ros2 run tf2_ros static_transform_publisher 0 0 0 0 0.3490659 0 {rover_name}/base_link {rover_name}/lidar',
+        #     ]
+        # },
         # Static TF (odom to map)
         {
             'shell_command': [
@@ -229,11 +276,13 @@ def main():
 
     parser.add_argument(
         '--odom-type', '-o',
-        choices=['dlio', 'mocap', 'dlio_in_mocap'],
+        choices=['dlio', 'mocap', 'mocap_in_two_d', 'dlio_in_mocap'],
         default='dlio',
         help='Localization source (default: dlio). dlio_in_mocap = DLIO seeds '
              'its initial pose from one mocap PoseStamped on /<ns>/world, so '
-             'its odom frame is anchored to mocap world from the first scan.',
+             'its odom frame is anchored to mocap world from the first scan. '
+             'mocap_in_two_d = mocap with the published z pinned to a constant '
+             '(average of the first samples), for flat 2D environments.',
     )
 
     parser.add_argument(
@@ -271,9 +320,11 @@ def main():
 
     print(f'[INFO] Odom type: {args.odom_type}')
     print(f'[INFO] Rover: {rover_name}')
-    if args.odom_type == 'mocap':
+    if args.odom_type in ('mocap', 'mocap_in_two_d'):
         print(f'[INFO] Goal type: {args.goal_type}')
-    if args.two_d_only and args.odom_type != 'mocap':
+    if args.odom_type == 'mocap_in_two_d':
+        print('[INFO] Mocap 2D-only: ON (z pinned to the average of the first 50 samples)')
+    if args.two_d_only and args.odom_type not in ('mocap', 'mocap_in_two_d'):
         print('[INFO] DLIO 2D-only output: ON (z pinned to constant)')
 
     if args.dry_run:

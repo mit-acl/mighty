@@ -45,6 +45,7 @@ def generate_launch_description():
     sim_env_arg = DeclareLaunchArgument('sim_env', default_value='', description='Simulation environment: gazebo or fake_sim (empty = use mighty.yaml default)')
     use_ground_robot_arg = DeclareLaunchArgument('use_ground_robot', default_value='false', description='Enable ground robot mode (spawns p3at, uses cmd_vel control)')
     use_onboard_localization_arg = DeclareLaunchArgument('use_onboard_localization', default_value='false', description='Use onboard localization (DLIO) vs Vicon')
+    mocap_two_d_only_arg = DeclareLaunchArgument('mocap_two_d_only', default_value='false', description='Pin the mocap z to a constant (flat 2D environments); mirrors DLIO two_d_only')
     depth_camera_name_arg = DeclareLaunchArgument('depth_camera_name', default_value='d435', description='Depth camera name for topic remapping')
     robot_type_arg = DeclareLaunchArgument('robot_type', default_value='quadrotor', description='Robot type: quadrotor, red_rover, star_robot')
     num_agents_arg = DeclareLaunchArgument('num_agents', default_value='10', description='Number of agents (for frame alignment subscriptions)')
@@ -235,6 +236,10 @@ def generate_launch_description():
             executable='convert_vicon_to_state',
             name='convert_vicon_to_state',
             namespace=namespace,
+            parameters=[{
+                'two_d_only': convert_str_to_bool(LaunchConfiguration('mocap_two_d_only').perform(context)),
+                'two_d_init_samples': 50,
+            }],
             remappings=[
                 ('world', 'world'),        # Remap incoming PoseStamped topic
                 ('twist', twist_topic),     # Remap incoming TwistStamped topic (e.g., mocap/twist)
@@ -376,6 +381,7 @@ def generate_launch_description():
         sim_env_arg,
         use_ground_robot_arg,
         use_onboard_localization_arg,
+        mocap_two_d_only_arg,
         depth_camera_name_arg,
         robot_type_arg,
         num_agents_arg,

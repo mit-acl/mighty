@@ -37,6 +37,25 @@ class PoseTwistToStateNode : public rclcpp::Node {
   void callback(const std::shared_ptr<const geometry_msgs::msg::PoseStamped>& pose_msg,
                 const std::shared_ptr<const geometry_msgs::msg::TwistStamped>& twist_msg);
 
+  /** @brief Return the z to publish, pinned to a constant when two_d_only_ is set.
+   *  @param raw_z The z straight from the mocap PoseStamped.
+   */
+  double effectivePublishZ(double raw_z);
+
+  // 2D-only z pinning. Mocap z is the noisiest axis for a ground robot that
+  // never leaves the floor, and that noise propagates into the planner state.
+  // When two_d_only_ is set, the published z is the average of the first
+  // two_d_init_samples_ samples and then held constant for the rest of the run
+  // (two_d_init_samples_ <= 0 locks on the very first sample). Mirrors DLIO's
+  // output/twoDOnly. No mutex: the sync callback is the only writer and the
+  // node spins single-threaded.
+  bool   two_d_only_{false};
+  int    two_d_init_samples_{50};
+  bool   two_d_z_locked_{false};
+  double two_d_z_const_{0.0};
+  double two_d_z_sum_{0.0};
+  int    two_d_z_count_{0};
+
   // Synchronized subscription
   message_filters::Subscriber<geometry_msgs::msg::PoseStamped> sub_pose_;
   message_filters::Subscriber<geometry_msgs::msg::TwistStamped> sub_twist_;

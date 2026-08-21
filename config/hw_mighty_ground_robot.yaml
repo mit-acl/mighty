@@ -326,7 +326,7 @@ mighty_node:
         # --- Frontier-Based Exploration ---
         # Hardware default: OFF. Flip exploration.enabled to true to autonomously
         # drive to frontiers detected on occ_2d_topic. See plan: snazzy-moseying-donut.md
-        exploration.enabled: true
+        exploration.enabled: false
         exploration.select_rate_hz: 1.0
         exploration.default_goal_z: 0.0
         exploration.detector.cluster_min_cells: 10
