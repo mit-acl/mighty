@@ -97,7 +97,7 @@ mighty_node:
         goal_seen_radius: 2.0                           # [m] Distance to stop replanning
 
         # --- L-BFGS Optimization Weights ---
-        dynamic_weight: 1e+2                            # [-] Dynamic obstacle avoidance weight
+        dynamic_weight: 5e+1                            # [-] Dynamic obstacle avoidance weight
         time_weight: 1e+3                               # [-] Time cost weight
         stat_weight: 0.0                                # [-] Static obstacle weight
         jerk_weight: 1e+4                               # [-] Jerk smoothness weight
