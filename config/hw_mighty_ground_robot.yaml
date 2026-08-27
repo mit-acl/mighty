@@ -109,18 +109,18 @@ mighty_node:
 
         # --- Safety Corridors ---
         local_box_size: [1.0, 1.0, 0.5]                # [m] Local planning window (smaller = faster, larger = smoother)
-        traj_lifetime: 10.0                              # [s] Discard obstacle trajectories older than this
+        traj_lifetime: 20.0                              # [s] Discard obstacle trajectories older than this
 
         # --- Dynamic Obstacle Heat (soft costs) ---
         heat_alpha0: 0.5                                # [-] Weight for reachability blob (smaller for ground robot)
         heat_alpha1: 1.3                                # [-] Weight for trajectory tube
-        heat_Hmax: 8.0                                  # [-] Maximum dynamic heat value
+        heat_Hmax: 7.0                                  # [-] Maximum dynamic heat value
         dyn_base_inflation_m: 0.8                       # [m] Base inflation for dynamic obstacle bboxes
         dyn_heat_tube_radius_m: 2.0                     # [m] Heat corridor radius (tighter for ground robot)
 
         # --- Static Obstacle Heat (boundary halo) ---
         static_heat_alpha: 1.0                           # [-] Peak heat at obstacle boundary
-        static_heat_Hmax: 1.0                           # [-] Maximum static heat value
+        static_heat_Hmax: 10.0                           # [-] Maximum static heat value
         static_heat_rmax_m: 1.0                         # [m] Maximum halo radius
 
         # --- Obstacle Tracking ---
