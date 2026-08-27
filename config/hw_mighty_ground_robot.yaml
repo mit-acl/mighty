@@ -58,7 +58,7 @@ mighty_node:
         g: 9.81                                         # [m/s^2] Gravitational acceleration
 
         # --- Trajectory Segments ---
-        num_N: 7                                        # [-] Number of trajectory pieces for local optimization
+        num_N: 5                                        # [-] Number of trajectory pieces for local optimization
 
         # --- Map Bounds ---
         x_min: -1000.0                                  # [m] Map x lower bound
@@ -113,10 +113,10 @@ mighty_node:
 
         # --- Dynamic Obstacle Heat (soft costs) ---
         heat_alpha0: 0.5                                # [-] Weight for reachability blob (smaller for ground robot)
-        heat_alpha1: 0.8                                # [-] Weight for trajectory tube
-        heat_Hmax: 10.0                                  # [-] Maximum dynamic heat value
+        heat_alpha1: 1.1                                # [-] Weight for trajectory tube
+        heat_Hmax: 5.0                                  # [-] Maximum dynamic heat value
         dyn_base_inflation_m: 0.8                       # [m] Base inflation for dynamic obstacle bboxes
-        dyn_heat_tube_radius_m: 3.0                     # [m] Heat corridor radius (tighter for ground robot)
+        dyn_heat_tube_radius_m: 2.0                     # [m] Heat corridor radius (tighter for ground robot)
 
         # --- Static Obstacle Heat (boundary halo) ---
         static_heat_alpha: 1.0                           # [-] Peak heat at obstacle boundary
@@ -152,7 +152,7 @@ mighty_node:
         free_goal_factor: 2.0                           # [-] Radius factor for goal freeing
         global_planner_heuristic_weight: 1.0             # [-] A* heuristic weight (higher = greedier)
         heat_weight: 5.0                                # [-] Overall heat map weight in A* cost
-        max_dist_vertexes: 0.5                          # [m] Max distance between path vertices
+        max_dist_vertexes: 1.0                          # [m] Max distance between path vertices
         w_unknown: 1.0                                  # [-] Cost weight for unknown cells
         w_align: 0.0                                    # [-] Cost weight for alignment with initial velocity
         decay_len_cells: 100.0                          # [-] Decay length for alignment cost
