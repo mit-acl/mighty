@@ -165,6 +165,7 @@ ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   scripts/goal_sender.py
   scripts/goal_monitor_node.py
+  scripts/goal_monitor_central_node.py
   scripts/generate_random_forest.py
   benchmarking/unc_benchmark_node.py
   scripts/repub_rviz_2Dgoal.py

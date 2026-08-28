@@ -48,6 +48,43 @@ def generate_launch_description():
         default_value='0.0',
         description='Angular offset in radians for circle positions (e.g. 0.7854 for 45 deg)'
     )
+    mode_arg = DeclareLaunchArgument(
+        'mode',
+        default_value='legacy',
+        description='legacy: one goal_monitor_node per agent (endless swap); '
+                    'exchange/random: single central coordinator with synchronized rounds'
+    )
+    num_cycles_arg = DeclareLaunchArgument(
+        'num_cycles',
+        default_value='0',
+        description='exchange/random: number of cycles (exchange: out + back = 1 cycle; '
+                    'random: 1 round = 1 cycle); <= 0 runs forever'
+    )
+    clockwise_arg = DeclareLaunchArgument(
+        'clockwise',
+        default_value='true',
+        description='exchange/random: number agents clockwise along the circle (JR '
+                    'hardware convention); false matches the CCW sim spawn convention'
+    )
+    seed_arg = DeclareLaunchArgument(
+        'seed',
+        default_value='-1',
+        description='random mode RNG seed; < 0 for nondeterministic'
+    )
+    state_source_arg = DeclareLaunchArgument(
+        'state_source',
+        default_value='state',
+        description='exchange/random: where agent positions come from — state: '
+                    'dynus_interfaces/State on /<ns>/state; world: '
+                    'geometry_msgs/PoseStamped on /<ns>/world (raw mocap)'
+    )
+    list_agents_arg = DeclareLaunchArgument(
+        'list_agents',
+        default_value='',
+        description='exchange/random: explicit comma-separated agent list (e.g. '
+                    '"JR01,JR02,RR03") overriding agent_prefix/num_agents; '
+                    'list order = clockwise slot order, first agent at angle_offset'
+    )
 
     def launch_setup(context):
         prefix = LaunchConfiguration('agent_prefix').perform(context)
@@ -57,6 +94,38 @@ def generate_launch_description():
         radius = float(LaunchConfiguration('radius').perform(context))
         use_ground_robot = LaunchConfiguration('use_ground_robot').perform(context)
         angle_offset = float(LaunchConfiguration('angle_offset').perform(context))
+        mode = LaunchConfiguration('mode').perform(context).lower()
+
+        # Central coordinator: one node driving all agents in synchronized rounds
+        if mode in ('exchange', 'random'):
+            return [
+                Node(
+                    package='mighty',
+                    executable='goal_monitor_central_node.py',
+                    name='goal_monitor_central_node',
+                    output='screen',
+                    parameters=[{
+                        'mode': mode,
+                        'agent_prefix': prefix,
+                        'num_agents': num_agents,
+                        'radius': radius,
+                        'angle_offset': angle_offset,
+                        'clockwise': LaunchConfiguration('clockwise').perform(context).lower() in ('true', '1'),
+                        'num_cycles': int(LaunchConfiguration('num_cycles').perform(context)),
+                        'goal_tolerance': float(goal_tolerance),
+                        'use_hardware': use_hardware.lower() in ('true', '1'),
+                        'use_ground_robot': use_ground_robot.lower() in ('true', '1'),
+                        'seed': int(LaunchConfiguration('seed').perform(context)),
+                        'state_source': LaunchConfiguration('state_source').perform(context).lower(),
+                        'list_agents': LaunchConfiguration('list_agents').perform(context),
+                    }]
+                )
+            ]
+
+        if mode != 'legacy':
+            raise RuntimeError(
+                f"goal_monitor.launch.py: invalid mode '{mode}' "
+                f"(expected legacy, exchange, or random)")
 
         namespaces = [f'{prefix}{i:02d}' for i in range(1, num_agents + 1)]
 
@@ -89,5 +158,11 @@ def generate_launch_description():
         num_agents_arg,
         radius_arg,
         angle_offset_arg,
+        mode_arg,
+        num_cycles_arg,
+        clockwise_arg,
+        seed_arg,
+        state_source_arg,
+        list_agents_arg,
         OpaqueFunction(function=launch_setup),
     ])

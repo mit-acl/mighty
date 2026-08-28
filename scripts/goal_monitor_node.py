@@ -80,17 +80,9 @@ class GoalMonitorNode(Node):
                     f"HW ground robot DLIO goals: "
                     f"{self.goal_points[0]} <-> {self.goal_points[1]}")
 
-        # Simulation: circle formation swap
-        elif self.namespace.startswith('NX'):
+        # Circle formation swap (NX sim drones, RR/JR hardware rovers)
+        elif self.namespace[:2] in ('NX', 'RR', 'JR') and self.namespace[2:].isdigit():
             agent_index = int(self.namespace[2:])  # NX01 -> 1
-            own_x, own_y, _, opp_x, opp_y, _ = circle_position(agent_index, num_agents, radius, z=z, angle_offset=angle_offset)
-            self.goal_points = [[opp_x, opp_y, z], [own_x, own_y, z]]
-            self.get_logger().info(
-                f"Circle swap goals (N={num_agents}, R={radius}): "
-                f"start ({own_x},{own_y}) <-> opposite ({opp_x},{opp_y})")
-
-        elif self.namespace.startswith('RR'):
-            agent_index = int(self.namespace[2:])  # RR01 -> 1
             own_x, own_y, _, opp_x, opp_y, _ = circle_position(agent_index, num_agents, radius, z=z, angle_offset=angle_offset)
             self.goal_points = [[opp_x, opp_y, z], [own_x, own_y, z]]
             self.get_logger().info(
