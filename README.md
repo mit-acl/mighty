@@ -14,6 +14,10 @@ If you like this project, please consider starring ⭐ the repo!
 
 <video src="https://github.com/user-attachments/assets/15bed70e-f922-44c7-9df2-51693ad33bb7" width="100%" autoplay loop muted playsinline controls></video>
 
+**Multi-Robot Ground Exploration** — three Pioneer 3-ATs explore an unknown office together. Each drives to the frontier it is best placed for — the one with the fewest teammates closer to it — and shares its map as it goes, so they divide the space instead of re-covering each other's ground:
+
+<video src="https://github.com/user-attachments/assets/REPLACE-WITH-ASSET-ID" width="100%" autoplay loop muted playsinline controls></video>
+
 | **Trajectory** | **Forest** |
 | ------------------------- | ------------------------- |
 <a target="_blank" href="https://youtu.be/Pvb-VPUdLvg"><img src="./imgs/mighty_gifs_complex_benchmarks.gif" width="360" height="240" alt="Complex Benchmarks"></a> | <a target="_blank" href="https://youtu.be/Pvb-VPUdLvg"><img src="./imgs/mighty_gifs_hard_forest.gif" width="360" height="240" alt="Static Forest"></a> |
@@ -63,9 +67,12 @@ workspace is built and run from `~/code/mighty_ws`; Docker commands run from
 | Scenario | Native | Docker |
 |----------|--------|--------|
 | **Ground robot, autonomous exploration** (Pioneer 3-AT explores `ACL_office` and returns to its start) | `python3 src/mighty/scripts/run_sim.py --mode exploration-singleagent-ground -s ~/code/mighty_ws/install/setup.bash` | `make run-ground-exploration` |
+| **Ground robots, multi-robot exploration** (3 Pioneer 3-ATs divide `ACL_office` via MinPos) | `python3 src/mighty/scripts/run_sim.py --mode exploration-multiagent-ground -s ~/code/mighty_ws/install/setup.bash` | `make run-multiagent-ground-exploration` |
 | Ground robot in a forest world | `python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot -s ~/code/mighty_ws/install/setup.bash` | `make run-ground-robot` |
 | Single UAV, goals clicked in RViz | `python3 src/mighty/scripts/run_sim.py --mode interactive -s ~/code/mighty_ws/install/setup.bash` | `make run-interactive` |
 | Multi-agent UAVs swapping on a circle | `python3 src/mighty/scripts/run_sim.py --mode multiagent -s ~/code/mighty_ws/install/setup.bash` | `make run-multiagent` |
+| **Ground robots swapping on a circle, no Gazebo** (10 Pioneer 3-ATs exchange antipodal positions in RViz; full planner→MPC→unicycle chain; ≥ 1 m separation floor) | `python3 src/mighty/scripts/run_sim.py --mode multiagent-ground-fake -s ~/code/mighty_ws/install/setup.bash` | `make run-ground-swap-fake` |
+| **Ground robots swapping on a circle, Gazebo + sensorless models** (same exchange, real P3AT models rendered in RViz; `--goal-pattern random_slot` for continuous traffic) | `python3 src/mighty/scripts/run_sim.py --mode multiagent-ground-gazebo -s ~/code/mighty_ws/install/setup.bash` | `make run-ground-swap` |
 | Single UAV through a Gazebo forest | `python3 src/mighty/scripts/run_sim.py --mode gazebo -s ~/code/mighty_ws/install/setup.bash` | `make run-gazebo` |
 
 Useful flags (native): `--no-rviz` for headless, `--env <world>` to pick a world,
@@ -144,6 +151,9 @@ tree. Override the tag with `make build MIGHTY_VERSION=v0.0.7`.
   # Test uncommitted C++ against the image
   make build-local
   make run-ground-exploration
+
+# Multi-robot: 3 ground robots dividing the map via MinPos
+make run-multiagent-ground-exploration
   ```
 
   `build-local` reuses every cached dependency layer and recompiles only the
@@ -199,7 +209,10 @@ In `run-interactive` mode, send goals from the RViz2 toolbar:
   | `make run-interactive` | Run single agent with manual goal (RViz2 2D Goal Pose) | - |
   | `make run-multiagent` | Run multi-agent aerial simulation (agents swap positions on a circle) | `NUM_AGENTS` (default: 10) |
   | `make run-gazebo` | Run single-agent Gazebo simulation | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` — all optional; unset means the same defaults as the native command (hard_forest, goal 305 0 3) |
+  | `make run-ground-swap` | 10 ground robots exchanging positions in Gazebo (sensorless P3AT models, ≥ 1 m separation floor) | `NUM_AGENTS`, `GOAL_PATTERN` (`random_slot`), `GOAL_STAGGER`, `RADIUS`, `MPC_RATE`, `MPC_HORIZON` — all optional, native defaults when unset |
+  | `make run-ground-swap-fake` | Same exchange without Gazebo (colored boxes in RViz — lightest variant) | same as `run-ground-swap` |
   | `make run-mac` | Run multi-agent aerial simulation on Mac (Xpra, browser at localhost:8080) | `NUM_AGENTS` (default: 10) |
+  | `make run-mac-ground-swap` | Ground swap on Mac (Xpra, browser at localhost:8080) | `NUM_AGENTS`, `GOAL_PATTERN`, `GOAL_STAGGER`, `RADIUS` |
   | `make run-mac-interactive` | Run single agent on Mac with manual goal (Xpra, browser at localhost:8080) | - |
   | `make run-mac-gazebo` | Run Gazebo on Mac (Xpra) | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
   | `make shell` | Open interactive shell for debugging | - |
@@ -511,21 +524,161 @@ Use RViz2's **"2D Goal Pose"** tool to send goals and confirm the planner is run
 
 ---
 
-## Ground Robot Simulation (Single Agent)
+## Ground Robot Simulation
 
-Besides the aerial vehicle, MIGHTY drives a single wheeled ground robot (Pioneer
-3-AT) in Gazebo. Two single-agent ground-robot scenarios are available:
+Besides the aerial vehicle, MIGHTY drives wheeled ground robots (Pioneer 3-AT)
+in Gazebo, alone or as a coordinated team:
 
 | Scenario | What it does | Goal |
 |----------|--------------|------|
-| **Autonomous exploration** | Robot explores an unknown `ACL_office` map on its own using frontier detection. | None — self-driven |
-| **Forest navigation** | Robot drives through a forest world (e.g. `easy_forest`). | Frontier exploration by default; a fixed goal after a one-line config change (see note) |
+| **Autonomous exploration** | One robot explores an unknown `ACL_office` map using frontier detection. | None — self-driven |
+| **Multi-robot exploration** | Three robots explore `ACL_office` together, dividing frontiers between them via MinPos. | None — self-driven |
+| **Forest navigation** | One robot crosses a forest world (e.g. `hard_forest`) to a commanded position. | `--goal X Y Z` |
+| **Position exchange, no Gazebo** | Ten robots on a 10 m circle continuously swap antipodal positions in an obstacle-free RViz world (`--mode multiagent-ground-fake`). | None — goal_monitor drives |
 
-> **Exploring vs. driving to a goal.** The two ground-robot scenarios differ
-> only in who picks the goal:
+> **How the no-Gazebo mode works.** Each robot runs the full real chain —
+> planner → `mpc_node` → `fake_sim`'s unicycle integrator — with RViz as the
+> only display (per-robot colored boxes, planned and driven trajectories).
+> There is no mapper and no obstacle world; the planner is fed by a constant
+> *sub-floor* point grid at z = −3 m (`scripts/publish_subfloor_cloud.py`),
+> which keeps its map machinery alive while staying below `z_min`, so the
+> planned world is genuinely empty. All goals are released together by
+> default — the classic simultaneous crossing (`--goal-stagger 5` releases
+> them sequentially instead), and `config/swap_mighty_ground_robot.yaml`
+> documents every parameter choice with the measurements behind it.
+> Both swap modes enforce a **guaranteed ≥ 1 m pairwise separation floor**
+> — see the Gazebo variant below for the mechanism and the measured
+> numbers; `scripts/separation_probe.py` is the verifier.
+
+> **The Gazebo variant** (`--mode multiagent-ground-gazebo`) runs the same
+> exchange with Gazebo in the loop, so RViz shows the actual **P3AT robot
+> model** (RobotModel displays fed by each robot's `robot_description`)
+> instead of colored boxes. What makes 10 Gazebo robots affordable:
+> `use_lidar:=false use_camera:=false` strip every sensor from the spawned
+> model — the mid360 alone costs 36,000 rays at 10 Hz per robot — and
+> `map_source:=sensor_cloud` feeds each planner from the same sub-floor
+> cloud as the no-Gazebo mode. Measured with all ten robots driving:
+> **gzserver ~10% of one core** (three lidar-equipped robots cost
+> 150–200%). Motion remains the teleport chain every Gazebo ground mode
+> uses — fake_sim integrates `cmd_vel` and teleports the model — so robots
+> are kinematic puppets. The harness scenario (`ground-swap-10-gazebo`)
+> additionally gates on every namespace existing as a Gazebo entity, closing
+> the documented spawn-flake trap where a robot drives around invisibly.
+>
+> **The ≥ 1 m separation floor — how it works.** Soft avoidance cannot
+> floor a ten-way crossing: with all path-shaping costs healthy, minima of
+> 0.02–0.27 m were measured at the shared centre. The guarantee is
+> geometric instead, two mechanisms working as a pair
+> (`peer_standoff_m` / `peer_static_disc_m`, enabled only by the swap
+> overlay — every other config keeps them off):
+>
+> 1. **Standoff rings** (reference truncation, `publishMpcPath`): the
+>    junior of each ID pair cuts its MPC reference at the first waypoint
+>    whose time-matched distance to the senior's shared trajectory *or* to
+>    the senior's live position would dip below 1.2 m (checking both worlds
+>    matters: a yielding robot's advertised plan diverges from where it
+>    actually is). The senior symmetrically stands off moving juniors at a
+>    slightly smaller ring — in any head-on the junior stops first, which
+>    preserves the priority order, and a robot already inside a ring may
+>    only move *outward*, so near-misses cannot lock in.
+> 2. **Parked robots become real obstacles** (`occupancyMapCallback`): a
+>    peer whose live position sits still for ~0.25 s gets a *filled* disc
+>    of synthetic obstacle points stamped into every other robot's sensor
+>    cloud at the corridor-true radius (disc + robot radius), so A*, the
+>    safe-corridor decomposition, and the heat layer all wall it off and
+>    every replanned detour is born corridor-feasible. Detours therefore
+>    clear the rings, which is what lets every hold self-release — no
+>    timeouts anywhere. (Nearby peers get a body-size disc instead, so a
+>    robot's own A* start is never swallowed by a wall.)
+>
+> Validated on a 48-core host (40 Hz MPC): on the shipping build, the
+> antipodal campaign measured run minima of **1.183 / 1.215 m with zero
+> time below 1 m** (three earlier 900 s runs on the pre-hardening build:
+> 1.155–1.187 m, also zero), all ten robots completing legs.
+> **`random_slot` is hardened, not guaranteed**: its continuous goal churn
+> creates crawl-approach geometries the rings cover less perfectly, and
+> the final 3 × 900 s campaign measured **zero or one brief sub-1 m
+> episode per run** (3.4–14.3 s, minima 0.08–0.53 m) — down from 16–21
+> episodes per run before the hardening. The residual event class and the
+> next lever (reserved crossings / speed-scaled rings) are documented
+> future work. The guarantee has an honest
+> price: every close encounter now costs a park → wall → detour cycle, so
+> fleet throughput at ten simultaneous robots is roughly **2–3× slower**
+> than the old floorless free-for-all, and lower-priority (higher-ID)
+> robots yield more often — that asymmetry is what makes the pattern
+> deadlock-free. Verify any run yourself with
+> `scripts/separation_probe.py --agents 10 --threshold 1.0`.
+>
+> **Two goal patterns.** The default is the classic simultaneous antipodal
+> exchange — maximum drama, one big crossing wave. `--goal-pattern
+> random_slot` makes each robot draw its next goal from the ten
+> evenly-spaced circle slots on every arrival instead: traffic spreads
+> organically in space and time, and fleet throughput is far higher than
+> the antipodal wave because encounters are pairwise instead of ten-way
+> (measured 129–160 slot arrivals per 900 s run with every robot
+> progressing; see the separation note above for its floor status). Seeded per-robot (stable across runs; `random_seed` on
+> `goal_monitor.launch.py`), so runs are reproducible. Two mechanics worth
+> knowing: slots double as parking spots, so a goal drawn onto a
+> momentarily-occupied slot is rejected by the planner ("goal in occupied
+> space") — the monitor self-heals by **redrawing after 20 s without
+> progress** (`redraw_stagnation_sec`; redraws are normal traffic
+> management, not failure). Without that redraw, a rejected robot parks
+> and blocks *its* slot for everyone — a measured deadlock chain (one
+> robot pinned 800 s, reproducibly, before the fix). That waiting-out-a-
+> redraw state is also why the planner keeps broadcasting on `/trajs` even
+> when replanning fails: receivers prune agents silent for
+> `traj_lifetime`, and a pruned robot is invisible to every peer's
+> avoidance — the keepalive re-shares the ended trajectory, whose
+> evaluation is the parked position.
+>
+> **Where visual "wobble" comes from — measured, not guessed.** A robot
+> driving alone in this mode tracks perfectly: **zero yaw-rate reversals**
+> over full crossings, 2 cm mean cross-track. Under dense traffic the
+> residual weave is the avoidance system working at saturation, not a
+> tracking error — an 11-cell tuning matrix over every path-shaping knob
+> moved nothing outside noise. With the separation floor the worst churn is
+> replaced by queue-and-detour behaviour by construction; for even calmer
+> traffic use `--num-agents 5`, `--goal-stagger 2`, or a larger `--radius`.
+>
+> Standing up ten robots exposed and fixed three latent fleet-scale bugs
+> that benefit every mode: (1) `fake_sim`'s Gazebo teleport spawned a
+> blocking thread per 10 ms tick — once gzserver fell behind, the pile-up
+> aborted the node; it is now a single in-flight async request that degrades
+> gracefully. (2) The planner's replan attempt rate was hardcoded at 100 Hz;
+> ten planners consumed ~8.5 cores and **starved the MPC control loops**
+> (30 Hz design degraded to 16 Hz; the yaw command sat at its limit 33 % of
+> driving time vs 1.3 % solo — visible as constant overshoot). The fix is a
+> CPU budget: `replan_rate_hz: 20` in the swap overlay plus
+> `mpc_control_rate_hz:=20 mpc_n_horizon:=10` launch overrides (exposed as
+> `--mpc-rate` / `--mpc-horizon`; measured after: yaw saturation 2.9 %).
+> (3) The planner's default `MultiThreadedExecutor` sizes itself to the
+> machine's core count, and every callback thread lazily grows its own
+> OpenMP pool — on a 48-core host that is **2,315 threads per planner**
+> (25k threads and load 64 for the fleet). The executor is now capped at 8
+> callback threads; on many-core hosts also set `OMP_NUM_THREADS=2
+> OMP_WAIT_POLICY=PASSIVE` per robot. Every default users see is otherwise
+> unchanged — solo and small-fleet modes keep 100 Hz replanning and the
+> stock MPC settings.
+>
+> **Running the fleet on a big remote machine, watching locally.** The
+> Gazebo swap is sensorless, so its DDS traffic (TF, markers, small clouds)
+> is light enough to stream across a LAN: run the sim headless on the
+> many-core box (`--no-rviz`, in Docker with `--network=host`) and start
+> only RViz on your desk with the same `ROS_DOMAIN_ID`. On a 48-core host
+> the whole 10-robot fleet runs at ~30 % load with MPC at
+> `--mpc-rate 40 --mpc-horizon 20`. Two gotchas: pick a **non-default
+> domain ID** so the sim cannot cross-talk with anything else on the LAN,
+> and if you probe topics on the sim host itself, do it *inside* the sim's
+> container — FastDDS's shared-memory transport silently drops data between
+> sibling containers.
+
+> **Exploring vs. driving to a goal.** The ground-robot scenarios differ only in
+> who picks the goal:
 >
 > - `--mode exploration-singleagent-ground` / `make run-ground-exploration` —
 >   the frontier loop drives, no goal needed.
+> - `--mode exploration-multiagent-ground` / `make run-multiagent-ground-exploration` —
+>   same, with three robots splitting the work (see Multi-Robot Exploration below).
 > - `--mode gazebo --ground-robot` / `make run-ground-robot` — crosses the world
 >   to the `--goal` / `GOAL_*` you give it, exactly like the UAV Gazebo
 >   scenario. Exploration is switched off at launch
@@ -608,6 +761,173 @@ ros2 launch mighty onboard_mighty.launch.py log_level:=info ...
 Note that `std::cout` output (`No frontiers left`, `Changing DroneStatus`) is
 never suppressed, so its presence does not tell you the log level is high enough.
 
+### Multi-Robot Exploration
+
+```bash
+python3 src/mighty/scripts/run_sim.py --mode exploration-multiagent-ground \
+  -s ~/code/mighty_ws/install/setup.bash            # native, 3 robots
+make run-multiagent-ground-exploration               # Docker
+make run-multiagent-ground-exploration NUM_AGENTS=4  # more robots
+```
+
+Three robots spawn on a line at `y = 2` (x = −5, 0, +5) and explore
+`ACL_office` together. Each returns to **its own** spawn point when the team
+runs out of frontiers.
+
+**How they divide the work.** Every robot broadcasts its pose, and each frontier
+is ranked by how many teammates are closer to it than you are. You take the
+frontier where your rank is lowest — so the robot best placed for a given area
+goes there, and the others look elsewhere. No negotiation, no central planner,
+no assigned sectors: the allocation falls out of everyone applying the same rule
+to the same information. Robots also exchange their persistent maps, so area one
+robot has already seen stops generating frontiers for the others.
+
+Positions alone still leave a race: two robots near-equidistant from a frontier
+both compute rank 0, both commit, and both drive there. So intent and verdicts
+travel too. Each robot **claims** the frontier it is pursuing; selection skips
+anything inside a teammate's claim radius, and when two robots claim the same
+spot before hearing each other, the lexicographically smaller namespace keeps it
+and the other re-targets within about a second. Each robot also broadcasts its
+frontier **status** list — including *visited* and *unreachable* verdicts — so
+one robot finishing (or failing) a frontier retires it for the whole team in
+under half a second, instead of a teammate driving across the office to a spot
+that was already cleared.
+
+Five global topics carry this (all agents publish and subscribe):
+
+| Topic | Purpose |
+|-------|---------|
+| `/exploration/peer_poses` | pose broadcast that MinPos ranks against (5 Hz per robot) |
+| `/exploration/peer_claims` | currently-pursued frontier; contested claims resolve by namespace (5 Hz while pursuing) |
+| `/exploration/frontier_status` | full frontier DB incl. VISITED/INVALIDATED — one robot's verdict retires the record everywhere (2 Hz per robot) |
+| `/exploration/visited_maps` | persistent map exchange (1 Hz per robot) |
+| `/exploration/return_home` | operator command: everyone stop and go home |
+
+RViz reads one more: `/exploration/frontier_markers`, the **single** team-wide
+frontier layer (state-colored centroids plus an orange claim ring per robot),
+published by the lexicographically smallest live namespace so three robots
+don't paint three overlapping copies of the same frontiers.
+
+`/trajs` deconfliction — the same mechanism the multi-UAV scenario uses — is
+already active, which is why the robots avoid each other without any of the
+above.
+
+**Configuration.** All robots load `config/mighty_ground_robot.yaml` with
+`config/multi_mighty_ground_robot.yaml` layered on top. That overlay is
+deliberately tiny:
+
+| Key | Solo | Team | Why |
+|-----|------|------|-----|
+| `exploration.minpos.enabled` | `false` | `true` | creates the peer-pose and map-sharing machinery |
+| `exploration.select_nearest` | `true` | `false` | selection is `if (select_nearest) … else if (use_minpos) …`, so leaving this true makes MinPos unreachable |
+| `exploration.minpos.min_frontier_dist_to_peers_m` | `3.0` | `4.0` | keeps the robots' work areas apart — the upstream reason they stop meeting in corridors |
+| `exploration.minpos.claim_block_radius_m` | `4.0` | `4.0` | never target a spot a teammate is already driving to; the claim filter is never relaxed, unlike the keep-out above |
+| `exploration.minpos.share_frontier_status` | `true` | `true` | visited/unreachable verdicts propagate team-wide (inert without `minpos.enabled`) |
+| `exploration.visualization.centralized` | `false` | `true` | one global frontier-marker topic instead of per-namespace ones |
+| `planner_Cw` | `1.0` | `1.4` | avoidance envelope; 1.4 + 0.6 m of robot = the ~2 m corridors exactly, so passing stays geometrically feasible (2.0 shoved trajectories into walls; 1.0 left no margin — see tuning note) |
+| `dynamic_weight` | `1e+3` | `1e+3` | measured: raising it bought nothing and doubled the violence of close passes |
+| `peer_yield_radius_m` / `peer_yield_speed_factor` | `0` (off) | `3.0` / `0.3` | head-on yield rule: tie-break loser crawls, winner proceeds — the asymmetry that resolves pinch encounters |
+| `agent_dyn_horizon_sec` | `0` (off) | `8.0` | only react to peers' predicted trajectories 8 s out — see the smoothness note below |
+| `jerk_weight` | `1e+3` | `1e+4` | matches the hardware ground config; stiffer spline against peer-induced bending |
+| `heat_alpha1` / `dyn_heat_tube_radius_m` | `1.5` / `3.0` | `3.0` / `4.0` | stronger, wider heat tubes along peer trajectories, so the global route detours around teammates before the local planner has to |
+| `mpc_path_publish_rate_hz` | `0` (every replan) | `10.0` | stop re-anchoring the MPC's reference ~85×/s — the yaw-hunting fix, see below |
+
+**Why `agent_dyn_horizon_sec` exists.** Peers replan about once a second, so
+their predicted positions more than a few seconds out are fiction — but the
+local avoidance term used to sample the entire ~40 s trajectory against them,
+bending the tail for phantom crossings on every replan, which accumulated
+into visibly wavy driving *even with all robots far apart*. With the 8 s
+horizon (a smooth fade, gradient-checked), the planned paths measure
+0.36 rad/m of turning — the same as a single robot's 0.35 — and 8 s is still
+4× the avoidance envelope for two closing robots, so nothing that can
+physically happen before both robots replan goes unavoided.
+
+**Why `mpc_path_publish_rate_hz` exists.** Every successful replan used to
+re-publish the MPC's reference path — ~85×/s, three times per 30 Hz control
+cycle — and each copy *starts at the robot's current pose*, so the
+controller's target micro-rotated every ~12 ms. Solo, that tracks cleanly.
+With three robots sharing one host, timing jitter turns each micro-rotation
+into a hard yaw correction (the sim controller carries `w_max: 1.5` for
+corner-clearance reasons, see `mpc_sim.yaml`): measured, the yaw command hit
+its limit 7.4% of driving time vs 1.8% solo — visible as serpentine driving
+and overshooting turns. Capping the reference at 10 Hz restored the solo yaw
+profile exactly (limit-hits 2.3%, command RMS 0.382 vs solo's 0.381) and cut
+driven-path turning by another 22%; worst-case reference staleness at
+0.5 m/s is ~5 cm of travel. The final smoothness stack was validated by a
+5-run campaign: 5/5 complete, coverage ≥ 0.99, zero duplicated-targeting
+seconds, zero robot-robot contacts, and the fastest mean finish measured
+(407 s vs 470–487 s for earlier configs — straighter driving is also faster
+driving).
+
+`minpos.enabled` and `select_nearest` are both required — setting either alone
+changes nothing.
+
+**How inter-robot avoidance was tuned**, in two eras, because the honest
+history is the argument for the current values. Era one: raising the
+avoidance *strength* did almost nothing (weight `1e+4` and 4×-finer sampling
+measured inside counting noise); what worked was stopping robots from
+converging at all — the 4.0 m frontier keep-out plus a 2.0 m clearance
+envelope took inter-robot contact from 15 episodes to 0 across 20 runs. Era
+two exposed what that 2.0 m envelope cost: it demands 2 m of center
+separation in ~2 m corridors, which is geometrically impossible when two
+robots pass — so close passes destabilized and shoved trajectories into
+walls instead (the base config runs `stat_weight 0`; walls exist only as
+corridor constraints, and the giant peer term outvoted them). The current
+setting is the measured middle: `planner_Cw 1.4` (passing robots need
+1.4 + 0.6 = 2.0 m — exactly what the corridors provide), `dynamic_weight`
+back at `1e+3`, and the **peer-yield governor**: in a close pass the robot
+that loses the namespace tie-break (the same order that settles claim
+contests) crawls at 0.3× while the winner — who never slows, so no deadlock
+— drives through. A planner-level variant of the yield and a 4 m yield
+radius were both built, measured worse, and reverted (details in the overlay
+comments).
+
+**How duplicate targeting was eliminated**, because the numbers are the
+argument for the claim/status design: before intent sharing existed, the
+robots spent a measured **82–107 seconds per run** with at least two of them
+targeting the same spot (time-averaged pair-duplication mean 0.083–0.225 over
+a 3-run baseline) — two robots near-equidistant from a frontier both compute
+rank 0, and the pursuit lock keeps both driving for the whole leg. With
+claims and status sharing on, the 10-run campaign measured
+**0 duplicated-targeting seconds in 10/10 runs**. A first design that made
+verdicts *permanent* (each 2 Hz rebroadcast re-applied, plus insert
+suppression) over-corrected: in 2 of 9 runs a single early verdict near a
+doorway walled off an unexplored wing and the team went home at 0.64
+coverage. The shipped rule is therefore **a verdict applies once** — new
+records near an old verdict are new information, and the local
+cooldown/strike lifecycle keeps governing retries.
+
+**What a healthy run looks like.** Robots fan out within the first minute rather
+than convoying. A **staggered finish is normal**: each robot announces
+`No frontiers left` and returns on its own schedule, so one parking while
+another is still exploring is expected, not a stall. An occasional late
+resume trip — a robot leaving home again to check a leftover sliver — is
+also normal and self-terminating.
+
+Measured over 10 runs with claims + status sharing
+(`--scenario ground-exploration-multi`; the pre-claims 20-run campaign in
+parentheses where comparable):
+
+| | 3 robots | 1 robot |
+|---|---|---|
+| Completed, all robots home | **10/10** (20/20) | 18/18 |
+| Duplicated-targeting time per run | **0 s in 10/10** (was 82–107 s) | n/a |
+| Coverage of the exploration bounds | 0.994 – 0.999 (0.995 – 0.998) | 0.991 – 0.996 |
+| Wall-clock to finish | 368 – 528 s, mean **407**¹ | 622 – 887 s |
+| Robot-robot contacts | **0 in 10 runs** (0 in 20) | n/a |
+| Coordination verified live | 10/10 | n/a |
+
+¹ Duration is from the 5-run campaign on the final configuration (with the
+smoothness stack above); earlier configs measured 383–673 s, mean 470–487.
+The coordination rows are from the 10-run claims campaign; every subsequent
+5-run campaign reproduced them (0 contacts, 0 duplication, all home).
+
+Roughly half the time for slightly better coverage. Coordination is checked at
+runtime, not assumed: the harness requires each planner to log MinPos, map
+sharing, claim sharing and status sharing as enabled *and* observes peer-pose,
+visited-map, claim and frontier-status traffic from all N robots before it
+will pass a run. See Known Issues for the wall contact rate.
+
 ### Docker (Linux)
 
 ```bash
@@ -645,6 +965,10 @@ cd ~/code/mighty_ws
 python3 src/mighty/scripts/run_sim.py --mode exploration-singleagent-ground \
   -s ~/code/mighty_ws/install/setup.bash
 
+# Multi-robot exploration: 3 robots dividing the map via MinPos
+python3 src/mighty/scripts/run_sim.py --mode exploration-multiagent-ground \
+  -s ~/code/mighty_ws/install/setup.bash
+
 # Ground robot in a forest world (explores by default; see note above for goal nav)
 python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot \
   -s ~/code/mighty_ws/install/setup.bash
@@ -660,8 +984,10 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot \
   | Target | Description | Options |
   |--------|-------------|---------|
   | `make run-ground-exploration` | Single ground robot, autonomous frontier exploration (ACL_office) | `ENV` (default: ACL_office) |
+  | `make run-multiagent-ground-exploration` | N ground robots (default 3) exploring together via MinPos | `NUM_AGENTS` (default: 3), `ENV` (default: ACL_office) |
   | `make run-ground-robot` | Single ground robot crossing a forest world to a fixed goal | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` — all optional; unset means the same defaults as the native command (hard_forest, goal 305 0 0) |
   | `make run-mac-ground-exploration` | Autonomous exploration on Mac (Xpra, browser at localhost:8080) | `ENV` (default: ACL_office) |
+  | `make run-mac-multiagent-ground-exploration` | Multi-robot exploration on Mac | `NUM_AGENTS` (default: 3), `ENV` |
   | `make run-mac-ground-robot` | Forest world on Mac (Xpra, browser at localhost:8080) | `GOAL_X`, `GOAL_Y`, `GOAL_Z`, `ENV` |
 
 </details>
@@ -673,10 +999,22 @@ python3 src/mighty/scripts/run_sim.py --mode gazebo --ground-robot \
 Measured with `scripts/exploration_test.py` (see below). Listed so you know what
 you're looking at rather than discovering it mid-demo.
 
+**Rare planner crash under rapid goal churn.** One `double free or
+corruption` abort of a planner process was observed in roughly forty
+10-robot swap runs — during a `random_slot` run, whose goal turnover is ~3×
+the antipodal pattern's. The affected robot stops; the other nine continue.
+Suspected heap race between the goal callback and the replan loop; needs an
+AddressSanitizer session to pin down. If a robot freezes mid-demo, check its
+pane for `process has died`.
+
 **The ground robot occasionally brushes a wall.** Contacts occurred in 8 of 15
 exploration runs (two campaigns of 10 and 5). The robot always recovered and
 completed the mission — 15/15 reached full coverage and returned home — so this
 costs appearance, not success.
+
+With three robots the wall-contact rate rises to 10 of 10 runs (317-1136 events
+per run, i.e. per-robot rates comparable to the single-robot case at 3x the
+exposure) — the same phenomenon, not a multi-robot regression.
 
 It is not uniformly distributed. Taking each run's closest approach to an
 obstacle as the proxy for where it happened, they cluster at two spots in
@@ -702,6 +1040,43 @@ measured that directly: raising the safe-corridor inflation from 0.30 m to 0.45 
 left contacts unchanged while dropping coverage from 0.991 to 0.948 and causing
 the robot to stop returning home. Lowering `v_max` further would trade run time
 for accuracy everywhere to fix two corners, which didn't seem worth it for a demo.
+
+**Multi-robot wall contacts scale with the robot count.** Three robots produce
+wall contacts in essentially every run (the single-robot entry above explains
+why); per robot the rate is comparable to the solo case, at 3x the exposure.
+
+**Occasional low-speed robot-robot contact in pinch encounters.** Two robots
+meeting head-on in a corridor or doorway is the one encounter class no
+clearance radius resolves — the geometry requires one robot to not be there.
+The earlier "0 contacts in 40 runs" era achieved that by an oversized 2.0 m
+avoidance envelope that paid at the walls instead (unstable, wall-shoved
+trajectories in close passes). With the current corridor-feasible tuning
+plus the yield governor, pooled measurement over 10 runs: **8 contact-free**
+(minimum pair separations 0.61–1.00 m), 2 runs with one low-speed pinch
+contact each (one ~0.1 s brush, one few-second shove; the robots slide past,
+recover, and both runs completed with ≥0.99 coverage — no instability, no
+wall violations, no failed runs). The distribution is heavy-tailed: roughly
+one pinch meeting every 2–5 runs, and pinch geometry decides between brush
+and shove. Eliminating the tail outright needs a *hard* mechanism — e.g.
+priority-based reservation of narrow segments over the existing claims
+channel — which is deliberate future work, not a tuning knob.
+
+**Residual multi-robot driving waviness on a shared host — a simulation
+artifact, not a planner or controller defect.** Two real contributors were
+found and fixed (`agent_dyn_horizon_sec` and `mpc_path_publish_rate_hz`,
+documented in Multi-Robot Exploration above); together they took driven-path
+turning at three robots from 1.07–1.29 rad/m down to **0.83**, with the yaw
+command profile now identical to solo. The remaining gap to the one-robot
+floor (0.54 rad/m — measured even when that one robot runs the full
+multi-robot config) tracks host contention: with three robots Gazebo's
+real-time factor drops to 0.91 (1.00 solo), the three MPCs each run near a
+full core, and the stack runs on wall clock — so controllers compute
+commands for real-time dynamics that the slowed, jittery physics doesn't
+quite deliver. On hardware each robot has its own computer, so this doesn't
+transfer. On a shared sim host: use a beefier machine, or `NUM_AGENTS=2` for
+smoother-looking runs. Migrating the multi sim to `use_sim_time` would remove
+the artifact in principle but re-times the entire stack and its validation —
+a deliberate future project, not a config flip.
 
 **Multi-agent UAVs pass closer than their own bounding box.** In the antipodal
 swap scenario the closest approach between two agents was 0.451 m with 5 agents
@@ -748,7 +1123,7 @@ python3 src/mighty/scripts/exploration_test.py run --scenario ground-exploration
 
 # Ten runs, with a summary table
 python3 src/mighty/scripts/exploration_test.py campaign \
-    --scenario ground-exploration --runs 10 --out /tmp/campaign
+    --scenario ground-exploration-multi --runs 10 --out /tmp/campaign
 ```
 
 Each run writes `run<NN>.json` (metrics, per-gate verdicts, and position/goal
@@ -781,6 +1156,8 @@ makes long round trips, so motion alone is never treated as evidence of a stall.
 The L-BFGS solver implementation in this repository (`src/mighty/lbfgs_solver.cpp`, `include/mighty/lbfgs_solver.hpp`) is adapted from [ZJU-FAST-Lab/GCOPTER](https://github.com/ZJU-FAST-Lab/GCOPTER/blob/main/gcopter/include/gcopter/lbfgs.hpp). We thank the authors for making their implementation publicly available.
 
 The ground robot's MPC path-tracking controller ([kotakondo/mpc](https://github.com/kotakondo/mpc), pulled in via `mighty.repos`) was originally developed by **[Lucas Jia (@lucas-yyy000)](https://github.com/lucas-yyy000)**. The ground-robot simulation depends on it.
+
+The `ACL_office` Gazebo environment used in the ground-robot exploration simulations was developed by **[Paul Leonhard Kohler (@p-kohler)](https://github.com/p-kohler)**.
 
 ---
 

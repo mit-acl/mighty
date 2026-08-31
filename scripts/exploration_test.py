@@ -77,6 +77,20 @@ CRASH_PATTERNS = [
 #   'goal'        — fly/drive to a fixed goal once
 #   'swap'        — continuous position swapping; time-boxed, scored on progress
 
+def home_for(sc, ns):
+    """That agent's own spawn point.
+
+    Multi-robot scenarios declare `homes` keyed by namespace (each robot returns
+    to where IT started); single-agent ones keep the scalar `home`. Gating every
+    robot against one shared home would pass a run where two robots parked on
+    top of the third's spawn.
+    """
+    homes = sc.get('homes')
+    if homes and ns in homes:
+        return homes[ns]
+    return sc['home']
+
+
 SCENARIOS = {
     'ground-exploration': dict(
         kind='exploration',
@@ -108,6 +122,32 @@ SCENARIOS = {
         gazebo=True,
         description='Single ground robot, autonomous frontier exploration '
                     '(ACL_office), must return to start when done.',
+    ),
+
+    'ground-exploration-multi': dict(
+        kind='exploration',
+        mode='exploration-multiagent-ground',
+        extra_args=['--no-rviz', '--log-level', 'info'],
+        namespaces=['NX01', 'NX02', 'NX03'],
+        # Each robot returns to where IT spawned (run_sim.py lays them out on a
+        # line at y=2, 5 m apart, centred on x=0).
+        homes={'NX01': (-5.0, 2.0), 'NX02': (0.0, 2.0), 'NX03': (5.0, 2.0)},
+        # 3 robots is 3x the Gazebo models, mappers, planners and casadi MPCs on
+        # one host, which depresses the real-time factor. These caps are the
+        # measured single-agent values with headroom; re-derive them from the
+        # first campaign rather than trusting them.
+        cap_s=2400.0,
+        startup_cap_s=420.0,             # 3 spawns + 3 mappers + 3 mpc_nodes
+        home_tol_m=0.5,
+        home_confirm_s=90.0,
+        bounds=(-7.0, 22.2, -27.0, 8.0),  # same ACL_office box, shared by all
+        min_coverage=0.95,               # union across agents
+        esdf_truncation_voxels=10,
+        clearance_warn_m=0.25,
+        max_tilt_deg=20.0,
+        gazebo=True,
+        description='3 ground robots exploring ACL_office together via MinPos '
+                    'frontier allocation; each must return to its own start.',
     ),
 
     # --- UAV scenarios advertised in README.md (Native Linux section) --------
@@ -165,6 +205,80 @@ SCENARIOS = {
         gazebo=False,
         description='5 UAVs swapping antipodal positions '
                     '(README: --mode multiagent --num-agents 5).',
+    ),
+    'ground-swap-10-gazebo': dict(
+        kind='swap',
+        mode='multiagent-ground-gazebo',
+        extra_args=['--no-rviz'],
+        namespaces=[f'NX{i:02d}' for i in range(1, 11)],
+        # Same swap dynamics as ground-swap-10 (same overlay, same goal
+        # machinery); the cap carries over. Startup is heavier: gzserver +
+        # 10 spawns on top of 10 planners/MPCs.
+        cap_s=900.0,
+        startup_cap_s=420.0,
+        min_swap_legs=1,
+        # Separation reported-not-gated for the same measured reasons as
+        # ground-swap-10 (robots are teleported puppets; contacts are counted
+        # in metrics via the gazebo contact stream but carry no physics
+        # consequence). No min_altitude_m: ground z pinned to spawn z.
+        gazebo=True,
+        description='10 sensorless P3ATs swapping antipodal positions on a '
+                    '10 m circle in Gazebo (empty world, models rendered in '
+                    'RViz), time-boxed (README: --mode multiagent-ground-gazebo).',
+    ),
+    'ground-swap-10-gazebo-random': dict(
+        kind='swap',
+        mode='multiagent-ground-gazebo',
+        extra_args=['--no-rviz', '--goal-pattern', 'random_slot'],
+        namespaces=[f'NX{i:02d}' for i in range(1, 11)],
+        cap_s=900.0,
+        startup_cap_s=420.0,
+        # Random slots: legs vary from adjacent-hop (~6 m) to full crossing
+        # (20 m), mean chord ~12.7 m — arrivals come faster than antipodal,
+        # so require 2 legs. Measured effect vs antipodal: near-weave -32%,
+        # far-weave -28% (the only goal-side change that moved either after
+        # a 13-cell tuning matrix).
+        min_swap_legs=2,
+        gazebo=True,
+        description='10 sensorless P3ATs drawing random goals from the 10 '
+                    'circle slots in Gazebo — organic traffic instead of one '
+                    'simultaneous crossing (README: --goal-pattern random_slot).',
+    ),
+    'ground-swap-10': dict(
+        kind='swap',
+        mode='multiagent-ground-fake',
+        extra_args=['--no-rviz'],
+        namespaces=[f'NX{i:02d}' for i in range(1, 11)],
+        # One leg = 20 m at v_max 0.5 → 40 s ideal; the MPC's 0.5 m/s² ramp,
+        # the 10-way centre crossing, and J_dyn detours realistically make it
+        # 2-4x that, and goals only start ~45 s in. The cap IS the intended
+        # end of a continuous scenario (TIME_BOX_ELAPSED) — generosity costs
+        # wall time, not correctness.
+        cap_s=900.0,
+        # First /state ~15 s (NX01's fake_sim); the tenth agent launches at
+        # ~28 s and 10 planners + 10 casadi MPCs warm up behind it.
+        startup_cap_s=300.0,
+        min_swap_legs=1,
+        # Separation is REPORTED, NOT GATED for this scenario (no
+        # min_separation_m key — evaluate() skips the gate, mirroring how
+        # ESDF clearance is handled for the ground explorer). Measured across
+        # a 6-cell tuning matrix (Cw/dw sweeps, goal stagger, yield governor)
+        # and two 900 s campaigns: soft avoidance on NON-HOLONOMIC robots in
+        # 10-way crossing traffic floors at ~0.1-0.4 m in dense phases, with
+        # occasional full pass-throughs (0.02 m) over long horizons — a
+        # unicycle cannot strafe out of a bubble, and fake_sim has no physics
+        # to make contact mean anything. The kept config (5 s goal stagger +
+        # /trajs-sourced yield) measured 40x fewer close episodes than any
+        # alternative. A real separation gate returns when crossings are
+        # RESERVED rather than negotiated by soft costs — documented future
+        # work alongside the office pinch case.
+        # Deliberately NO min_altitude_m: fake_sim pins ground robots to
+        # their spawn z (0.0), so an altitude floor would fail by
+        # construction. evaluate() skips the gate when the key is absent.
+        gazebo=False,
+        description='10 ground robots swapping antipodal positions on a '
+                    '10 m circle, no Gazebo (fake_sim + MPC unicycle chain), '
+                    'time-boxed (README: --mode multiagent-ground-fake).',
     ),
     'uav-gazebo-hard-forest': dict(
         kind='goal',
@@ -244,6 +358,7 @@ TEARDOWN_PATTERNS = [
     r'install/mighty/lib/mighty/',        # mighty, fake_sim, convert_odom_to_state
     r'install/mpc/lib/mpc/mpc_node',
     r'install/global_mapper_ros/lib/',
+    r'install/local_sensing/lib/',        # pcl_render (fake_sim scenarios)
     r'ros2 launch (mighty|global_mapper_ros)',
     r'rviz2',
 ]
@@ -316,13 +431,22 @@ def launch(sc, yaml_path, setup_bash, ros_domain_id, log_dir):
 # one line per foreign contact — normally zero. A contact is a collision when
 # exactly one side is the robot and the other is not the floor; robot-vs-robot
 # (wheel against its own chassis) and anything-vs-ground_plane are just driving.
+#
+# Multi-robot: NSLIST is a comma-separated namespace list rather than a single
+# NS, and both model names are emitted so Python can tell a wall contact from a
+# robot-robot collision. One awk process handles the whole team — N copies of a
+# 15k line/s stream would compete with the simulation for CPU. Gazebo already
+# reports an NX01/NX02 touch here, so inter-robot collisions come from ground
+# truth rather than from inferring them off a separation threshold.
 CONTACT_AWK = r'''
+BEGIN { n = split(NSLIST, t, ","); for (i = 1; i <= n; i++) ROBOT[t[i]] = 1 }
 /collision1:/ { split($2, a, "::"); m1 = a[1]; next }
 /collision2:/ {
   split($2, b, "::"); m2 = b[1];
-  if ((m1 == NS) != (m2 == NS)) {
-    other = (m1 == NS) ? m2 : m1;
-    if (other != "ground_plane") { print systime() " " other; fflush(); }
+  if (m1 == m2) next;                                  # a robot touching itself
+  if (m1 == "ground_plane" || m2 == "ground_plane") next;   # just driving
+  if ((m1 in ROBOT) || (m2 in ROBOT)) {
+    print systime() " " m1 " " m2; fflush();
   }
 }
 '''
@@ -333,7 +457,7 @@ CONTACT_AWK = r'''
 CONTACT_EVENT_GAP_S = 3.0
 
 
-def start_contact_watch(ns, out_file):
+def start_contact_watch(namespaces, out_file):
     """Watch every Gazebo contact for the whole run (not a sample).
 
     Restarts itself if gzserver isn't up yet or the stream drops, so it can be
@@ -342,7 +466,7 @@ def start_contact_watch(ns, out_file):
     script = (
         f'while true; do '
         f'  gz topic -e /gazebo/default/physics/contacts 2>/dev/null '
-        f"    | awk -F'\"' -v NS={ns} '{CONTACT_AWK}' >> {out_file}; "
+        f"    | awk -F'\"' -v NSLIST={','.join(namespaces)} '{CONTACT_AWK}' >> {out_file}; "
         f'  sleep 2; '
         f'done')
     return subprocess.Popen(['bash', '-c', script],
@@ -368,6 +492,36 @@ def read_logs(log_paths):
         except FileNotFoundError:
             pass
     return '\n'.join(text)
+
+
+# tmuxp types each pane's command into the pane, so a planner pane's log always
+# contains the launch line that created it. That is what lets us attribute log
+# lines to a specific robot without touching the ROS graph.
+PANE_OWNER_RE = re.compile(r'onboard_mighty\.launch\.py\s+namespace:=(\S+)')
+
+
+def read_logs_by_agent(log_paths):
+    """Return (concatenated_text, {namespace: that agent's pane text}).
+
+    Multi-robot judging cannot use the concatenation. Every planner pane holds
+    one robot's give-up line AND its own mpc_node output (mpc is launched from
+    inside onboard_mighty.launch.py), so searching the merged text lets one
+    robot's "No frontiers left" pair up with a different robot's "MPC: goal
+    reached" and satisfy the finished-cleanly gate while nobody actually
+    finished. Splitting per pane makes each agent answer for itself.
+    """
+    all_text, per_agent = [], {}
+    for p in log_paths:
+        try:
+            raw = ANSI_RE.sub('', p.read_text(errors='replace'))
+        except FileNotFoundError:
+            continue
+        all_text.append(raw)
+        m = PANE_OWNER_RE.search(raw)
+        if m:
+            ns = m.group(1).rstrip(':')
+            per_agent[ns] = per_agent.get(ns, '') + raw
+    return '\n'.join(all_text), per_agent
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +583,13 @@ class Monitor:
     # position-change alone measures jitter, not target switching.
     OSC_WINDOW_S = 90.0
     OSC_MIN_JUMP_M = 2.0
+    # Two agents targeting within this distance count as duplicated effort.
+    GOAL_DUP_M = 2.0
+    # Sampling period for the TIME-AVERAGED duplication metric. The snapshot
+    # goal_duplication_frac is evaluated once at report time, which biases it
+    # toward whatever the endgame happened to look like; the time average is
+    # what actually measures duplicated effort over a run.
+    DUP_SAMPLE_S = 1.0
     OSC_SWITCHES = 6
     OSC_NET_DISP_M = 1.5
     OSC_MIN_PATH_M = 6.0
@@ -480,15 +641,52 @@ class Monitor:
                 lambda m, aa=a: self._on_term_goal(aa, m), lax_qos)
 
         if self.kind == 'exploration':
-            self.node.create_subscription(
-                OccupancyGrid, f'/{ns}/exploration/visited_map',
-                self._on_visited, tl_qos)
+            # One visited_map + current_goal per agent, so coverage is a union
+            # and goal churn is measured per robot rather than for whichever
+            # agent happened to be listed first.
+            for a in self.all_ns:
+                self.node.create_subscription(
+                    OccupancyGrid, f'/{a}/exploration/visited_map',
+                    lambda m, aa=a: self._on_visited(aa, m), tl_qos)
+                self.node.create_subscription(
+                    PoseStamped, f'/{a}/exploration/current_goal',
+                    lambda m, aa=a: self._on_goal(aa, m), lax_qos)
             self.node.create_subscription(
                 OccupancyGrid, f'/{ns}/esdf_2d_topic', self._on_esdf,
                 qos_profile_sensor_data)
-            self.node.create_subscription(
-                PoseStamped, f'/{ns}/exploration/current_goal', self._on_goal,
-                lax_qos)
+            if len(self.all_ns) > 1:
+                # Runtime half of the coordination gate: seeing the traffic, not
+                # just the config claiming it is on. These are global topics and
+                # self-filtering happens node-side, so the monitor sees all N.
+                self.node.create_subscription(
+                    PoseStamped, '/exploration/peer_poses',
+                    lambda m: self.peer_pose_senders.add(m.header.frame_id), lax_qos)
+                # lax_qos, NOT tl_qos. mighty_node publishes this with
+                # rclcpp::QoS(1).reliable(), whose durability is VOLATILE, and a
+                # TRANSIENT_LOCAL subscriber does not match a VOLATILE publisher —
+                # the subscription simply never fires. That silently emptied
+                # visited_map_senders and failed coordination_active on a run
+                # where all three robots were in fact sharing maps.
+                self.node.create_subscription(
+                    OccupancyGrid, '/exploration/visited_maps',
+                    lambda m: self.visited_map_senders.add(m.header.frame_id), lax_qos)
+                # Claim + frontier-status traffic (same global-topic,
+                # frame_id-is-the-sender convention; same lax_qos requirement).
+                # On pre-claims builds these topics simply never appear and the
+                # sets stay empty — the metrics report that honestly.
+                self.node.create_subscription(
+                    PoseStamped, '/exploration/peer_claims',
+                    lambda m: self.claim_senders.add(m.header.frame_id), lax_qos)
+                try:
+                    from dynus_interfaces.msg import FrontierList
+                    self.node.create_subscription(
+                        FrontierList, '/exploration/frontier_status',
+                        lambda m: self.status_senders.add(m.header.frame_id),
+                        lax_qos)
+                except ImportError:
+                    # Old workspace without the message build — sender set just
+                    # stays empty rather than killing the monitor.
+                    pass
         if sc.get('gazebo'):
             self.node.create_subscription(
                 ModelStates, '/plug/model_states_plug', self._on_models, lax_qos)
@@ -512,6 +710,8 @@ class Monitor:
         self.clearance_samples = []
         self.max_tilt_deg = 0.0
         self.obstacle_contacts = 0
+        self.robot_robot_contacts = 0
+        self.contacts_by_agent = {}
         self.contact_models = []
         self.contact_events = []
         self.contact_file = None
@@ -521,6 +721,7 @@ class Monitor:
         self.samples = 0
         self.goal_history = []           # [[t_rel, x, y], ...] on each retarget
         self.pos_track = []              # [[t_rel, x, y], ...] every 2 s
+        self.pos_track_by_agent = {}     # {ns: [[t_rel, x, y], ...]}
         self._t_last_track = 0.0
         self.swap_legs = {}              # ns -> completed swap legs
         self._last_term_goal = {}
@@ -532,6 +733,9 @@ class Monitor:
         self._bounds_mask = None
         self._last_pos = None
         self._last_goal = None
+        self._last_goal_by_ns = {}
+        self.goal_switches_by_ns = {}
+        self.agent_goal = {}
         self._t_last_tick = 0.0
         # Trailing (t, x, y, cumulative_path) ring for windowed net-displacement
         # and windowed path-length queries. Decimated to TICK_S so it stays small.
@@ -551,6 +755,32 @@ class Monitor:
         self.saw_arrival_confirmed = False
         self._t_arrived = None
         self.max_dist_home = 0.0
+        # Per-agent views of the same facts. For a single-agent scenario these
+        # hold exactly one entry and agree with the scalars above; for N robots
+        # they are what the gates actually read.
+        self.agent_logs = {}
+        self.giveups = {a: 0 for a in self.all_ns}
+        self.arrival_confirmed = {a: False for a in self.all_ns}
+        self.minpos_on = {a: False for a in self.all_ns}
+        self.map_sharing_on = {a: False for a in self.all_ns}
+        self.claims_on = {a: False for a in self.all_ns}
+        self.status_on = {a: False for a in self.all_ns}
+        self.yields = {a: 0 for a in self.all_ns}
+        self.status_retire_events = {a: 0 for a in self.all_ns}
+        # Union coverage across agents (each agent's own visited_map).
+        self._cov_masks = {}
+        # Peer-traffic observation, the runtime half of the coordination gate.
+        self.peer_pose_senders = set()
+        self.visited_map_senders = set()
+        # Gazebo entity names observed on /plug/model_states_plug.
+        self.gazebo_models = set()
+        self.claim_senders = set()
+        self.status_senders = set()
+        # Time-averaged duplication accumulator (sampled every DUP_SAMPLE_S).
+        self._t_last_dup = 0.0
+        self.dup_samples = 0
+        self.dup_sum = 0.0
+        self.dup_active_s = 0
 
     # -- callbacks ---------------------------------------------------------
     def _on_any_state(self, ns, msg):
@@ -570,19 +800,51 @@ class Monitor:
                 self.swap_legs[ns] = self.swap_legs.get(ns, 0) + 1
             self._last_term_goal[ns] = p
 
-    def _on_goal(self, msg):
+    def _on_goal(self, ns, msg):
         p = (msg.pose.position.x, msg.pose.position.y)
-        if self._last_goal is None or \
-                math.dist(p, self._last_goal) >= self.OSC_MIN_JUMP_M:
-            if self._last_goal is not None:
-                self.goal_switches += 1
+        self.agent_goal[ns] = p
+        prev = self._last_goal_by_ns.get(ns)
+        if prev is None or math.dist(p, prev) >= self.OSC_MIN_JUMP_M:
+            if prev is not None:
+                self.goal_switches_by_ns[ns] = self.goal_switches_by_ns.get(ns, 0) + 1
                 self._osc_events.append(time.time())
-            # Retarget history, for reconstructing oscillation geometry offline.
-            self.goal_history.append(
-                [round(time.time() - self.t0, 1), round(p[0], 2), round(p[1], 2)])
-        self._last_goal = p
+                # Global counters stay keyed to the primary agent so the
+                # single-agent numbers keep their original meaning.
+                if ns == self.ns:
+                    self.goal_switches += 1
+            if ns == self.ns:
+                # Retarget history, for reconstructing oscillation geometry offline.
+                self.goal_history.append(
+                    [round(time.time() - self.t0, 1), round(p[0], 2), round(p[1], 2)])
+        self._last_goal_by_ns[ns] = p
+        if ns == self.ns:
+            self._last_goal = p
 
-    def _on_visited(self, msg):
+    def goal_duplication_frac(self):
+        """Fraction of agent pairs currently targeting within GOAL_DUP_M.
+
+        The number that shows coordination is doing something: uncoordinated
+        robots in a shared space converge on the same nearest frontier, so this
+        rises. Reported, not gated — the threshold should come from measured
+        data rather than a guess.
+        """
+        gs = [g for g in self.agent_goal.values() if g is not None]
+        if len(gs) < 2:
+            return 0.0
+        pairs = [(a, b) for i, a in enumerate(gs) for b in gs[i + 1:]]
+        dup = sum(1 for a, b in pairs if math.dist(a, b) < self.GOAL_DUP_M)
+        return dup / len(pairs)
+
+    def _on_visited(self, ns, msg):
+        """Coverage is the UNION of every agent's persistent map.
+
+        Single-agent runs reduce to exactly the previous behaviour (one mask).
+        With visited-map sharing on, each robot's map already approximates the
+        union, so this mostly guards the case where one agent's map never
+        arrives — which would otherwise silently understate what the team
+        covered, or overstate it if the one agent we happened to watch was the
+        laggard.
+        """
         arr = np.frombuffer(bytes(msg.data), dtype=np.int8)
         W, H = msg.info.width, msg.info.height
         if arr.size != W * H:
@@ -597,9 +859,17 @@ class Monitor:
             my = (ys >= y0) & (ys <= y1)
             self._bounds_mask = np.outer(my, mx)
         inb = arr.reshape(H, W)[self._bounds_mask]
-        if inb.size:
-            self.coverage = float((inb >= 0).sum()) / float(inb.size)
-            self.coverage_peak = max(self.coverage_peak, self.coverage)
+        if not inb.size:
+            return
+        self._cov_masks[ns] = (inb >= 0)
+        # All agents share one config, so every map has identical geometry and
+        # the masks are elementwise comparable.
+        try:
+            union = np.logical_or.reduce(list(self._cov_masks.values()))
+        except ValueError:
+            return
+        self.coverage = float(union.sum()) / float(union.size)
+        self.coverage_peak = max(self.coverage_peak, self.coverage)
 
     def _on_esdf(self, msg):
         arr = np.frombuffer(bytes(msg.data), dtype=np.int8).astype(np.float32)
@@ -616,6 +886,12 @@ class Monitor:
                       msg.info.origin.position.y + 0.5 * res, dmax)
 
     def _on_models(self, msg):
+        # Every Gazebo entity name we ever saw. Backs the all_models_spawned
+        # gate: fake_sim drives the robot whether or not its Gazebo spawn
+        # succeeded (the documented spawn_entity flake), so telemetry alone
+        # cannot distinguish "robot in Gazebo" from "invisible ghost driving
+        # around" — the model list from Gazebo itself can.
+        self.gazebo_models.update(msg.name)
         try:
             i = msg.name.index(self.ns)
         except ValueError:
@@ -655,15 +931,39 @@ class Monitor:
             raw = Path(self.contact_file).read_text().splitlines()
         except (FileNotFoundError, OSError):
             return
-        stamps = []
+        # Lines are "<epoch> <model1> <model2>"; the awk guarantees at least one
+        # side is a robot and neither is the ground plane.
+        robots = set(self.all_ns)
+        stamps = []            # (t, other_model) — wall contacts only
+        self.robot_robot_contacts = 0
+        self.contacts_by_agent = {a: 0 for a in self.all_ns}
         for line in raw:
-            parts = line.split(None, 1)
-            if len(parts) != 2:
+            parts = line.split()
+            if len(parts) < 3:
+                # Tolerate the older two-field format so archived runs still parse.
+                if len(parts) == 2:
+                    try:
+                        stamps.append((int(parts[0]), parts[1]))
+                    except ValueError:
+                        pass
                 continue
             try:
-                stamps.append((int(parts[0]), parts[1].strip()))
+                t = int(parts[0])
             except ValueError:
                 continue
+            m1, m2 = parts[1], parts[2]
+            r1, r2 = m1 in robots, m2 in robots
+            if r1 and r2:
+                # Two robots touching each other. Counted separately: it is a
+                # coordination failure, not an obstacle-avoidance one.
+                self.robot_robot_contacts += 1
+                for m in (m1, m2):
+                    self.contacts_by_agent[m] = self.contacts_by_agent.get(m, 0) + 1
+                continue
+            robot = m1 if r1 else m2
+            other = m2 if r1 else m1
+            stamps.append((t, other))
+            self.contacts_by_agent[robot] = self.contacts_by_agent.get(robot, 0) + 1
         self.obstacle_contacts = len(stamps)
         for _, n in stamps:
             if n not in self.contact_models:
@@ -728,7 +1028,33 @@ class Monitor:
         self._t_last_log = now
         # Strip ANSI colour codes: the planner wraps status names in them, so
         # naive substring matching on "to status_=X" would never match.
-        self._log_cache = ANSI_RE.sub('', read_logs(self.log_paths))
+        # The concatenation stays authoritative for crash patterns (a crash
+        # anywhere is a failure); everything per-robot uses agent_logs.
+        self._log_cache, self.agent_logs = read_logs_by_agent(self.log_paths)
+
+        # Per-agent completion. Each agent must show its OWN give-up followed by
+        # its OWN arrival — see read_logs_by_agent for why the merged text
+        # cannot answer this.
+        for a in self.all_ns:
+            text = self.agent_logs.get(a, '')
+            self.giveups[a] = text.count('No frontiers left')
+            i = text.find('No frontiers left')
+            self.arrival_confirmed[a] = bool(
+                i >= 0 and ('MPC: goal reached' in text[i:]
+                            or 'to status_=GOAL_REACHED' in text[i:]))
+            # Proof that coordination is actually on, straight from the node.
+            # Without this a silently-uncoordinated run — the exact bug this
+            # scenario exists to catch — looks like a healthy one.
+            self.minpos_on[a] = ('Exploration MinPos: enabled' in text)
+            self.map_sharing_on[a] = ('visited-map sharing enabled' in text)
+            self.claims_on[a] = ('claim sharing enabled' in text)
+            self.status_on[a] = ('frontier-status sharing enabled' in text)
+            # Coordination event counts. Yields should be O(1-5) per agent per
+            # run (contested selections at startup); an explosion here means
+            # claim flapping. Retire events show status sharing doing work.
+            self.yields[a] = text.count('Exploration claim: yielding')
+            self.status_retire_events[a] = text.count('Exploration status: retired')
+
         self.n_giveups = self._log_cache.count('No frontiers left')
         idx = self._log_cache.find('No frontiers left')
         if idx >= 0:
@@ -777,6 +1103,27 @@ class Monitor:
                 continue
             self._t_last_tick = now
 
+            # Time-averaged goal duplication, over agents still exploring.
+            # Agents that gave up are excluded: agent_goal retains their LAST
+            # frontier forever, so a robot parked at home would otherwise keep
+            # "duplicating" whatever its final target happened to be. (An agent
+            # that later resumes after a give-up is also excluded — rare
+            # endgame case, and excluding it under-reports rather than
+            # inflates.)
+            if (len(self.all_ns) > 1
+                    and now - self._t_last_dup >= self.DUP_SAMPLE_S):
+                self._t_last_dup = now
+                gs = [g for a, g in self.agent_goal.items()
+                      if g is not None and self.giveups.get(a, 0) == 0]
+                if len(gs) >= 2:
+                    pairs = [(a, b) for i, a in enumerate(gs) for b in gs[i + 1:]]
+                    frac = sum(1 for a, b in pairs
+                               if math.dist(a, b) < self.GOAL_DUP_M) / len(pairs)
+                    self.dup_samples += 1
+                    self.dup_sum += frac
+                    if frac > 0:
+                        self.dup_active_s += 1
+
             pos = (self.state.pos.x, self.state.pos.y, self.state.pos.z)
             self.samples += 1
             self.min_altitude = min(self.min_altitude, pos[2])
@@ -796,8 +1143,16 @@ class Monitor:
                 self._track.popleft()
             if now - self._t_last_track >= 2.0:
                 self._t_last_track = now
-                self.pos_track.append([round(now - self.t0, 1),
-                                       round(pos[0], 2), round(pos[1], 2)])
+                t_rel = round(now - self.t0, 1)
+                self.pos_track.append([t_rel, round(pos[0], 2), round(pos[1], 2)])
+                # Per-agent tracks as well. pos_track follows only the primary
+                # agent, which cannot localise a collision between the OTHER
+                # two robots — the position it reports then belongs to an
+                # uninvolved robot. Cheap to record and it is the only way to
+                # tell a corridor pinch from congestion around the home points.
+                for a, p_a in self.peer_pos.items():
+                    self.pos_track_by_agent.setdefault(a, []).append(
+                        [t_rel, round(p_a[0], 2), round(p_a[1], 2)])
 
             # Track inter-agent separation (the real safety property of the
             # antipodal swap scenario: everyone crosses through the centre).
@@ -856,7 +1211,7 @@ class Monitor:
             # that; an earlier revision kept an arrival timer running while the
             # robot was 26 m away and wrongly reported the arrival unconfirmed.
             if self.kind == 'exploration':
-                d_home_now = math.dist(pos[:2], self.sc['home'])
+                d_home_now = math.dist(pos[:2], home_for(self.sc, self.ns))
                 self.max_dist_home = max(self.max_dist_home, d_home_now)
                 # Driven by the planner's own give-up message, because there is
                 # no ROS-side signal to use: exploration goals are issued by a
@@ -898,11 +1253,22 @@ class Monitor:
             # otherwise the harness tears the sim down mid-manoeuvre and the
             # "did it finish cleanly?" question is decided by a race.
             if self.phase == 'RETURNING':
-                hx, hy = self.sc['home']
-                if math.dist((pos[0], pos[1]), (hx, hy)) <= self.sc['home_tol_m']:
+                # The team is done only when EVERY robot is parked at its own
+                # spawn. Ending on the primary agent alone would tear the sim
+                # down while the others were still exploring — and with per-agent
+                # logs their unfinished state would then read as a failure that
+                # the harness itself caused. A staggered finish is normal.
+                tol = self.sc['home_tol_m']
+                all_home = all(
+                    a in self.peer_pos
+                    and math.dist(self.peer_pos[a][:2], home_for(self.sc, a)) <= tol
+                    for a in self.all_ns)
+                all_confirmed = all(self.arrival_confirmed.get(a, False)
+                                    for a in self.all_ns)
+                if all_home:
                     if self._t_arrived is None:
                         self._t_arrived = now
-                    if self.saw_arrival_confirmed:
+                    if all_confirmed:
                         return 'DONE'
                     if now - self._t_arrived > self.sc['home_confirm_s']:
                         # Physically home but never declared it. Real finding,
@@ -917,7 +1283,7 @@ class Monitor:
             # evidence that tripped it so a false positive is auditable.
             parked_at_home = (self.kind == 'exploration'
                               and self.phase == 'RETURNING'
-                              and math.dist(pos[:2], self.sc['home'])
+                              and math.dist(pos[:2], home_for(self.sc, self.ns))
                                   <= self.sc['home_tol_m'])
             ref_pos, ref_t = self._prog_ref
             if parked_at_home:
@@ -982,13 +1348,48 @@ def evaluate(sc, mon, outcome, duration_s, logs):
 
     home_d = None
     if sc['kind'] == 'exploration':
+        agents = sc['namespaces']
+        multi = len(agents) > 1
         gates['coverage'] = mon.coverage_peak >= sc['min_coverage']
-        gates['finished_cleanly'] = (mon.saw_no_frontiers
-                                     and mon.saw_arrival_confirmed)
-        home_d = (math.dist(mon._last_pos[:2], sc['home'])
-                  if mon._last_pos else float('inf'))
-        gates['returned_home'] = home_d <= sc['home_tol_m']
+
+        # Every agent answers for itself. On the merged log one robot's give-up
+        # could pair with another's arrival and pass this while nobody finished;
+        # mon.giveups / mon.arrival_confirmed are per-pane (read_logs_by_agent).
+        gates['finished_cleanly'] = all(
+            mon.giveups.get(a, 0) > 0 and mon.arrival_confirmed.get(a, False)
+            for a in agents)
+
+        # Distance to that agent's OWN spawn, not to a single shared home.
+        home_ds = {a: (math.dist(mon.peer_pos[a][:2], home_for(sc, a))
+                       if a in mon.peer_pos else float('inf'))
+                   for a in agents}
+        gates['returned_home'] = all(d <= sc['home_tol_m'] for d in home_ds.values())
+        home_d = home_ds.get(mon.ns)
+
         gates['not_tilted'] = mon.max_tilt_deg < sc['max_tilt_deg']
+
+        if multi:
+            # A partial launch must not read as success. The spawn_entity race
+            # is documented and its odds scale with the robot count.
+            gates['all_agents_alive'] = len(mon.peer_pos) == len(agents)
+            # Coordination has to be observed, not assumed: the config claiming
+            # MinPos is on (planner log) AND peer traffic actually flowing. This
+            # is the direct guard against silently re-shipping N solo robots,
+            # which is the state this whole scenario exists to move away from.
+            gates['coordination_active'] = (
+                all(mon.minpos_on.get(a, False) for a in agents)
+                and all(mon.map_sharing_on.get(a, False) for a in agents)
+                and all(mon.claims_on.get(a, False) for a in agents)
+                and all(mon.status_on.get(a, False) for a in agents)
+                and len(mon.peer_pose_senders) == len(agents)
+                and len(mon.visited_map_senders) == len(agents)
+                # Every robot pursues at least one frontier, so all N claim at
+                # least once; status broadcasts continuously. Both sets reach N
+                # in any healthy run — their absence means the intent half of
+                # coordination silently did not ship.
+                and len(mon.claim_senders) == len(agents)
+                and len(mon.status_senders) == len(agents))
+            gates['no_robot_robot_contact'] = (mon.robot_robot_contacts == 0)
         # Collision gate uses Gazebo's own contact stream, i.e. ground truth.
         # The ESDF-derived clearance is reported but NOT gated: sampled at the
         # robot's centre it under-reports true distance (measured 0.42 m where
@@ -999,20 +1400,34 @@ def evaluate(sc, mon, outcome, duration_s, logs):
 
     elif sc['kind'] == 'goal':
         gates['goal_reached'] = mon.goal_reached
-        gates['stayed_airborne'] = (mon.min_altitude >= sc['min_altitude_m']
-                                    if math.isfinite(mon.min_altitude) else False)
+        if sc.get('min_altitude_m') is not None:
+            gates['stayed_airborne'] = (mon.min_altitude >= sc['min_altitude_m']
+                                        if math.isfinite(mon.min_altitude) else False)
 
     elif sc['kind'] == 'swap':
         # Every agent must have completed at least min_swap_legs crossings, and
         # all agents must have reported state at all (catches partial launches).
         legs = {a: mon.swap_legs.get(a, 0) for a in sc['namespaces']}
         gates['all_agents_alive'] = len(mon.peer_pos) == len(sc['namespaces'])
+        if sc.get('gazebo'):
+            # Telemetry cannot catch a failed spawn (fake_sim drives the robot
+            # regardless — README's documented flake); Gazebo's own model list
+            # can. Every namespace must actually exist as an entity.
+            gates['all_models_spawned'] = all(
+                ns in mon.gazebo_models for ns in sc['namespaces'])
         gates['all_agents_swapped'] = all(v >= sc['min_swap_legs']
                                           for v in legs.values())
-        gates['separation'] = (mon.min_separation_m >= sc['min_separation_m']
-                               if math.isfinite(mon.min_separation_m) else False)
-        gates['stayed_airborne'] = (mon.min_altitude >= sc['min_altitude_m']
-                                    if math.isfinite(mon.min_altitude) else False)
+        # Gate only when the scenario declares a floor; ground-swap-10 reports
+        # separation without gating it (see the scenario comment for why).
+        if sc.get('min_separation_m') is not None:
+            gates['separation'] = (mon.min_separation_m >= sc['min_separation_m']
+                                   if math.isfinite(mon.min_separation_m) else False)
+        # Altitude gate only where the scenario declares a floor: ground-robot
+        # swaps run at spawn z = 0 by construction (fake_sim pins z), so a
+        # floor would fail every run for the wrong reason.
+        if sc.get('min_altitude_m') is not None:
+            gates['stayed_airborne'] = (mon.min_altitude >= sc['min_altitude_m']
+                                        if math.isfinite(mon.min_altitude) else False)
 
     metrics = dict(
         outcome=outcome,
@@ -1042,6 +1457,21 @@ def evaluate(sc, mon, outcome, duration_s, logs):
         stuck_evidence=mon.stuck_evidence,
         goal_reached=mon.goal_reached,
         obstacle_contacts=mon.obstacle_contacts,
+        robot_robot_contacts=mon.robot_robot_contacts,
+        obstacle_contacts_by_agent=mon.contacts_by_agent,
+        goal_switches_by_agent=mon.goal_switches_by_ns,
+        goal_duplication_frac=round(mon.goal_duplication_frac(), 3),
+        goal_duplication_mean=(round(mon.dup_sum / mon.dup_samples, 3)
+                               if mon.dup_samples else None),
+        goal_duplication_s=mon.dup_active_s,
+        yields_by_agent=dict(mon.yields),
+        status_retire_events_by_agent=dict(mon.status_retire_events),
+        giveups_by_agent=dict(mon.giveups),
+        arrival_confirmed_by_agent=dict(mon.arrival_confirmed),
+        peer_pose_senders=sorted(mon.peer_pose_senders),
+        visited_map_senders=sorted(mon.visited_map_senders),
+        claim_senders=sorted(mon.claim_senders),
+        status_senders=sorted(mon.status_senders),
         contact_models=mon.contact_models,
         contact_events=mon.contact_events,
         min_separation_m=(round(mon.min_separation_m, 3)
@@ -1091,7 +1521,7 @@ def do_run(sc, name, out_dir, setup_bash, ros_domain_id, run_idx,
         if sc.get('gazebo'):
             contact_file = run_dir / 'contacts.log'
             contact_file.touch()
-            contact_watch = start_contact_watch(sc['namespaces'][0], contact_file)
+            contact_watch = start_contact_watch(sc['namespaces'], contact_file)
         if not rclpy.ok():
             rclpy.init()
         mon = Monitor(sc, sc['namespaces'][0], log_paths)
@@ -1131,7 +1561,8 @@ def do_run(sc, name, out_dir, setup_bash, ros_domain_id, run_idx,
         # Kept out of `metrics` so summary tables stay readable; these are the
         # traces used to reconstruct a failure offline.
         record['traces'] = dict(goal_history=mon.goal_history,
-                                pos_track=mon.pos_track)
+                                pos_track=mon.pos_track,
+                                pos_track_by_agent=mon.pos_track_by_agent)
     (out_dir / f'run{run_idx:02d}.json').write_text(json.dumps(record, indent=2))
 
     if not attach:            # in attach mode the caller owns the sim's lifetime
