@@ -52,7 +52,10 @@ std::vector<LinearConstraint3D> makeSampleStaticConstraints() {
 
 /// Two moving dynamic obstacles.
 /// Mirrors makeSampleDynamicObstacles() in src/test/test_lbfgs_solver.cpp.
-std::vector<std::shared_ptr<dynTraj>> makeSampleDynamicObstacles() {
+/// as_agents flags them is_agent, which routes them through the
+/// agent-coupling taper (agent_dyn_horizon_sec) in J_dyn.
+std::vector<std::shared_ptr<dynTraj>> makeSampleDynamicObstacles(
+    bool as_agents = false) {
   std::vector<std::shared_ptr<dynTraj>> obstacles;
   obstacles.reserve(2);
 
@@ -62,7 +65,7 @@ std::vector<std::shared_ptr<dynTraj>> makeSampleDynamicObstacles() {
               Eigen::Vector3d{0.0, 0.0, 0.0}, Eigen::Vector3d{0.0, 0.0, 0.0},
               0.0, 8.0);
     d.id = 10;
-    d.is_agent = false;
+    d.is_agent = as_agents;
     obstacles.push_back(std::make_shared<dynTraj>(std::move(d)));
   }
   {
@@ -71,7 +74,7 @@ std::vector<std::shared_ptr<dynTraj>> makeSampleDynamicObstacles() {
               Eigen::Vector3d{0.0, 0.0, 0.0}, Eigen::Vector3d{0.0, 0.0, 0.0},
               0.0, 8.0);
     d.id = 11;
-    d.is_agent = false;
+    d.is_agent = as_agents;
     obstacles.push_back(std::make_shared<dynTraj>(std::move(d)));
   }
 
@@ -80,7 +83,9 @@ std::vector<std::shared_ptr<dynTraj>> makeSampleDynamicObstacles() {
 
 /// Build a fully configured solver on the baseline problem and return it
 /// alongside the first valid initial-guess vector for that problem.
-std::shared_ptr<lbfgs::SolverLBFGS> buildBaselineSolver(Eigen::VectorXd& z0_out) {
+std::shared_ptr<lbfgs::SolverLBFGS> buildBaselineSolver(
+    Eigen::VectorXd& z0_out, bool obstacles_as_agents = false,
+    double agent_horizon_sec = 0.0) {
   using namespace lbfgs;
 
   planner_params_t p;
@@ -114,6 +119,7 @@ std::shared_ptr<lbfgs::SolverLBFGS> buildBaselineSolver(Eigen::VectorXd& z0_out)
   p.f_max = 10.0;
   p.mass = 1.0;
   p.g = 9.81;
+  p.agent_dyn_horizon_sec = agent_horizon_sec;
 
   auto solver = std::make_shared<SolverLBFGS>();
   solver->initializeSolver(p);
@@ -121,7 +127,8 @@ std::shared_ptr<lbfgs::SolverLBFGS> buildBaselineSolver(Eigen::VectorXd& z0_out)
   vec_Vecf<3> global_wps = {Vecf<3>{0.0, 0.0, 0.0}, Vecf<3>{0.0, 2.0, 0.0},
                             Vecf<3>{0.0, 4.0, 0.0}, Vecf<3>{5.0, 5.0, 0.0}};
   std::vector<LinearConstraint3D> safe_corridor = makeSampleStaticConstraints();
-  std::vector<std::shared_ptr<dynTraj>> obstacles = makeSampleDynamicObstacles();
+  std::vector<std::shared_ptr<dynTraj>> obstacles =
+      makeSampleDynamicObstacles(obstacles_as_agents);
 
   state s0, sf;
   s0.setPos(0.0, 0.0, 0.0);
@@ -168,6 +175,65 @@ TEST(GradientCheck, CoordinatesMatchFiniteDiff) {
   const double err = solver->checkGradCoordinates(z0, /*max_coords=*/static_cast<int>(z0.size()),
                                                   /*eps=*/1e-6, /*seed=*/7);
   EXPECT_LT(err, 1e-5) << "Worst per-coord rel err = " << err;
+}
+
+// The agent-coupling taper adds a ∂w/∂T chain term inside the fade band; the
+// finite-difference check is what proves that term is exact rather than
+// approximately right. Horizon 2 s with the baseline's multi-second
+// trajectory puts the band squarely over active samples.
+TEST(GradientCheck, AgentHorizonDirectionalMatchesFiniteDiff) {
+  Eigen::VectorXd z0;
+  auto solver = buildBaselineSolver(z0, /*obstacles_as_agents=*/true,
+                                    /*agent_horizon_sec=*/2.0);
+  ASSERT_GT(z0.size(), 0) << "prepareSolverForReplan produced no initial guesses";
+
+  const double err = solver->checkGradDirectional(z0, /*num_dirs=*/16, /*eps=*/1e-6,
+                                                  /*seed=*/42);
+  EXPECT_LT(err, 1e-5) << "Worst directional rel err (agent taper) = " << err;
+}
+
+// Horizon <= 0 must be BIT-identical to the pre-taper evaluator: the weight
+// short-circuits to 1.0 and the arithmetic path is unchanged. This is the
+// single-robot / UAV regression guard — every shipped config except the
+// ground multi overlay runs with the default 0.
+TEST(GradientCheck, AgentHorizonZeroMatchesLegacy) {
+  Eigen::VectorXd z_agents, z_plain;
+  auto agents = buildBaselineSolver(z_agents, /*obstacles_as_agents=*/true,
+                                    /*agent_horizon_sec=*/0.0);
+  auto plain  = buildBaselineSolver(z_plain, /*obstacles_as_agents=*/false,
+                                    /*agent_horizon_sec=*/0.0);
+  ASSERT_GT(z_agents.size(), 0);
+  ASSERT_EQ(z_agents.size(), z_plain.size());
+
+  Eigen::VectorXd ga(z_agents.size()), gp(z_plain.size());
+  const double fa = agents->evaluateObjectiveAndGradientFused(z_agents, ga);
+  const double fp = plain->evaluateObjectiveAndGradientFused(z_agents, gp);
+  EXPECT_DOUBLE_EQ(fa, fp);
+  EXPECT_LT((ga - gp).norm(), 1e-12);
+}
+
+// A huge horizon (fade band far beyond the trajectory) must also match the
+// full-coupling evaluator; a tight horizon can only REMOVE cost (J_dyn terms
+// are non-negative), never add it.
+TEST(GradientCheck, AgentHorizonMonotone) {
+  Eigen::VectorXd z0, z_tmp;
+  auto full  = buildBaselineSolver(z0, /*obstacles_as_agents=*/true,
+                                   /*agent_horizon_sec=*/1e6);
+  auto tight = buildBaselineSolver(z_tmp, /*obstacles_as_agents=*/true,
+                                   /*agent_horizon_sec=*/2.0);
+  auto plain = buildBaselineSolver(z_tmp, /*obstacles_as_agents=*/false,
+                                   /*agent_horizon_sec=*/0.0);
+  ASSERT_GT(z0.size(), 0);
+
+  Eigen::VectorXd g(z0.size());
+  const double f_full  = full->evaluateObjectiveAndGradientFused(z0, g);
+  const double f_tight = tight->evaluateObjectiveAndGradientFused(z0, g);
+  const double f_plain = plain->evaluateObjectiveAndGradientFused(z0, g);
+
+  EXPECT_DOUBLE_EQ(f_full, f_plain)
+      << "a horizon beyond the trajectory must not change anything";
+  EXPECT_LE(f_tight, f_full + 1e-12)
+      << "tapering can only remove non-negative J_dyn contributions";
 }
 
 int main(int argc, char** argv) {

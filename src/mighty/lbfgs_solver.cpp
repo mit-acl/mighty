@@ -589,6 +589,7 @@ void SolverLBFGS::initializeSolver(const planner_params_t& params) {
   num_dyn_obst_samples_ = params.num_dyn_obst_samples;  // Number of dynamic obstacle samples
   Co_ = params.Co;    // Clearance distance for static obstacle avoidance
   Cw_ = params.Cw;    // Clearance distance for dynamic obstacle avoidance
+  agent_dyn_horizon_sec_ = params.agent_dyn_horizon_sec;  // Agent-coupling horizon for J_dyn
   BIG_ = params.BIG;  // A large constant for static constraints
   dc_ = params.dc;    // Discretization constant
   V_min_ = 0.0;       // Minimum speed
@@ -2547,6 +2548,19 @@ double SolverLBFGS::evaluateObjectiveAndGradientFused(const Eigen::VectorXd& z,
           double t_abs = t0_ + u * total_T;
           t_abs = std::min(std::max(t_abs, edges.front() + kEpsT), edges.back() - kEpsT);
 
+          // Agent-coupling taper: a peer's predicted position this far into
+          // the future is fiction (they replan ~1 Hz), and reacting to a
+          // phantom crossing bends the tail on every replan — which the
+          // ~85 Hz re-anchoring then adopts as driven wander. Weight w fades
+          // to 0 at the horizon; dw/dt feeds the ∂J/∂T chain below so the
+          // gradient stays exact. Samples are monotonic in time, so once the
+          // weight hits zero nothing later can contribute — break.
+          double w_ag = 1.0, dwdt_ag = 0.0;
+          if (obs->is_agent) {
+            agentCouplingWeight(u * total_T, w_ag, dwdt_ag);
+            if (w_ag <= 0.0) break;
+          }
+
           // Locate segment and local tau (strictly inside)
           int s = int(std::upper_bound(edges.begin(), edges.end(), t_abs) - edges.begin()) - 1;
           s = std::clamp(s, 0, M - 1);
@@ -2590,8 +2604,8 @@ double SolverLBFGS::evaluateObjectiveAndGradientFused(const Eigen::VectorXd& z,
           const double h2 = h * h;
           const double h3 = h2 * h;
 
-          // ∂/∂p (h^3) = -6 h^2 (p - k)
-          const double factor = -6.0 * h2;
+          // ∂/∂p (h^3) = -6 h^2 (p - k), scaled by the agent taper weight
+          const double factor = -6.0 * h2 * w_ag;
 
           // (1) CP path: ∂J/∂CP = (∂J/∂p)(∂p/∂CP) dt
           for (int j = 0; j < num_cp_; ++j) gCP_dyn[s][j] += (factor * dt * Bd[j]) * diff;
@@ -2613,10 +2627,16 @@ double SolverLBFGS::evaluateObjectiveAndGradientFused(const Eigen::VectorXd& z,
           for (int r = 0; r < M; ++r) gT_dyn[r] += (factor * dt) * inner_obs * u;
 
           // (4) dt scaling: dt = total_T/N ⇒ ∂dt/∂T_r = 1/N
-          for (int r = 0; r < M; ++r) gT_dyn[r] += h3 / static_cast<double>(N);
+          for (int r = 0; r < M; ++r) gT_dyn[r] += w_ag * h3 / static_cast<double>(N);
+
+          // (5) taper chain: J_i = w(u·total_T)·h³·dt, and ∂(u·total_T)/∂T_r = u,
+          // so each T_r gains h³·dt·w'·u inside the fade band (w' = 0 outside).
+          if (dwdt_ag != 0.0) {
+            for (int r = 0; r < M; ++r) gT_dyn[r] += (h3 * dt) * dwdt_ag * u;
+          }
 
           // accumulate objective
-          J_dyn += h3 * dt;
+          J_dyn += w_ag * h3 * dt;
         }
       }
 
@@ -3038,6 +3058,15 @@ void SolverLBFGS::dJ_dyn_dz(const VecXd& z, const std::vector<Vec3>& P, const st
       const double i_over_N = static_cast<double>(i) * invN;
       const double t_abs = edges.front() + i_over_N * total_T;
 
+      // Agent-coupling taper — same contract as the fused evaluator: far-
+      // future peer predictions are fiction, weight them out smoothly and
+      // keep the gradient exact via the dw/dt chain term below.
+      double w_ag = 1.0, dwdt_ag = 0.0;
+      if (obs->is_agent) {
+        agentCouplingWeight(i_over_N * total_T, w_ag, dwdt_ag);
+        if (w_ag <= 0.0) break;  // samples are monotonic in time
+      }
+
       // find active segment s
       int s = int(std::upper_bound(edges.begin(), edges.end(), t_abs) - edges.begin()) - 1;
       if (s < 0) s = 0;
@@ -3069,7 +3098,7 @@ void SolverLBFGS::dJ_dyn_dz(const VecXd& z, const std::vector<Vec3>& P, const st
       if (d2 >= Cw2) continue;  // outside hinge support
 
       const double h = (Cw2 - d2);
-      const double fac = -6.0 * h * h;  // 3*h^2 * (-2*diff)
+      const double fac = -6.0 * h * h * w_ag;  // 3*h^2 * (-2*diff), agent-tapered
 
       // ---- ∂J/∂CP via p(u) ----
       for (int j = 0; j < 6; ++j) gCP[s][j] += (fac * dt * B[j]) * diff;
@@ -3093,7 +3122,12 @@ void SolverLBFGS::dJ_dyn_dz(const VecXd& z, const std::vector<Vec3>& P, const st
 
       // ---- Riemann weight dt = total_T/N → ∂dt/∂T_r = 1/N ----
       const double hinge3 = h * h * h;
-      for (int r = 0; r < M; ++r) gT[r] += hinge3 * invN;
+      for (int r = 0; r < M; ++r) gT[r] += w_ag * hinge3 * invN;
+
+      // ---- taper chain: ∂w/∂T_r = w'·(∂t_rel/∂T_r) = w'·i/N ----
+      if (dwdt_ag != 0.0) {
+        for (int r = 0; r < M; ++r) gT[r] += (hinge3 * dt) * dwdt_ag * i_over_N;
+      }
     }
   }
 

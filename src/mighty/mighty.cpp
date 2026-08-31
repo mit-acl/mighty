@@ -35,6 +35,7 @@ MIGHTY::MIGHTY(parameters par) : par_(par) {
   planner_params_.time_weight = par_.time_weight;  // weight for time cost
   planner_params_.pos_anchor_weight = par_.pos_anchor_weight;
   planner_params_.dyn_weight = par_.dynamic_weight;
+  planner_params_.agent_dyn_horizon_sec = par_.agent_dyn_horizon_sec;
   planner_params_.stat_weight = par_.stat_weight;
   planner_params_.jerk_weight = par_.jerk_weight;
   planner_params_.dyn_constr_vel_weight = par_.dyn_constr_vel_weight;

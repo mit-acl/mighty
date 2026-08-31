@@ -65,6 +65,15 @@ struct planner_params_t {
   int num_dyn_obst_samples = 10;  // Number of dynamic obstacle samples
   double Co = 0.5;                // for static obstacle avoidance
   double Cw = 1.0;                // for dynamic obstacle avoidance
+  // Agent-coupling horizon: J_dyn only reacts to is_agent obstacles within
+  // this many seconds from the trajectory start (linear fade over the last
+  // 25%). Peers replan ~every second, so their predicted positions further
+  // out are fiction — reacting to a "crossing" 30 s away bends the local
+  // trajectory tail on every replan, and the plan is re-anchored at the
+  // robot's actual pose ~85x/s, so each phantom bend is adopted as wander
+  // (measured: driven turning 1.29 rad/m vs 0.56 single-robot). <=0 keeps
+  // the full-horizon coupling (all UAV configs, single-robot: unchanged).
+  double agent_dyn_horizon_sec = 0.0;
   double BIG = 1e8;               // a large constant for static constraints
   double dc = 0.01;               // discretization constant
   double init_turn_bf = 15.0;     // initial turn buffer in degrees
@@ -776,6 +785,7 @@ class SolverLBFGS {
   int num_dyn_obst_samples_;  // Number of dynamic obstacle samples
   double Co_;                 // for static obstacle avoidance
   double Cw_;
+  double agent_dyn_horizon_sec_ = 0.0;  // see params.agent_dyn_horizon_sec
   double V_min_;       // used for initial guess
   double turn_buf_;    // used for initial guess
   double turn_span_;   // used for initial guess
@@ -786,6 +796,25 @@ class SolverLBFGS {
 
   // Constants
   double Cw2_;
+
+  // Agent-coupling taper for J_dyn (see params.agent_dyn_horizon_sec).
+  // Returns the weight w(t_rel) in [0,1] and its time derivative — the
+  // derivative feeds the ∂J/∂T chain so the analytic gradient stays exact
+  // through the fade band (pinned by test_gradient_check).
+  inline void agentCouplingWeight(double t_rel, double& w, double& dw_dt) const {
+    w = 1.0;
+    dw_dt = 0.0;
+    if (agent_dyn_horizon_sec_ <= 0.0) return;
+    const double H = agent_dyn_horizon_sec_;
+    const double fade = std::max(1.0, 0.25 * H);
+    if (t_rel <= H - fade) return;
+    if (t_rel >= H) {
+      w = 0.0;
+      return;
+    }
+    w = (H - t_rel) / fade;
+    dw_dt = -1.0 / fade;
+  }
 
   // Optimization variables
   mutable std::vector<double> t_abs_;

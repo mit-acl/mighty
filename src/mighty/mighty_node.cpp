@@ -232,9 +232,17 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
     }
   }
 
-  // Timer for callback
-  timer_replanning_ = this->create_wall_timer(10ms, std::bind(&MIGHTY_NODE::replanCallback, this),
-                                              this->cb_group_replan_);
+  // Timer for callback. The replan attempt rate is a parameter because it is
+  // the dominant CPU knob per robot: at the historical 100 Hz a fleet of ten
+  // planners consumed ~8.5 cores and starved the MPC control loops (measured:
+  // 30 Hz loops degraded to 16 Hz with 231 ms worst-case periods and 33% yaw
+  // saturation — visible overshoot). Default keeps 100 Hz for every existing
+  // config; the 10-robot swap overlay runs 20 Hz (a 0.5 m/s robot moves
+  // 2.5 cm per replan at that rate).
+  const double replan_rate = std::max(1.0, par_.replan_rate_hz);
+  timer_replanning_ = this->create_wall_timer(
+      std::chrono::duration<double>(1.0 / replan_rate),
+      std::bind(&MIGHTY_NODE::replanCallback, this), this->cb_group_replan_);
   timer_goal_ =
       this->create_wall_timer(std::chrono::duration<double>(par_.dc),
                               std::bind(&MIGHTY_NODE::publishGoal, this), this->cb_group_goal_);
@@ -245,6 +253,24 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
         100ms, std::bind(&MIGHTY_NODE::goalReachedCheckCallback, this), this->cb_groups_re_[2]);
   timer_cleanup_old_trajs_ = this->create_wall_timer(
       500ms, std::bind(&MIGHTY_NODE::cleanUpOldTrajsCallback, this), this->cb_groups_mu_[4]);
+  // /trajs KEEPALIVE — deliberately a standalone timer, NOT a branch of the
+  // replan loop: the robots that go dark are exactly the ones whose replan
+  // callback exits early (rejected goal, goal reached, no goal yet), so a
+  // keepalive inside replanCallback never fires for them. Receivers prune
+  // agents silent for traj_lifetime, and a pruned robot is invisible to
+  // every peer's avoidance (J_dyn, standoff rings, static discs) — measured
+  // in the random_slot campaign as full-speed drive-throughs of robots
+  // waiting out the stagnation redraw. Re-sharing the last committed pwp is
+  // honest: it has ended, so peers evaluating it at NOW get the parked
+  // position. Inert until the first real share.
+  timer_traj_keepalive_ = this->create_wall_timer(1s, [this]() {
+    if (!par_.share_traj || !own_traj_ever_shared_) return;
+    if (this->now().seconds() - last_own_traj_pub_t_ >
+        par_.traj_lifetime / 3.0) {
+      publishOwnTraj();
+      last_own_traj_pub_t_ = this->now().seconds();
+    }
+  });
   if (par_.use_hardware)
     timer_initial_pose_ = this->create_wall_timer(
         100ms, std::bind(&MIGHTY_NODE::getInitialPoseHwCallback, this), this->cb_groups_mu_[8]);
@@ -287,7 +313,7 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
         std::bind(&MIGHTY_NODE::unknownMapCallback, this, std::placeholders::_1), options_map);
     RCLCPP_INFO(this->get_logger(),
                 "Hardware mode: subscribing to occupancy_grid and unknown_grid independently");
-  } else if (par_.sim_env != "fake_sim") {
+  } else if (par_.sim_env != "fake_sim" && par_.map_source != "sensor_cloud") {
     // Gazebo sim: synchronize the occupancy grid and unknown grid
     occup_grid_sub_.subscribe(this, "occupancy_grid", rmw_qos_profile_sensor_data, options_map);
     unknown_grid_sub_.subscribe(this, "unknown_grid", rmw_qos_profile_sensor_data, options_map);
@@ -295,6 +321,9 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
     sync_->registerCallback(
         std::bind(&MIGHTY_NODE::mapCallback, this, std::placeholders::_1, std::placeholders::_2));
   } else {
+    // fake_sim, OR a gazebo run with map_source:='sensor_cloud' — sensorless
+    // spawned models (use_lidar:=false) have no mapper chain, so the planner
+    // eats the pcl_render feed exactly as in fake_sim.
     sub_fake_sim_occupancy_map_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
         "sensor_point_cloud",
         rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)),
@@ -360,6 +389,10 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
       mp.invalidation_keep_out_radius_m = par_.expl_invalidation_keep_out_radius_m;
       mp.invalidation_cooldown_sec      = par_.expl_invalidation_cooldown_sec;
       mp.peer_visit_radius_m            = par_.expl_peer_visit_radius_m;
+      // Consumed peer verdicts age out on the same silence threshold as the
+      // peers themselves: a dead peer frees its claims and its consumed
+      // verdicts together, so a later fresh verdict at the same spot applies.
+      mp.peer_verdict_ttl_sec           = par_.expl_peer_timeout_sec;
       frontier_manager_ = std::make_unique<FrontierManager>(mp);
 
       // Persistent visited bitmap. Records every cell ever observed across
@@ -423,6 +456,81 @@ MIGHTY_NODE::MIGHTY_NODE() : Node("mighty_node") {
             },
             options_map);
         RCLCPP_INFO(this->get_logger(), "Exploration MinPos: visited-map sharing enabled");
+      }
+
+      // Claim sharing: broadcast which frontier we are currently pursuing, so
+      // peers can hard-skip it at selection time. This is the intent half of
+      // coordination — positions alone let two robots that are near-equidistant
+      // from a frontier both compute rank 0 and both drive there for a whole
+      // leg. Subscriber on the reentrant group like peer poses; the tracker
+      // stores ARRIVAL time (not header stamp) because claims gate hard
+      // selection decisions and must be immune to peer clock skew.
+      if (par_.expl_use_minpos && par_.expl_claim_block_radius_m > 0.0) {
+        auto claim_qos = rclcpp::QoS(10).reliable();
+        pub_peer_claim_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
+            "/exploration/peer_claims", claim_qos);
+        sub_peer_claim_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+            "/exploration/peer_claims", claim_qos,
+            [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+              if (msg->header.frame_id == ns_) return;
+              claim_tracker_.updateClaim(
+                  msg->header.frame_id,
+                  msg->pose.position.x,
+                  msg->pose.position.y,
+                  this->now().seconds());
+            },
+            options_re_1);
+        RCLCPP_INFO(this->get_logger(),
+                    "Exploration MinPos: claim sharing enabled (block_radius=%.1fm)",
+                    par_.expl_claim_block_radius_m);
+      }
+
+      // Frontier-status sharing: broadcast the full frontier DB including
+      // VISITED/INVALIDATED so one robot's "done" or "unreachable" verdict
+      // retires the matching record everywhere — instead of depending on a
+      // peer wandering within peer_visit_radius_m of the exact centroid, or
+      // on the 1 Hz map merge surviving an unknown sliver. Receivers act only
+      // on terminal states (share-to-retire); subscriber on cb_group_map_ so
+      // applyPeerStatus() is serialized with update()/selection.
+      if (par_.expl_use_minpos && par_.expl_share_frontier_status) {
+        pub_frontier_status_ = this->create_publisher<dynus_interfaces::msg::FrontierList>(
+            "/exploration/frontier_status", rclcpp::QoS(1).reliable());
+        sub_frontier_status_ = this->create_subscription<dynus_interfaces::msg::FrontierList>(
+            "/exploration/frontier_status", rclcpp::QoS(1).reliable(),
+            [this](const dynus_interfaces::msg::FrontierList::SharedPtr msg) {
+              if (msg->header.frame_id == ns_ || !frontier_manager_) return;
+              std::vector<PeerFrontierStatus> statuses;
+              for (const auto& f : msg->frontiers) {
+                if (f.state == dynus_interfaces::msg::Frontier::STATE_VISITED) {
+                  statuses.push_back({Eigen::Vector2d(f.centroid.x, f.centroid.y), false});
+                } else if (f.state == dynus_interfaces::msg::Frontier::STATE_INVALIDATED) {
+                  statuses.push_back({Eigen::Vector2d(f.centroid.x, f.centroid.y), true});
+                }
+              }
+              if (statuses.empty()) return;
+              const int n = frontier_manager_->applyPeerStatus(
+                  statuses, this->now().seconds(), par_.expl_status_match_radius_m,
+                  exploration_active_ ? std::optional<uint64_t>(current_explore_id_)
+                                      : std::nullopt);
+              if (n > 0) {
+                RCLCPP_INFO(this->get_logger(),
+                            "Exploration status: retired %d record(s) from peer %s",
+                            n, msg->header.frame_id.c_str());
+              }
+            },
+            options_map);
+        RCLCPP_INFO(this->get_logger(),
+                    "Exploration MinPos: frontier-status sharing enabled");
+      }
+
+      // Centralized frontier viz: ONE global marker topic for the whole team,
+      // published by the elected leader (see occ2DCallback), so multi-robot
+      // RViz shows a single deduplicated frontier layer instead of N
+      // overlapping per-namespace ones.
+      if (par_.expl_use_minpos && par_.expl_viz_centralized) {
+        pub_frontier_markers_global_ =
+            this->create_publisher<visualization_msgs::msg::MarkerArray>(
+                "/exploration/frontier_markers", 10);
       }
 
       // Global return-home trigger. One publish on /exploration/return_home
@@ -495,6 +603,8 @@ MIGHTY_NODE::~MIGHTY_NODE() {
 void MIGHTY_NODE::declareParameters() {
   // Sim enviroment
   this->declare_parameter("sim_env", "fake_sim");
+  this->declare_parameter("map_source", "");
+  this->declare_parameter("replan_rate_hz", 100.0);
 
   // UAV or Ground robot
   this->declare_parameter("vehicle_type", "uav");
@@ -646,6 +756,7 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("closed_form_traj_verbose", false);
   this->declare_parameter("jerk_weight", 1.0);
   this->declare_parameter("dynamic_weight", 1.0);
+  this->declare_parameter("agent_dyn_horizon_sec", 0.0);
   this->declare_parameter("time_weight", 1.0);
   this->declare_parameter("pos_anchor_weight", 1.0);
   this->declare_parameter("stat_weight", 1.0);
@@ -748,6 +859,13 @@ void MIGHTY_NODE::declareParameters() {
 
   this->declare_parameter("trajectory_downsample_points", 500);
   this->declare_parameter("mpc_path_spacing", 0.05);
+  this->declare_parameter("mpc_path_publish_rate_hz", 0.0);
+  this->declare_parameter("peer_yield_radius_m", 0.0);
+  this->declare_parameter("peer_yield_speed_factor", 0.3);
+  this->declare_parameter("crossing_meter_radius_m", 0.0);
+  this->declare_parameter("crossing_meter_max_k", 3);
+  this->declare_parameter("peer_standoff_m", 0.0);
+  this->declare_parameter("peer_static_disc_m", 0.0);
 
   // Frontier-based exploration (ground robot only).
   this->declare_parameter("exploration.enabled", false);
@@ -807,6 +925,11 @@ void MIGHTY_NODE::declareParameters() {
   this->declare_parameter("exploration.minpos.peer_publish_rate_hz", 5.0);
   this->declare_parameter("exploration.minpos.min_frontier_dist_to_peers_m", 0.0);
   this->declare_parameter("exploration.minpos.peer_visit_radius_m", 2.0);
+  this->declare_parameter("exploration.minpos.claim_block_radius_m", 4.0);
+  this->declare_parameter("exploration.minpos.status_match_radius_m", 2.0);
+  this->declare_parameter("exploration.minpos.status_publish_rate_hz", 2.0);
+  this->declare_parameter("exploration.minpos.share_frontier_status", true);
+  this->declare_parameter("exploration.visualization.centralized", false);
   this->declare_parameter("exploration.external_selector", false);
 }
 
@@ -820,6 +943,8 @@ void MIGHTY_NODE::setParameters() {
 
   // Sim enviroment
   par_.sim_env = this->get_parameter("sim_env").as_string();
+  par_.map_source = this->get_parameter("map_source").as_string();
+  par_.replan_rate_hz = this->get_parameter("replan_rate_hz").as_double();
 
   // Vehicle type (UAV, Wheeled Robit, or Quadruped)
   par_.vehicle_type = this->get_parameter("vehicle_type").as_string();
@@ -1005,6 +1130,7 @@ void MIGHTY_NODE::setParameters() {
   par_.closed_form_traj_verbose = this->get_parameter("closed_form_traj_verbose").as_bool();
   par_.jerk_weight = this->get_parameter("jerk_weight").as_double();
   par_.dynamic_weight = this->get_parameter("dynamic_weight").as_double();
+  par_.agent_dyn_horizon_sec = this->get_parameter("agent_dyn_horizon_sec").as_double();
   par_.time_weight = this->get_parameter("time_weight").as_double();
   par_.pos_anchor_weight = this->get_parameter("pos_anchor_weight").as_double();
   par_.stat_weight = this->get_parameter("stat_weight").as_double();
@@ -1120,6 +1246,18 @@ void MIGHTY_NODE::setParameters() {
 
   par_.trajectory_downsample_points = this->get_parameter("trajectory_downsample_points").as_int();
   par_.mpc_path_spacing = this->get_parameter("mpc_path_spacing").as_double();
+  par_.mpc_path_publish_rate_hz =
+      this->get_parameter("mpc_path_publish_rate_hz").as_double();
+  par_.peer_yield_radius_m = this->get_parameter("peer_yield_radius_m").as_double();
+  par_.peer_yield_speed_factor =
+      this->get_parameter("peer_yield_speed_factor").as_double();
+  par_.crossing_meter_radius_m =
+      this->get_parameter("crossing_meter_radius_m").as_double();
+  par_.crossing_meter_max_k =
+      static_cast<int>(this->get_parameter("crossing_meter_max_k").as_int());
+  par_.peer_standoff_m = this->get_parameter("peer_standoff_m").as_double();
+  par_.peer_static_disc_m =
+      this->get_parameter("peer_static_disc_m").as_double();
 
   // Frontier-based exploration
   par_.expl_enabled              = this->get_parameter("exploration.enabled").as_bool();
@@ -1192,6 +1330,16 @@ void MIGHTY_NODE::setParameters() {
       this->get_parameter("exploration.minpos.min_frontier_dist_to_peers_m").as_double();
   par_.expl_peer_visit_radius_m =
       this->get_parameter("exploration.minpos.peer_visit_radius_m").as_double();
+  par_.expl_claim_block_radius_m =
+      this->get_parameter("exploration.minpos.claim_block_radius_m").as_double();
+  par_.expl_status_match_radius_m =
+      this->get_parameter("exploration.minpos.status_match_radius_m").as_double();
+  par_.expl_status_publish_rate_hz =
+      this->get_parameter("exploration.minpos.status_publish_rate_hz").as_double();
+  par_.expl_share_frontier_status =
+      this->get_parameter("exploration.minpos.share_frontier_status").as_bool();
+  par_.expl_viz_centralized =
+      this->get_parameter("exploration.visualization.centralized").as_bool();
   par_.expl_external_selector =
       this->get_parameter("exploration.external_selector").as_bool();
 }
@@ -1494,6 +1642,12 @@ void MIGHTY_NODE::trajCallback(const dynus_interfaces::msg::DynTraj::SharedPtr m
  * @param msg State message
  */
 void MIGHTY_NODE::stateCallback(const dynus_interfaces::msg::State::SharedPtr msg) {
+  {
+    // Own position cache for the near-peer disc exemption (swap modes).
+    std::lock_guard<std::mutex> lk(peer_park_mutex_);
+    own_xy_ = Eigen::Vector2d(msg->pos.x, msg->pos.y);
+    own_xy_valid_ = true;
+  }
   if (par_.use_state_update) {
     state current_state;
     current_state.setPos(msg->pos.x, msg->pos.y, msg->pos.z);
@@ -1555,6 +1709,32 @@ void MIGHTY_NODE::stateCallback(const dynus_interfaces::msg::State::SharedPtr ms
       pose_msg.pose.position.z = msg->pos.z;
       pub_peer_pose_->publish(pose_msg);
       last_peer_pose_publish_t_ = t_now_peer;
+    }
+  }
+
+  // Claim broadcast, same cadence as the pose. Gated on exploration_active_,
+  // so release is implicit: every pursuit-ending site clears that flag and
+  // publishing stops; peers age the claim out after peer_timeout_sec. Reads
+  // only the mutex-guarded cache — frontier_manager_ is NOT safe from this
+  // (reentrant) callback group.
+  if (pub_peer_claim_ && exploration_active_ &&
+      par_.expl_peer_publish_rate_hz > 0.0) {
+    const double t_now_claim = this->now().seconds();
+    if (t_now_claim - last_peer_claim_publish_t_ >=
+        1.0 / par_.expl_peer_publish_rate_hz) {
+      Eigen::Vector2d cxy;
+      {
+        std::lock_guard<std::mutex> lk(claim_mutex_);
+        cxy = claim_xy_;
+      }
+      geometry_msgs::msg::PoseStamped claim_msg;
+      claim_msg.header.stamp = this->now();
+      claim_msg.header.frame_id = ns_;
+      claim_msg.pose.position.x = cxy.x();
+      claim_msg.pose.position.y = cxy.y();
+      claim_msg.pose.orientation.w = 1.0;
+      pub_peer_claim_->publish(claim_msg);
+      last_peer_claim_publish_t_ = t_now_claim;
     }
   }
 }
@@ -1651,8 +1831,15 @@ void MIGHTY_NODE::replanCallback() {
     }
   }
 
-  // To share trajectory with other agents
-  if (replanning_result && par_.share_traj) publishOwnTraj();
+  // To share trajectory with other agents. Failure/idle paths are covered
+  // by timer_traj_keepalive_ (constructor) — do not add a keepalive here:
+  // early returns above this line skip it for exactly the robots that need
+  // one.
+  if (replanning_result && par_.share_traj) {
+    publishOwnTraj();
+    last_own_traj_pub_t_ = this->now().seconds();
+    own_traj_ever_shared_ = true;
+  }
 
   // Publish trajectory for tracking (increments trajectory_id on replan)
   if (replanning_result) {
@@ -2779,6 +2966,18 @@ void MIGHTY_NODE::publishTrajectory() {
 // ----------------------------------------------------------------------------
 
 void MIGHTY_NODE::publishMpcPath() {
+  // Reference-stability throttle (see mpc_path_publish_rate_hz in
+  // mighty_type.hpp). Re-anchoring the MPC's target at the robot's pose on
+  // every ~85 Hz replan makes the controller chase micro-rotations of the
+  // first segment; capping the rate gives it a stable target between replans.
+  if (par_.mpc_path_publish_rate_hz > 0.0) {
+    const double t_now = this->now().seconds();
+    if (t_now - last_mpc_path_publish_t_ < 1.0 / par_.mpc_path_publish_rate_hz) {
+      return;
+    }
+    last_mpc_path_publish_t_ = t_now;
+  }
+
   // Get optimized trajectory setpoints (smooth quintic Hermite spline)
   mighty_ptr_->retrieveGoalSetpoints(goal_setpoints_);
 
@@ -2840,6 +3039,251 @@ void MIGHTY_NODE::publishMpcPath() {
     path_msg.poses[i].pose.orientation.y = 0.0;
     path_msg.poses[i].pose.orientation.z = std::sin(yaw / 2.0);
     path_msg.poses[i].pose.orientation.w = std::cos(yaw / 2.0);
+  }
+
+  // Peer-yield governor, applied to the MPC reference speeds. Two designs
+  // were measured before keeping this one:
+  //  * No yield: symmetric pinch head-ons grind robot-on-robot (688/869
+  //    contact events) — no clearance radius fixes symmetry.
+  //  * Planner-level yield (scale the optimizer's V_max so /trajs advertises
+  //    the slow plan): theoretically more honest, measurably worse — replans
+  //    go fragile against the tightened bound (a robot outran its stale plan
+  //    and wedged: STUCK at 0.84 coverage), and the winner then sees a
+  //    quasi-static blocker filling the corridor for its whole horizon and
+  //    pushes through anyway (171-event grind).
+  //  * THIS design (reference-level yield, radius 3.0): 4 of 5 runs
+  //    contact-free, worst case one 17-event ~0.1 s brush at 0.61 m. The
+  //    /trajs-vs-actual inconsistency it creates is real but works in our
+  //    favor: the winner times its pass against the gap the (actually
+  //    slower) crawler is about to leave.
+  // Loser of the namespace tie-break crawls when the winner is within radius
+  // and ahead of its travel direction; the winner never slows, so one robot
+  // of any pair always proceeds — deadlock-free. Crawl, not stop: the stall
+  // watchdog stays quiet.
+  if (par_.peer_yield_radius_m > 0.0 && path_msg.poses.size() >= 2) {
+    const Eigen::Vector2d p0(path_msg.poses[0].pose.position.x,
+                             path_msg.poses[0].pose.position.y);
+    const Eigen::Vector2d p1(path_msg.poses[1].pose.position.x,
+                             path_msg.poses[1].pose.position.y);
+    const Eigen::Vector2d heading = p1 - p0;
+    bool yield_now = false;
+    std::string yield_to;
+    if (par_.expl_use_minpos) {
+      // Exploration: peers come from the MinPos pose channel.
+      for (const auto& peer : peer_tracker_.getActivePeersWithIds(
+               this->now().seconds(), par_.expl_peer_timeout_sec)) {
+        const Eigen::Vector2d rel = peer.position - p0;
+        if (rel.norm() >= par_.peer_yield_radius_m) continue;
+        if (winsClaimTie(ns_, peer.id)) continue;   // I outrank them: they yield
+        if (heading.squaredNorm() > 1e-9 && rel.dot(heading) <= 0.0) continue;
+        yield_now = true;
+        yield_to = peer.id;
+        break;
+      }
+    } else {
+      // Non-exploration multi-robot modes (e.g. the fake_sim position
+      // exchange): the MinPos machinery is never constructed, but every
+      // agent already broadcasts on /trajs — evaluate each is_agent
+      // trajectory at NOW for its current position. This matters because a
+      // diff-drive robot cannot strafe: J_dyn's lateral push is the wrong
+      // degree of freedom at close range (measured: 10-way crossings
+      // interpenetrated to 0.13 m with fresh /trajs on both sides), and
+      // speed is the one that physically exists. Tie-break by numeric agent
+      // id — identical ordering to the NXxx lexicographic rule.
+      int my_id = 0;
+      for (char c : ns_) if (c >= '0' && c <= '9') my_id = my_id * 10 + (c - '0');
+      const double t_now = this->now().seconds();
+
+      // Crossing-zone occupancy meter (demo-specific: zone centred on the
+      // ORIGIN, i.e. the swap circle's centre; radius 0 disables — every
+      // non-swap config). Measured motivation: at 10 simultaneous antipodal
+      // goals, ALL TEN robots peak inside the 3 m centre at once (>3 inside
+      // 44% of the time), and no path-shaping knob changes the resulting
+      // churn — the only resolvable dimension for non-holonomic robots is
+      // TIME. Rule, deterministic and deadlock-free:
+      //   * robots already inside the zone NEVER brake (no mid-intersection
+      //     stalls; they exit and free their slot);
+      //   * a robot outside and approaching may enter while
+      //     (#insiders + #lower-id aspirants) < K; otherwise it eases to the
+      //     yield crawl at the boundary. Lowest ids win slots, so someone
+      //     always proceeds.
+      bool meter_hold = false;
+      int meter_occ = 0;
+      if (par_.crossing_meter_radius_m > 0.0) {
+        const double my_center_d = p0.norm();
+        const bool inside = my_center_d < par_.crossing_meter_radius_m;
+        const Eigen::Vector2d to_center = -p0;
+        const bool approaching =
+            heading.squaredNorm() > 1e-9 && to_center.dot(heading) > 0.0;
+        if (!inside && approaching &&
+            my_center_d < par_.crossing_meter_radius_m + 4.0) {
+          int insiders = 0, senior_aspirants = 0;
+          for (const auto& tr : mighty_ptr_->getTrajs()) {
+            if (!tr || !tr->is_agent) continue;
+            const Eigen::Vector3d pp = tr->eval(t_now);
+            const double d = pp.head<2>().norm();
+            if (d < par_.crossing_meter_radius_m) {
+              ++insiders;
+            } else if (d < par_.crossing_meter_radius_m + 4.0 && tr->id < my_id) {
+              ++senior_aspirants;
+            }
+          }
+          meter_occ = insiders;
+          if (insiders + senior_aspirants >= par_.crossing_meter_max_k) {
+            meter_hold = true;
+          }
+        }
+      }
+
+      for (const auto& tr : mighty_ptr_->getTrajs()) {
+        if (!tr || !tr->is_agent) continue;
+        if (my_id <= tr->id) continue;              // I outrank them (or self)
+        const Eigen::Vector3d pp = tr->eval(t_now);
+        const Eigen::Vector2d rel = pp.head<2>() - p0;
+        if (rel.norm() >= par_.peer_yield_radius_m) continue;
+        if (heading.squaredNorm() > 1e-9 && rel.dot(heading) <= 0.0) continue;
+        yield_now = true;
+        yield_to = "agent " + std::to_string(tr->id);
+        break;
+      }
+      if (meter_hold && !yield_now) {
+        yield_now = true;
+        yield_to = "crossing meter (occ=" + std::to_string(meter_occ) + ")";
+      }
+    }
+    if (yield_now) {
+      // Scale the LOCAL speeds vector — path_msg.speeds is assigned from it
+      // below, so scaling the message field would be overwritten.
+      for (auto& s : speeds) {
+        s *= par_.peer_yield_speed_factor;
+      }
+      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                           "Peer yield: crawling for %s (factor %.2f)",
+                           yield_to.c_str(), par_.peer_yield_speed_factor);
+    }
+  }
+
+  // Hard standoff barrier (see peer_standoff_m in mighty_type.hpp). The yield
+  // above shapes SPEED; this shapes GEOMETRY: for the losing side of each id
+  // tie-break, drop every reference waypoint from the first one whose
+  // time-matched distance to a senior peer's shared trajectory falls below
+  // the ring. The truncated reference ends with an explicit zero speed, so
+  // the MPC parks AT the ring instead of coasting through it; the next
+  // publish re-extends the reference as soon as the winner has cleared.
+  // Winners keep their full reference (deadlock-freedom: one robot of any
+  // pair always proceeds); their clearance around a parked loser is the
+  // planner's ordinary avoidance problem — and a parked robot is its easiest
+  // case. /trajs modes only, like the yield fallback above.
+  if (par_.peer_standoff_m > 0.0 && !par_.expl_use_minpos &&
+      path_msg.poses.size() >= 2) {
+    int my_id = 0;
+    for (char c : ns_) if (c >= '0' && c <= '9') my_id = my_id * 10 + (c - '0');
+    const double t_now = this->now().seconds();
+    // Senior peers, with their CURRENT position hoisted out of the k-loop.
+    // The ring is checked against BOTH worlds a peer lives in:
+    //  * its advertised /trajs plan at the time-matched instant (intent) —
+    //    catches a peer that will be crossing waypoint k when I get there;
+    //  * its eval(NOW) position held fixed over my horizon (reality) —
+    //    the reference-level yield slows robots WITHOUT touching their
+    //    advertised plan, so a yielding/parked senior physically lags its
+    //    plan by meters, exactly where a plan-only check waves me through.
+    // EVERY peer gets a ring, asymmetric by rank — and BOTH sides are
+    // load-bearing, each proven by a measured failure of its absence:
+    //   * junior checks seniors at peer_standoff_m (1.2): without any ring,
+    //     crossings bottom out at 0.02-0.27 m (soft costs cannot floor a
+    //     10-way crossing);
+    //   * senior checks juniors at the smaller derived ring (1.1): junior-
+    //     only designs broke twice on moving-moving geometry the junior's
+    //     forward-path check cannot see — a sideswiped pair reached 0.09 m
+    //     and stayed interlocked for the rest of the run (a robot cannot
+    //     guard its flank by truncating its forward path).
+    // The rings stay below the corridor-guaranteed detour distance around a
+    // parked peer (peer_static_disc_m + drone_radius = 1.3): once anyone
+    // parks, its DENSE disc (below) walls it off and everyone's replanned
+    // detour clears both rings, so every hold self-lifts. That makes the
+    // pattern slow-but-live at full 10-robot convergence (each encounter
+    // costs a park -> disc -> detour cycle) and bulletproof on the floor.
+    struct RingPeer {
+      Eigen::Vector2d pnow;
+      const dynTraj* tr;
+      double ring;
+    };
+    std::vector<RingPeer> ring_peers;
+    const Eigen::Vector2d p_self(path_msg.poses[0].pose.position.x,
+                                 path_msg.poses[0].pose.position.y);
+    const double ring_junior =
+        std::max(1.0, par_.peer_static_disc_m + par_.drone_radius - 0.15);
+    for (const auto& tr : mighty_ptr_->getTrajs()) {
+      if (!tr || !tr->is_agent) continue;
+      const Eigen::Vector2d pnow = tr->eval(t_now).head<2>();
+      double ring = (my_id > tr->id) ? par_.peer_standoff_m : ring_junior;
+      // OUTWARD-ONLY ESCAPE: if we are ALREADY inside this peer's ring
+      // (brake overrun past a truncated reference lands ~0.1 m under it at
+      // laptop MPC rates; one measured pair sat absorbed at 0.98 m for a
+      // full run), the ring must not block retreat. Waypoints that strictly
+      // increase the distance stay legal; anything at or inside the current
+      // distance is still cut, so the pair can only separate.
+      const double dnow = (pnow - p_self).norm();
+      if (dnow < ring) ring = dnow + 0.02;
+      ring_peers.push_back({pnow, tr.get(), ring});
+    }
+    size_t cut = path_msg.poses.size();
+    double eta = 0.0;
+    double path_dist = 0.0;
+    for (size_t k = 1;
+         k < path_msg.poses.size() && cut == path_msg.poses.size() &&
+         !ring_peers.empty();
+         ++k) {
+      const Eigen::Vector2d pk(path_msg.poses[k].pose.position.x,
+                               path_msg.poses[k].pose.position.y);
+      const Eigen::Vector2d pk_prev(path_msg.poses[k - 1].pose.position.x,
+                                    path_msg.poses[k - 1].pose.position.y);
+      const double seg = (pk - pk_prev).norm();
+      path_dist += seg;
+      // ETA from the commanded speed profile; floor avoids div-by-~0 on the
+      // final (decelerating) waypoints.
+      eta += seg / std::max(0.1, speeds[k]);
+      // Two checks with two horizons, both measured into place:
+      //  * LIVE-POSITION check over the first 4 m of path — "the peer
+      //    stays put" is a fair assumption within the near envelope, and a
+      //    DISTANCE horizon is immune to the commanded-speed pathology
+      //    that gutted a time horizon (a yield-crawler's 8 s ETA budget
+      //    died within its first metre, leaving the rest of the reference
+      //    unchecked — the dominant random_slot leak). Checking live
+      //    positions over the WHOLE reference is the opposite failure:
+      //    20 m antipodal references almost always cross someone's
+      //    current position far ahead, and fleet flow collapsed 41 -> 5
+      //    arrivals from fictional far-field truncations.
+      //  * TIME-MATCHED check against the peer's advertised plan while
+      //    the ETA stays credible (peers replan ~20x/s; beyond ~8 s the
+      //    match is fiction).
+      const bool live_check = path_dist <= 4.0;
+      const bool time_match_credible = eta <= 8.0;
+      if (!live_check && !time_match_credible) break;
+      for (const auto& rp : ring_peers) {
+        if ((live_check && (rp.pnow - pk).norm() < rp.ring) ||
+            (time_match_credible &&
+             (rp.tr->eval(t_now + eta).head<2>() - pk).norm() < rp.ring)) {
+          cut = k;
+          break;
+        }
+      }
+    }
+    if (cut < path_msg.poses.size()) {
+      if (cut >= 2) {
+        path_msg.poses.resize(cut);
+        speeds.resize(cut);
+      } else {
+        // The ring is already at the first segment: hold in place.
+        path_msg.poses.resize(2);
+        speeds.resize(2);
+        speeds[0] = 0.0;
+      }
+      speeds.back() = 0.0;  // park AT the ring, don't coast into it
+      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                           "Standoff: reference truncated to %zu waypoints",
+                           path_msg.poses.size());
+    }
   }
 
   // Assign per-waypoint speeds
@@ -3226,6 +3670,89 @@ void MIGHTY_NODE::occupancyMapCallback(const sensor_msgs::msg::PointCloud2::Cons
   pcl::PointCloud<pcl::PointXYZ>::Ptr map_pc(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::fromROSMsg(*map_msg, *map_pc);
 
+  // Static-ify parked peers (see peer_static_disc_m in mighty_type.hpp).
+  // Parked is judged from the wall-time displacement of eval(now) — NOT the
+  // advertised plan, which keeps promising motion while the reference-level
+  // yield/standoff actually holds the robot still.
+  //
+  // The injected radius is CORRIDOR-TRUE: the corridor inflates obstacle
+  // points by drone_radius, so an A* seed path that merely clears the raw
+  // disc still sits inside the inflated zone and the decomposition fails —
+  // measured as permanently-parked pairs whose ring-free senior replanned
+  // every cycle and never got a spline. Injecting at
+  // disc + drone_radius makes every A* seed born corridor-feasible (the
+  // final spline then detours at ~2x drone_radius beyond the disc, clearing
+  // every standoff ring with margin).
+  //
+  // NEAR peers (already within the inflated radius + margin) get a small
+  // body-size disc instead: a full-size disc would swallow OUR OWN A* start
+  // and kill the planner outright; the small disc still blocks pass-through
+  // while leaving the escape/detour plannable, and its corridor-inflated
+  // pass distance still clears the 1 m floor.
+  if (par_.peer_static_disc_m > 0.0 && !par_.expl_use_minpos) {
+    const double t_now = this->now().seconds();
+    std::lock_guard<std::mutex> lk(peer_park_mutex_);
+    const Eigen::Vector2d own_xy = own_xy_;
+    const bool own_valid = own_xy_valid_;
+    for (const auto& tr : mighty_ptr_->getTrajs()) {
+      if (!tr || !tr->is_agent) continue;
+      const Eigen::Vector2d pp = tr->eval(t_now).head<2>();
+      auto& track = peer_park_track_[tr->id];
+      if (track.t == 0.0) {
+        track.pos = pp;
+        track.t = t_now;
+        continue;
+      }
+      const double dt = t_now - track.t;
+      if (dt >= 0.25) {
+        // < ~0.12 m/s sustained over the window counts as parked; the same
+        // threshold un-parks it as soon as it accelerates away.
+        const bool was_parked = track.parked;
+        track.parked = (pp - track.pos).norm() < 0.125 * dt;
+        if (track.parked && !was_parked) track.parked_since = t_now;
+        track.parked_at = pp;
+        track.pos = pp;
+        track.t = t_now;
+      }
+      if (!track.parked) continue;
+      // Three disc tiers by MY distance to the parked peer:
+      //   far   -> corridor-true radius (disc + drone_radius): A* seeds are
+      //            born corridor-feasible, detours clear every ring;
+      //   near  -> body-size: a full disc would swallow my own A* start;
+      //   overlapped (already inside even the body disc + margin) -> NO
+      //            disc at all: after a floor violation both robots must be
+      //            able to PLAN the escape the outward-only ring permits —
+      //            measured without this tier, a 0.09 m pair sat absorbed
+      //            for 30 s because each start was inside the other's wall.
+      const double full_r = par_.peer_static_disc_m + par_.drone_radius;
+      const double small_r = 0.55 + par_.drone_radius;
+      double r_outer = full_r;
+      if (own_valid) {
+        const double dme = (pp - own_xy).norm();
+        if (dme < small_r + 0.05) continue;
+        if (dme < full_r + 0.15) r_outer = small_r;
+      }
+      // FILLED polar grid, spacing under the voxel resolution. A sparse
+      // ring of points is a sieve, not a wall: measured with 12 points per
+      // ring (0.52 m apart), A* threaded between them and planned 0.89 m
+      // from the peer's centre — inside the disc.
+      constexpr double kSpacing = 0.12;
+      for (double r = 0.0; r <= r_outer + 1e-3; r += kSpacing) {
+        const int nseg =
+            std::max(1, static_cast<int>(std::ceil(2.0 * M_PI * r / kSpacing)));
+        for (int a = 0; a < nseg; ++a) {
+          const double th = a * (2.0 * M_PI / nseg);
+          for (double z : {0.3, 0.7}) {
+            map_pc->points.emplace_back(pp.x() + r * std::cos(th),
+                                        pp.y() + r * std::sin(th), z);
+          }
+        }
+      }
+      map_pc->width = map_pc->points.size();
+      map_pc->height = 1;
+    }
+  }
+
   mighty_ptr_->updateOccupancyMap(map_pc);
 
   // Publish heat cloud visualization if enabled
@@ -3451,6 +3978,18 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
       }
     }
 
+    // Broadcast frontier states (incl. VISITED/INVALIDATED) so one robot's
+    // verdict retires the matching record on every peer. ~100x smaller than
+    // the visited-map broadcast above, so it can afford a higher rate.
+    if (pub_frontier_status_ && par_.expl_status_publish_rate_hz > 0.0) {
+      const double t_now = this->now().seconds();
+      if (t_now - last_frontier_status_publish_t_ >=
+          1.0 / par_.expl_status_publish_rate_hz) {
+        publishFrontierStatus();
+        last_frontier_status_publish_t_ = t_now;
+      }
+    }
+
     // Throttled diagnostic so it's obvious whether detection is finding
     // anything (and gives a hint about *why* if the answer is "no").
     {
@@ -3469,7 +4008,31 @@ void MIGHTY_NODE::occ2DCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr ms
           n_free, n_occ, n_unknown, clusters.size(), frontier_manager_->size());
     }
 
-    if (par_.expl_publish_markers) publishFrontierMarkers();
+    if (par_.expl_use_minpos && par_.expl_viz_centralized) {
+      // Centralized viz: exactly one robot publishes the ONE global marker
+      // topic — the lexicographic minimum of the live namespaces. Dynamic
+      // election (no launch plumbing): on leader death the next namespace
+      // takes over within peer_timeout_sec, and the DELETEALL prefix keeps
+      // the RViz scene consistent across the handover. Election reads the
+      // pose tracker, not claims — poses flow for the whole run.
+      const auto ids = peer_tracker_.getActivePeerIds(
+          this->now().seconds(), par_.expl_peer_timeout_sec);
+      const bool leader = std::all_of(
+          ids.begin(), ids.end(),
+          [this](const std::string& id) { return ns_ < id; });
+      if (leader != viz_leader_) {
+        RCLCPP_INFO(this->get_logger(), "%s",
+                    leader ? "Exploration viz: this agent is the frontier-marker leader"
+                           : "Exploration viz: frontier-marker leadership passed");
+        viz_leader_ = leader;
+      }
+      if (leader && par_.expl_publish_markers && pub_frontier_markers_global_) {
+        publishFrontierMarkers(pub_frontier_markers_global_,
+                               /*include_peer_claims=*/true);
+      }
+    } else if (par_.expl_publish_markers) {
+      publishFrontierMarkers(pub_frontiers_);
+    }
     publishFrontierData();
 
     // Drive the goal-selection loop immediately. This makes the robot start
@@ -3543,26 +4106,55 @@ void MIGHTY_NODE::exploreSelectCallback() {
               r->state == FrontierState::DORMANT)) {
       const double t_now = this->now().seconds();
       const Eigen::Vector2d pos_xy(cur.pos.x(), cur.pos.y());
-      // Progress = the robot moved, or we are pursuing a different frontier
-      // than when the timer was last reset.
-      if (explore_stall_id_ != current_explore_id_ ||
-          (pos_xy - explore_stall_pos_).norm() > par_.expl_stall_eps_m) {
-        explore_stall_id_  = current_explore_id_;
-        explore_stall_pos_ = pos_xy;
-        explore_stall_t_   = t_now;
-      } else if (par_.expl_stall_timeout_sec > 0.0 &&
-                 t_now - explore_stall_t_ > par_.expl_stall_timeout_sec) {
-        RCLCPP_WARN(this->get_logger(),
-                    "Exploration watchdog: no progress towards frontier %lu for "
-                    "%.0f s at (%.2f, %.2f) — invalidating so selection can move on",
-                    static_cast<unsigned long>(current_explore_id_),
-                    t_now - explore_stall_t_, pos_xy.x(), pos_xy.y());
-        // markInvalidated() also counts a strike, so a spot that repeatedly
-        // stalls escalates to a permanent keep-out instead of being re-picked.
-        frontier_manager_->markInvalidated(current_explore_id_, t_now);
-        exploration_active_ = false;
-        unreachable_consec_count_ = 0;
-        explore_stall_t_ = t_now;
+
+      // Contested claim: a peer with the lexicographically smaller namespace
+      // is claiming (a frontier within claim_block_radius of) our pursued
+      // record — both of us selected before either heard the other's claim.
+      // Yield: drop the deadline WITHOUT a state change or strike. The
+      // frontier stays ACTIVE for the winner, and an armed deadline left
+      // behind would later fire INVALIDATED on the peer's legitimate goal —
+      // which status sharing would then propagate team-wide. Falling through
+      // (no return) re-selects in this same tick, where the claim filter
+      // steers us elsewhere.
+      if (pub_peer_claim_ && par_.expl_claim_block_radius_m > 0.0) {
+        for (const auto& c : claim_tracker_.getActiveClaims(
+                 t_now, par_.expl_peer_timeout_sec)) {
+          if ((c.position - r->centroid_xy).norm() <
+                  par_.expl_claim_block_radius_m &&
+              !winsClaimTie(ns_, c.id)) {
+            RCLCPP_INFO(this->get_logger(),
+                        "Exploration claim: yielding frontier %lu to %s (d=%.2fm)",
+                        static_cast<unsigned long>(current_explore_id_),
+                        c.id.c_str(), (c.position - r->centroid_xy).norm());
+            frontier_manager_->clearPursuit(current_explore_id_);
+            exploration_active_ = false;
+            break;
+          }
+        }
+      }
+
+      if (exploration_active_) {
+        // Progress = the robot moved, or we are pursuing a different frontier
+        // than when the timer was last reset.
+        if (explore_stall_id_ != current_explore_id_ ||
+            (pos_xy - explore_stall_pos_).norm() > par_.expl_stall_eps_m) {
+          explore_stall_id_  = current_explore_id_;
+          explore_stall_pos_ = pos_xy;
+          explore_stall_t_   = t_now;
+        } else if (par_.expl_stall_timeout_sec > 0.0 &&
+                   t_now - explore_stall_t_ > par_.expl_stall_timeout_sec) {
+          RCLCPP_WARN(this->get_logger(),
+                      "Exploration watchdog: no progress towards frontier %lu for "
+                      "%.0f s at (%.2f, %.2f) — invalidating so selection can move on",
+                      static_cast<unsigned long>(current_explore_id_),
+                      t_now - explore_stall_t_, pos_xy.x(), pos_xy.y());
+          // markInvalidated() also counts a strike, so a spot that repeatedly
+          // stalls escalates to a permanent keep-out instead of being re-picked.
+          frontier_manager_->markInvalidated(current_explore_id_, t_now);
+          exploration_active_ = false;
+          unreachable_consec_count_ = 0;
+          explore_stall_t_ = t_now;
+        }
       }
       if (exploration_active_) return;
     }
@@ -3617,9 +4209,14 @@ void MIGHTY_NODE::exploreSelectCallback() {
   } else if (par_.expl_use_minpos) {
     auto peers = peer_tracker_.getActivePeers(
         this->now().seconds(), par_.expl_peer_timeout_sec);
+    const auto claims = (par_.expl_claim_block_radius_m > 0.0)
+        ? claim_tracker_.getActiveClaims(this->now().seconds(),
+                                         par_.expl_peer_timeout_sec)
+        : std::vector<PeerClaim>{};
     next = frontier_manager_->selectNextGoalMinPos(
         robot_pose, *current_detect_grid_, peers,
-        par_.expl_min_frontier_dist_to_peers_m);
+        par_.expl_min_frontier_dist_to_peers_m,
+        claims, par_.expl_claim_block_radius_m);
   } else {
     next = frontier_manager_->selectNextGoal(robot_pose, *current_detect_grid_);
   }
@@ -3763,6 +4360,13 @@ void MIGHTY_NODE::exploreSelectCallback() {
   current_explore_id_       = next->id;
   exploration_active_       = true;
   unreachable_consec_count_ = 0;
+  {
+    // Cache the claimed centroid for the stateCallback broadcast — the only
+    // writer; see claim_mutex_ in the header for why the publish side cannot
+    // read frontier_manager_ directly.
+    std::lock_guard<std::mutex> lk(claim_mutex_);
+    claim_xy_ = next->centroid_xy;
+  }
   frontier_manager_->markSelected(
       next->id, Eigen::Vector2d(robot_pose.x(), robot_pose.y()),
       this->now().seconds());
@@ -3837,6 +4441,53 @@ void MIGHTY_NODE::publishFrontierData() {
 // ----------------------------------------------------------------------------
 
 /**
+ * @brief Global /exploration/frontier_status broadcast — the share-to-retire
+ *        half of multi-robot coordination. Deliberately different from
+ *        publishFrontierData in two load-bearing ways: (1) ALL four states
+ *        are included, because the whole point is propagating VISITED and
+ *        INVALIDATED verdicts to peers; (2) header.frame_id carries ns_ (the
+ *        sender identity, per the global-topic self-filter convention), NOT
+ *        the map frame. publishFrontierData's schema is the VLM
+ *        external-selector contract and must not change.
+ */
+void MIGHTY_NODE::publishFrontierStatus() {
+  if (!pub_frontier_status_ || !frontier_manager_) return;
+
+  dynus_interfaces::msg::FrontierList msg;
+  msg.header.frame_id = ns_;
+  msg.header.stamp    = this->now();
+
+  for (const auto& r : frontier_manager_->records()) {
+    dynus_interfaces::msg::Frontier f;
+    f.id = r.id;
+    switch (r.state) {
+      case FrontierState::ACTIVE:
+        f.state = dynus_interfaces::msg::Frontier::STATE_ACTIVE; break;
+      case FrontierState::DORMANT:
+        f.state = dynus_interfaces::msg::Frontier::STATE_DORMANT; break;
+      case FrontierState::VISITED:
+        f.state = dynus_interfaces::msg::Frontier::STATE_VISITED; break;
+      case FrontierState::INVALIDATED:
+        f.state = dynus_interfaces::msg::Frontier::STATE_INVALIDATED; break;
+    }
+    f.centroid.x = r.centroid_xy.x();
+    f.centroid.y = r.centroid_xy.y();
+    f.centroid.z = par_.expl_default_goal_z;
+    f.size_cells = static_cast<uint64_t>(std::max(0, r.size_cells));
+    f.aabb_min.x = r.aabb_min.x();
+    f.aabb_min.y = r.aabb_min.y();
+    f.aabb_max.x = r.aabb_max.x();
+    f.aabb_max.y = r.aabb_max.y();
+    f.cached_utility = r.cached_utility;
+    msg.frontiers.push_back(f);
+  }
+
+  pub_frontier_status_->publish(msg);
+}
+
+// ----------------------------------------------------------------------------
+
+/**
  * @brief Publish frontier visualization markers. We only show ACTIVE and
  *        DORMANT centroids plus a small `id=N` text label per centroid, plus
  *        the yellow robot→goal line. VISITED and INVALIDATED frontiers are
@@ -3844,8 +4495,10 @@ void MIGHTY_NODE::publishFrontierData() {
  *        but suppressed from RViz to keep the scene readable. One MarkerArray
  *        per cycle, prefixed with DELETEALL so stale markers don't accumulate.
  */
-void MIGHTY_NODE::publishFrontierMarkers() {
-  if (!pub_frontiers_ || !frontier_manager_ || !occ_grid_2d_) return;
+void MIGHTY_NODE::publishFrontierMarkers(
+    const rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr& pub,
+    bool include_peer_claims) {
+  if (!pub || !frontier_manager_ || !occ_grid_2d_) return;
 
   visualization_msgs::msg::MarkerArray arr;
 
@@ -3998,7 +4651,66 @@ void MIGHTY_NODE::publishFrontierMarkers() {
     arr.markers.push_back(label);
   }
 
-  pub_frontiers_->publish(arr);
+  // Claim rings (centralized viz only): a circle of claim_block_radius
+  // around each active claim, labelled with the claimant's namespace —
+  // makes the "one robot per work area" allocation visible at a glance.
+  if (include_peer_claims && par_.expl_claim_block_radius_m > 0.0) {
+    auto claims = claim_tracker_.getActiveClaims(
+        this->now().seconds(), par_.expl_peer_timeout_sec);
+    // The tracker only ever holds PEER claims (own messages are self-filtered
+    // at subscription), and this function runs on the leader — whose own
+    // target would otherwise be the one ring missing from RViz. Add it from
+    // the local cache, under the same mutex the claim broadcast uses.
+    if (exploration_active_) {
+      Eigen::Vector2d own_xy;
+      {
+        std::lock_guard<std::mutex> lk(claim_mutex_);
+        own_xy = claim_xy_;
+      }
+      claims.push_back({ns_, own_xy});
+    }
+    int ring_id = 0;
+    for (const auto& c : claims) {
+      visualization_msgs::msg::Marker ring;
+      ring.header.frame_id = par_.map_frame_id;
+      ring.header.stamp    = this->now();
+      ring.ns              = "peer_claims";
+      ring.id              = ring_id++;
+      ring.type            = visualization_msgs::msg::Marker::LINE_STRIP;
+      ring.action          = visualization_msgs::msg::Marker::ADD;
+      ring.scale.x         = 0.05;
+      ring.pose.orientation.w = 1.0;
+      ring.color = makeColor(1.0, 0.5, 0.0, 0.8);  // orange: someone's intent
+      constexpr int kSegments = 24;
+      for (int k = 0; k <= kSegments; ++k) {
+        const double a = 2.0 * M_PI * k / kSegments;
+        geometry_msgs::msg::Point p;
+        p.x = c.position.x() + par_.expl_claim_block_radius_m * std::cos(a);
+        p.y = c.position.y() + par_.expl_claim_block_radius_m * std::sin(a);
+        p.z = par_.expl_default_goal_z;
+        ring.points.push_back(p);
+      }
+      arr.markers.push_back(ring);
+
+      visualization_msgs::msg::Marker tag;
+      tag.header.frame_id = par_.map_frame_id;
+      tag.header.stamp    = this->now();
+      tag.ns              = "peer_claims";
+      tag.id              = ring_id++;
+      tag.type            = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+      tag.action          = visualization_msgs::msg::Marker::ADD;
+      tag.pose.position.x = c.position.x();
+      tag.pose.position.y = c.position.y();
+      tag.pose.position.z = par_.expl_default_goal_z + 0.6;
+      tag.pose.orientation.w = 1.0;
+      tag.scale.z = 0.4;
+      tag.color   = makeColor(1.0, 0.5, 0.0, 0.9);
+      tag.text    = c.id;
+      arr.markers.push_back(tag);
+    }
+  }
+
+  pub->publish(arr);
 }
 
 // ----------------------------------------------------------------------------
@@ -4219,8 +4931,16 @@ void MIGHTY_NODE::publishGround2DHeat() {
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
 
-  // Initialize multi-threaded executor
-  rclcpp::executors::MultiThreadedExecutor executor;
+  // A default-constructed MultiThreadedExecutor sizes itself to
+  // hardware_concurrency(), and every callback thread that enters an OpenMP
+  // region lazily grows its own OMP pool — on a 48-core host that is 48
+  // executor threads x 48-thread pools = 2315 threads PER PLANNER (measured;
+  // a ten-robot fleet hit 25k threads and load 64, starving its MPC loops).
+  // Eight callback threads cover this node's subscriptions and timers with
+  // headroom on any machine; pair with OMP_NUM_THREADS on many-core hosts.
+  rclcpp::executors::MultiThreadedExecutor executor(
+      rclcpp::ExecutorOptions(),
+      std::min<size_t>(8, std::max<size_t>(2, std::thread::hardware_concurrency())));
 
   // add node to executor
   auto node = std::make_shared<mighty::MIGHTY_NODE>();

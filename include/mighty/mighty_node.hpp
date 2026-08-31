@@ -10,6 +10,7 @@
 
 #include <fstream>
 #include <optional>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -184,9 +185,20 @@ class MIGHTY_NODE : public rclcpp::Node {
   void publishStaticPushPoints();
   void publishLocalGlobalPath();
   void publishVelocityInText(const Eigen::Vector3d& position, double velocity);
-  // Frontier exploration visualization
-  void publishFrontierMarkers();
+  // Frontier exploration visualization. publishFrontierMarkers takes its
+  // target publisher because the same builder serves two topics: the
+  // per-namespace exploration/frontiers (single-robot, as always) and the
+  // leader-elected global /exploration/frontier_markers (centralized viz).
+  // include_peer_claims additionally draws a ring + label at each active
+  // peer claim — only meaningful on the global topic.
+  void publishFrontierMarkers(
+      const rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr& pub,
+      bool include_peer_claims = false);
   void publishFrontierData();
+  // Global /exploration/frontier_status broadcast: like publishFrontierData
+  // but ALL four states and header.frame_id = ns_ (sender identity), the
+  // share-to-retire half of multi-robot coordination.
+  void publishFrontierStatus();
   void publishExplorationCurrentGoal(const FrontierRecord& r);
   void publishVisitedMap();
 
@@ -316,6 +328,49 @@ class MIGHTY_NODE : public rclcpp::Node {
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_peer_visited_map_;
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr sub_peer_visited_map_;
   double last_peer_visited_publish_t_ = 0.0;
+  // MPC reference-path throttle (see mpc_path_publish_rate_hz)
+  double last_mpc_path_publish_t_ = 0.0;
+  // Parked-peer detector for the static-disc injection (peer_static_disc_m).
+  // Tracks the WALL-TIME displacement of each agent trajectory's eval(now):
+  // /trajs re-anchors at the robot's true pose on every replan, so eval(now)
+  // follows reality even when the advertised plan promises motion.
+  struct PeerParkTrack {
+    Eigen::Vector2d pos{0.0, 0.0};
+    double t = 0.0;
+    bool parked = false;
+    Eigen::Vector2d parked_at{0.0, 0.0};
+    double parked_since = 0.0;  // wall time of the false->true transition
+  };
+  std::unordered_map<int, PeerParkTrack> peer_park_track_;
+  std::mutex peer_park_mutex_;  // occupancyMapCallback writes, publishMpcPath reads
+  // Own planar position (from stateCallback) for the near-peer disc
+  // exemption — guarded by peer_park_mutex_.
+  Eigen::Vector2d own_xy_{0.0, 0.0};
+  bool own_xy_valid_ = false;
+  // /trajs keepalive (standalone timer — replan-loop early returns skip
+  // exactly the robots that need it).
+  rclcpp::TimerBase::SharedPtr timer_traj_keepalive_;
+  double last_own_traj_pub_t_ = 0.0;
+  bool own_traj_ever_shared_ = false;
+  // Claim sharing (intent half of coordination; see ClaimTracker)
+  ClaimTracker claim_tracker_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_peer_claim_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_peer_claim_;
+  double last_peer_claim_publish_t_ = 0.0;
+  // The claimed centroid, cached because the claim is PUBLISHED from
+  // stateCallback (reentrant group) but DECIDED at the selection commit
+  // (cb_group_map_). stateCallback must never touch frontier_manager_ —
+  // find() returns a pointer into a vector that update()/evict can
+  // reallocate concurrently — so it reads this mutex-guarded copy instead.
+  std::mutex claim_mutex_;
+  Eigen::Vector2d claim_xy_ = Eigen::Vector2d::Zero();
+  // Frontier-status sharing (share-to-retire)
+  rclcpp::Publisher<dynus_interfaces::msg::FrontierList>::SharedPtr pub_frontier_status_;
+  rclcpp::Subscription<dynus_interfaces::msg::FrontierList>::SharedPtr sub_frontier_status_;
+  double last_frontier_status_publish_t_ = 0.0;
+  // Centralized frontier viz (leader-elected single global marker topic)
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_frontier_markers_global_;
+  bool viz_leader_ = false;
   // Global return-home trigger. A single Empty publish on /exploration/return_home
   // makes every agent issue a goal back to its captured exploration_start_pos_
   // and stop accepting new frontier goals (so it stays parked once arrived).

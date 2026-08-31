@@ -36,6 +36,13 @@ struct polytope {
 struct parameters {
   // Sim enviroment
   std::string sim_env;
+  // Planner map-feed override: "sensor_cloud" routes a gazebo run onto the
+  // fake_sim-style sensor_point_cloud subscription (pcl_render), for spawned
+  // models with no sensors (use_lidar:=false). "" = derive from sim_env.
+  std::string map_source;
+  // Replan-attempt timer rate. 100 = the historical hardcoded 10 ms; large
+  // fleets lower it to keep the host's CPU budget for the control loops.
+  double replan_rate_hz{100.0};
 
   // UAV or Ground robot
   std::string vehicle_type;
@@ -197,6 +204,11 @@ struct parameters {
   bool closed_form_traj_verbose;
   double jerk_weight;
   double dynamic_weight;
+  // J_dyn only reacts to is_agent obstacles within this many seconds of the
+  // trajectory start (smooth fade over the last 25%); <=0 = full horizon.
+  // Peers replan ~1 Hz, so far-future predicted crossings are fiction that
+  // bends the trajectory tail on every replan. See lbfgs_solver.hpp.
+  double agent_dyn_horizon_sec{0.0};
   double time_weight;
   double pos_anchor_weight;
   double stat_weight;
@@ -324,6 +336,46 @@ struct parameters {
   // Trajectory publishing parameters
   int trajectory_downsample_points{500};  // Number of points to downsample trajectory to
   double mpc_path_spacing{0.05};          // [m] Spacing between waypoints in MPC path
+  // Cap on how often the MPC reference path is re-published. The replan loop
+  // succeeds ~85x/s and each publish re-anchors the reference at the robot's
+  // CURRENT pose — so the controller chases a target whose first segment
+  // micro-rotates every ~12 ms, several times per 30 Hz control cycle. Under
+  // multi-robot host load (timing jitter + w_max 1.5 yaw authority in
+  // mpc_sim.yaml) that reads as yaw hunting. At 0.5 m/s a 10 Hz cap delays a
+  // fresh plan by at most ~5 cm of travel. 0 = publish on every replan (the
+  // historical behavior; single-robot and UAV configs keep it).
+  double mpc_path_publish_rate_hz{0.0};
+  // Peer-yield governor (multi-robot ground): when a peer that wins the
+  // namespace tie-break is within this radius AND ahead of the travel
+  // direction, scale the published path speeds by peer_yield_speed_factor —
+  // the deterministic asymmetry that resolves head-on pinch encounters,
+  // which no clearance radius can (measured: every Cw pays somewhere).
+  // <=0 disables (all non-multi configs). Requires exploration.minpos.enabled.
+  double peer_yield_radius_m{0.0};
+  double peer_yield_speed_factor{0.3};
+  // Crossing-zone occupancy meter (swap demos): cap simultaneous robots
+  // inside the origin-centred zone; approachers over quota crawl at the
+  // yield factor. 0 disables (every non-swap config).
+  double crossing_meter_radius_m{0.0};
+  int    crossing_meter_max_k{3};
+  // Hard standoff barrier (multi-robot ground swap): the yield above shapes
+  // SPEED, this shapes GEOMETRY. For the losing side of each id tie-break the
+  // published MPC reference is TRUNCATED at the first waypoint whose
+  // time-matched distance to a senior peer's shared trajectory drops below
+  // this ring — the reference itself can never carry the robot inside it, so
+  // the separation floor stops depending on soft-cost tuning (measured: with
+  // yield+J_dyn alone, 10-way crossings still bottomed out at 0.05-0.27 m).
+  // The winner keeps its full reference — someone always proceeds, so the
+  // pattern is deadlock-free. <=0 disables (every non-swap config).
+  double peer_standoff_m{0.0};
+  // Static-ify parked peers: a peer whose eval(now) has stayed put for
+  // ~0.5 s of wall time gets a disc of synthetic obstacle points of this
+  // radius stamped into the local sensor cloud each map tick, so A*, the
+  // corridor decomposition, and the heat layer all wall it off — the hard
+  // clearance the standoff winner needs to pass a parked loser (J_dyn is
+  // soft, and the parked robot's ADVERTISED plan claims it is elsewhere).
+  // <=0 disables (every non-swap config).
+  double peer_static_disc_m{0.0};
 
   // Frontier-based exploration (ground robot only).
   // Master toggle is `expl_enabled`. When enabled, mighty_node runs a frontier
@@ -444,8 +496,17 @@ struct parameters {
   double expl_peer_publish_rate_hz{5.0};      // throttle for pose broadcast (Hz)
   double expl_min_frontier_dist_to_peers_m{0.0};  // reject frontier candidates within this radius of any active peer; 0 disables
   double expl_peer_visit_radius_m{2.0};       // mark frontier VISITED when any active peer is within this radius (sticky); 0 disables
+  // Intent + status sharing (both master-gated by expl_use_minpos)
+  double expl_claim_block_radius_m{4.0};      // hard-skip candidates within this radius of any peer's claimed target; NEVER relaxed; <=0 disables claims entirely
+  double expl_status_match_radius_m{2.0};     // a peer's VISITED/INVALIDATED verdict retires the nearest local record within this radius
+  double expl_status_publish_rate_hz{2.0};    // full frontier-DB FrontierList broadcast throttle
+  bool   expl_share_frontier_status{true};    // broadcast + apply terminal frontier states
   // Visualization
   bool   expl_publish_markers{true};
+  // One leader-elected global /exploration/frontier_markers topic instead of
+  // per-namespace marker topics (multi-robot RViz). Leader = lexicographic
+  // min of {own ns, active peer ids}; requires expl_use_minpos.
+  bool   expl_viz_centralized{false};
   // When true, skip publishing exploration goals from exploreSelectCallback so
   // an external selector (e.g. a VLM node) can own term_goal. Frontier
   // detection, scoring, and marker publication continue as normal.
