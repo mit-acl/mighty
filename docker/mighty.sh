@@ -35,9 +35,15 @@ cd /home/kkondo/code/mighty_ws
 
 # Default values
 MODE="${MODE:-multiagent}"
-NUM_AGENTS="${NUM_AGENTS:-10}"
 ENV="${ENV:-hard_forest}"
 GROUND_ROBOT="${GROUND_ROBOT:-false}"
+
+# NUM_AGENTS is deliberately left unset rather than defaulted, for the same
+# reason as GOAL_* below: run_sim.py picks a per-mode default (10 multiagent,
+# 4 swap, 3 exploration-multiagent-ground) and a default here would override all
+# of them with one number. It previously defaulted to 10, which collided with
+# run_sim.py's old "10 means unspecified" sentinel — so `NUM_AGENTS=10` on the
+# multi-robot ground mode silently produced 3 robots and 10 was unrequestable.
 
 # Whether the caller pinned a goal. Deliberately checked BEFORE any default is
 # applied: run_sim.py picks a goal from the size of the world being used
@@ -73,12 +79,52 @@ if [ "$MODE" = "gazebo" ]; then
     fi
 elif [ "$MODE" = "interactive" ]; then
     : # interactive mode needs no extra args
-elif [ "$MODE" = "exploration-singleagent-ground" ]; then
-    # Single-agent ground robot autonomous frontier exploration.
-    # run_sim.py maps the default env (hard_forest) to ACL_office for this mode.
+elif [ "$MODE" = "exploration-singleagent-ground" ] || \
+     [ "$MODE" = "exploration-multiagent-ground" ]; then
+    # Ground robot autonomous frontier exploration, single or multi-robot.
+    # run_sim.py maps the default env (hard_forest) to ACL_office for these modes.
+    # Multi-robot additionally loads config/multi_mighty_ground_robot.yaml, which
+    # is what enables MinPos coordination.
+    #
+    # Before this branch existed, exploration-multiagent-ground fell through to
+    # the else below, which passes --num-agents but NOT --env — so ENV= was
+    # silently ignored for that mode.
     ARGS="$ARGS --env $ENV"
+    if [ -n "${NUM_AGENTS}" ]; then
+        ARGS="$ARGS --num-agents $NUM_AGENTS"
+    fi
+elif [ "$MODE" = "multiagent-ground-fake" ] || \
+     [ "$MODE" = "multiagent-ground-gazebo" ]; then
+    # 10-robot ground position exchange: RViz-only (fake) or Gazebo with
+    # sensorless P3AT models. Every knob passes through only when set, so the
+    # bare docker command stays byte-for-byte the native default (antipodal
+    # goals, radius 10, MPC 20 Hz / N=10).
+    #   GOAL_PATTERN=random_slot  — draw goals from the N start slots instead
+    #   GOAL_STAGGER=<sec>        — per-agent goal release stagger
+    #   RADIUS=<m>                — circle radius
+    #   MPC_RATE / MPC_HORIZON    — raise on many-core hosts (e.g. 40 / 20)
+    if [ -n "${NUM_AGENTS}" ]; then
+        ARGS="$ARGS --num-agents $NUM_AGENTS"
+    fi
+    if [ -n "${GOAL_PATTERN}" ]; then
+        ARGS="$ARGS --goal-pattern $GOAL_PATTERN"
+    fi
+    if [ -n "${GOAL_STAGGER}" ]; then
+        ARGS="$ARGS --goal-stagger $GOAL_STAGGER"
+    fi
+    if [ -n "${RADIUS}" ]; then
+        ARGS="$ARGS --radius $RADIUS"
+    fi
+    if [ -n "${MPC_RATE}" ]; then
+        ARGS="$ARGS --mpc-rate $MPC_RATE"
+    fi
+    if [ -n "${MPC_HORIZON}" ]; then
+        ARGS="$ARGS --mpc-horizon $MPC_HORIZON"
+    fi
 else
-    ARGS="$ARGS --num-agents $NUM_AGENTS"
+    if [ -n "${NUM_AGENTS}" ]; then
+        ARGS="$ARGS --num-agents $NUM_AGENTS"
+    fi
 fi
 
 echo "[Docker] Running: python3 src/mighty/scripts/run_sim.py $ARGS"

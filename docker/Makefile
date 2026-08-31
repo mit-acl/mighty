@@ -163,6 +163,29 @@ run-ground-exploration:
 				-e NO_RVIZ=$(or $(NO_RVIZ),false) \
 				--rm mighty
 
+# Run N ground robots (default 3) exploring ACL_office together. Each picks the
+# frontier it is best placed for — fewest peers closer to it — via MinPos, and
+# they share persistent maps, so they divide the space instead of re-covering
+# each other's ground. Self-driven; no goal needed. Every robot returns to its
+# own spawn when the team runs out of frontiers.
+#
+# NUM_AGENTS and ENV pass through only when set, so with no arguments this
+# matches the native command exactly.
+# Usage: make run-multiagent-ground-exploration [NUM_AGENTS=3] [ENV=ACL_office] [DEV=1]
+run-multiagent-ground-exploration:
+	$(XHOST_CMD) && docker run $(PLATFORM_FLAG) -it \
+				$(GPU_FLAGS) \
+				--privileged \
+				$(DISPLAY_ENV) \
+				$(NETWORK_FLAG) \
+				--env="QT_X11_NO_MITSHM=1" \
+				$(DEV_MOUNTS) \
+				-e MODE=exploration-multiagent-ground \
+				-e ENV=$(or $(ENV),ACL_office) \
+				-e NO_RVIZ=$(or $(NO_RVIZ),false) \
+				$(if $(NUM_AGENTS),-e NUM_AGENTS=$(NUM_AGENTS),) \
+				--rm mighty
+
 # Run single-agent ground robot (Pioneer 3-AT) crossing a forest world to a
 # fixed goal — the ground-robot counterpart of run-gazebo. Exploration is turned
 # off at launch, so the goal is honoured even though
@@ -188,6 +211,67 @@ run-ground-robot:
 				$(if $(GOAL_Y),-e GOAL_Y=$(GOAL_Y),) \
 				$(if $(GOAL_Z),-e GOAL_Z=$(GOAL_Z),) \
 				$(if $(ENV),-e ENV=$(ENV),) \
+				--rm mighty
+
+# Run the 10-robot ground position exchange in Gazebo (sensorless P3AT models,
+# RViz renders the fleet). Antipodal crossing by default; GOAL_PATTERN=random_slot
+# draws each robot's next goal from the N start slots instead. Knobs pass through
+# only when set, so the bare command matches the native default exactly.
+# Usage: make run-ground-swap [NUM_AGENTS=10] [GOAL_PATTERN=random_slot]
+#        [GOAL_STAGGER=2] [RADIUS=10] [MPC_RATE=40] [MPC_HORIZON=20] [DEV=1]
+run-ground-swap:
+	$(XHOST_CMD) && docker run $(PLATFORM_FLAG) -it \
+				$(GPU_FLAGS) \
+				--privileged \
+				$(DISPLAY_ENV) \
+				$(NETWORK_FLAG) \
+				--env="QT_X11_NO_MITSHM=1" \
+				$(DEV_MOUNTS) \
+				-e MODE=multiagent-ground-gazebo \
+				$(if $(NUM_AGENTS),-e NUM_AGENTS=$(NUM_AGENTS),) \
+				$(if $(GOAL_PATTERN),-e GOAL_PATTERN=$(GOAL_PATTERN),) \
+				$(if $(GOAL_STAGGER),-e GOAL_STAGGER=$(GOAL_STAGGER),) \
+				$(if $(RADIUS),-e RADIUS=$(RADIUS),) \
+				$(if $(MPC_RATE),-e MPC_RATE=$(MPC_RATE),) \
+				$(if $(MPC_HORIZON),-e MPC_HORIZON=$(MPC_HORIZON),) \
+				--rm mighty
+
+# The no-Gazebo variant: same swap machinery, colored boxes instead of P3AT
+# models (fake_sim + RViz only — lightest way to run the 10-robot demo).
+# Usage: make run-ground-swap-fake [NUM_AGENTS=10] [GOAL_PATTERN=random_slot] [DEV=1]
+run-ground-swap-fake:
+	$(XHOST_CMD) && docker run $(PLATFORM_FLAG) -it \
+				$(GPU_FLAGS) \
+				--privileged \
+				$(DISPLAY_ENV) \
+				$(NETWORK_FLAG) \
+				--env="QT_X11_NO_MITSHM=1" \
+				$(DEV_MOUNTS) \
+				-e MODE=multiagent-ground-fake \
+				$(if $(NUM_AGENTS),-e NUM_AGENTS=$(NUM_AGENTS),) \
+				$(if $(GOAL_PATTERN),-e GOAL_PATTERN=$(GOAL_PATTERN),) \
+				$(if $(GOAL_STAGGER),-e GOAL_STAGGER=$(GOAL_STAGGER),) \
+				$(if $(RADIUS),-e RADIUS=$(RADIUS),) \
+				$(if $(MPC_RATE),-e MPC_RATE=$(MPC_RATE),) \
+				$(if $(MPC_HORIZON),-e MPC_HORIZON=$(MPC_HORIZON),) \
+				--rm mighty
+
+# Ground swap on Mac (Xpra, browser at localhost:8080)
+# Usage: make run-mac-ground-swap [NUM_AGENTS=10] [GOAL_PATTERN=random_slot]
+run-mac-ground-swap:
+	docker run $(PLATFORM_FLAG) -it \
+				$(GPU_FLAGS) \
+				--privileged \
+				$(NETWORK_FLAG) \
+				--env="QT_X11_NO_MITSHM=1" \
+				$(DEV_MOUNTS) \
+				-e USE_XPRA=true \
+				-e MODE=multiagent-ground-gazebo \
+				$(if $(NUM_AGENTS),-e NUM_AGENTS=$(NUM_AGENTS),) \
+				$(if $(GOAL_PATTERN),-e GOAL_PATTERN=$(GOAL_PATTERN),) \
+				$(if $(GOAL_STAGGER),-e GOAL_STAGGER=$(GOAL_STAGGER),) \
+				$(if $(RADIUS),-e RADIUS=$(RADIUS),) \
+				-p 8080:8080 \
 				--rm mighty
 
 # Run with Xpra (macOS visualization via browser at http://localhost:8080)
@@ -249,6 +333,22 @@ run-mac-ground-exploration:
 				-e USE_XPRA=true \
 				-e MODE=exploration-singleagent-ground \
 				-e ENV=$(or $(ENV),ACL_office) \
+				-p 8080:8080 \
+				--rm mighty
+
+# Multi-robot ground exploration on Mac (Xpra, browser at localhost:8080).
+# Usage: make run-mac-multiagent-ground-exploration [NUM_AGENTS=3] [ENV=ACL_office]
+run-mac-multiagent-ground-exploration:
+	docker run $(PLATFORM_FLAG) -it \
+				$(GPU_FLAGS) \
+				--privileged \
+				$(NETWORK_FLAG) \
+				--env="QT_X11_NO_MITSHM=1" \
+				$(DEV_MOUNTS) \
+				-e USE_XPRA=true \
+				-e MODE=exploration-multiagent-ground \
+				-e ENV=$(or $(ENV),ACL_office) \
+				$(if $(NUM_AGENTS),-e NUM_AGENTS=$(NUM_AGENTS),) \
 				-p 8080:8080 \
 				--rm mighty
 
