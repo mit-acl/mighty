@@ -8,6 +8,7 @@
 
 #include <math.h>
 
+#include <atomic>
 #include <chrono>
 #include <thread>
 
@@ -173,8 +174,8 @@ class FakeSim : public rclcpp::Node {
       }
     }
 
-    // Delay before sending the initial state to Gazebo
-    if (send_state_to_gazebo_) std::thread(&FakeSim::sendGazeboState, this).detach();
+    // Send the initial state to Gazebo (non-blocking async; see sendGazeboState)
+    if (send_state_to_gazebo_) sendGazeboState();
 
     // Flag to publish drone marker
     publish_marker_drone_ = (visual_level > 0);
@@ -210,6 +211,9 @@ class FakeSim : public rclcpp::Node {
   rclcpp::Subscription<dynus_interfaces::msg::Goal>::SharedPtr sub_goal_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_cmd_vel_;
   rclcpp::Client<gazebo_msgs::srv::SetEntityState>::SharedPtr gazebo_client_;
+  // Teleport backpressure (see sendGazeboState): one request in flight, max.
+  std::atomic<bool> gazebo_call_inflight_{false};
+  double gazebo_call_sent_t_ = 0.0;
   rclcpp::TimerBase::SharedPtr timer_;
 
   dynus_interfaces::msg::State state_;
@@ -305,6 +309,28 @@ class FakeSim : public rclcpp::Node {
   }
 
   void sendGazeboState() {
+    // At most ONE teleport request in flight, ever. The previous design
+    // spawned a detached thread per 10 ms tick, each BLOCKING on the service
+    // response — with ten robots that is 1,000 calls/s against gzserver, and
+    // the moment the service falls behind, threads accumulate until
+    // std::thread throws EAGAIN ("Resource temporarily unavailable") and
+    // terminate() takes the whole node down. Measured: all ten fake_sims
+    // aborted within seconds of goal release in the 10-robot Gazebo swap.
+    //
+    // Skipping a tick while a request is pending is strictly better than
+    // queueing it: the next tick carries a fresher pose anyway, so the
+    // teleport rate degrades gracefully to whatever gzserver can serve
+    // (solo/3-robot runs stay at the full 100 Hz — the service keeps up).
+    const double now_s = std::chrono::duration<double>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (gazebo_call_inflight_.exchange(true)) {
+      // Watchdog: if the pending call never completed (service died — e.g.
+      // gzserver teardown), stop treating it as in flight after 2 s so a
+      // restarted service resumes teleports.
+      if (now_s - gazebo_call_sent_t_ < 2.0) return;
+    }
+    gazebo_call_sent_t_ = now_s;
+
     auto request = std::make_shared<gazebo_msgs::srv::SetEntityState::Request>();
     request->state.name = ns_;
 
@@ -316,13 +342,11 @@ class FakeSim : public rclcpp::Node {
     request->state.pose.orientation.z = state_.quat.z;
     request->state.pose.orientation.w = state_.quat.w;
 
-    auto future = gazebo_client_->async_send_request(request);
-
-    try {
-      (void)future.get();
-    } catch (const std::exception&) {
-      // Keep silent (same behavior as your original code)
-    }
+    gazebo_client_->async_send_request(
+        request,
+        [this](rclcpp::Client<gazebo_msgs::srv::SetEntityState>::SharedFuture) {
+          gazebo_call_inflight_.store(false);
+        });
   }
 
   void getTransformStamped() {
@@ -407,14 +431,22 @@ class FakeSim : public rclcpp::Node {
       publishOdometry();
     }
 
-    // Publish drone marker (UAV only — ground robot is rendered from URDF via RobotModel display)
-    if (publish_marker_drone_ && !use_ground_robot_) {
-      pub_marker_drone_->publish(getDroneMarker());
+    // Publish the vehicle marker. UAVs always get the quadrotor mesh. Ground
+    // robots get a bbox-sized cube ONLY in pure fake_sim: in Gazebo modes the
+    // robot is rendered from its URDF (RobotModel display), and publishing a
+    // marker there too would paint a second, drifting phantom box.
+    if (publish_marker_drone_) {
+      if (!use_ground_robot_) {
+        pub_marker_drone_->publish(getDroneMarker());
+      } else if (!send_state_to_gazebo_) {
+        pub_marker_drone_->publish(getGroundMarker());
+      }
     }
 
-    // Send the state to Gazebo
+    // Send the state to Gazebo (non-blocking; skips the tick if the previous
+    // teleport is still in flight — see sendGazeboState for why)
     if (send_state_to_gazebo_) {
-      std::thread(&FakeSim::sendGazeboState, this).detach();
+      sendGazeboState();
     }
 
     // Publish the state (disabled for ground robots - convert_odom_to_state publishes actual state)
@@ -446,6 +478,55 @@ class FakeSim : public rclcpp::Node {
     marker.scale.x = 0.75;
     marker.scale.y = 0.75;
     marker.scale.z = 0.75;
+
+    return marker;
+  }
+
+  // Ground-robot body for pure fake_sim runs (no Gazebo → no URDF → nothing
+  // else renders the robot). A Pioneer-bbox cube at the unicycle state, with
+  // a deterministic per-namespace color so ten robots are tellable apart.
+  visualization_msgs::msg::Marker getGroundMarker() {
+    visualization_msgs::msg::Marker marker;
+    marker.id = drone_marker_id_;
+    marker.ns = std::string("ground_box_") + this->get_namespace();
+    marker.header.frame_id = map_frame_id_;
+    marker.header.stamp = this->get_clock()->now();
+    marker.type = marker.CUBE;
+    marker.action = marker.ADD;
+
+    marker.pose.position.x = state_.pos.x;
+    marker.pose.position.y = state_.pos.y;
+    // Sit the box on the floor: state z is the ground plane, box is 0.5 tall.
+    marker.pose.position.z = state_.pos.z + 0.25;
+    marker.pose.orientation.x = state_.quat.x;
+    marker.pose.orientation.y = state_.quat.y;
+    marker.pose.orientation.z = state_.quat.z;
+    marker.pose.orientation.w = state_.quat.w;
+
+    // drone_bbox of the ground config.
+    marker.scale.x = 0.6;
+    marker.scale.y = 0.6;
+    marker.scale.z = 0.5;
+
+    // Deterministic hue from the namespace (golden-ratio spacing keeps any
+    // NX01..NX10 fleet visually distinct without a lookup table).
+    size_t h = std::hash<std::string>{}(ns_);
+    const double hue = (h % 360) / 360.0;
+    const double x = 1.0 - std::fabs(std::fmod(hue * 6.0, 2.0) - 1.0);
+    const int sector = static_cast<int>(hue * 6.0) % 6;
+    double r = 0, g = 0, b = 0;
+    switch (sector) {
+      case 0: r = 1; g = x; break;
+      case 1: r = x; g = 1; break;
+      case 2: g = 1; b = x; break;
+      case 3: g = x; b = 1; break;
+      case 4: r = x; b = 1; break;
+      default: r = 1; b = x; break;
+    }
+    marker.color.r = static_cast<float>(r);
+    marker.color.g = static_cast<float>(g);
+    marker.color.b = static_cast<float>(b);
+    marker.color.a = 1.0f;
 
     return marker;
   }

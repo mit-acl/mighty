@@ -9,7 +9,7 @@
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 import launch_ros.actions
 import launch_ros.descriptions
@@ -46,6 +46,24 @@ def generate_launch_description():
     
     use_mockamap = LaunchConfiguration('use_mockamap', default=False) # map_generator or mockamap
     use_mockamap_arg = DeclareLaunchArgument('use_mockamap', default_value=use_mockamap, description='Choose map type, map_generator or mockamap')
+
+    # Obstacle-free worlds (e.g. the ground-robot position-exchange demo):
+    # launch_map_generator:=false drops the random forest, and
+    # use_empty_world_cloud:=true starts a constant SUB-FLOOR point grid on
+    # /map_generator/global_cloud instead. The planner cannot run without a
+    # continuously arriving sensor cloud (checkReadyToReplan requires an
+    # initialized map, and pcl_render publishes nothing without a global map
+    # — an EMPTY cloud would leave its FLANN index unbuilt). Points at
+    # z = -3 m keep pcl_render fed while staying below every agent's z_min,
+    # so the voxel map sees a world with no obstacles at all.
+    launch_map_generator = LaunchConfiguration('launch_map_generator', default='true')
+    launch_map_generator_arg = DeclareLaunchArgument(
+        'launch_map_generator', default_value='true',
+        description='Start the random_forest obstacle generator (false = obstacle-free world)')
+    use_empty_world_cloud = LaunchConfiguration('use_empty_world_cloud', default='false')
+    use_empty_world_cloud_arg = DeclareLaunchArgument(
+        'use_empty_world_cloud', default_value='false',
+        description='Publish the sub-floor global cloud that feeds pcl_render in obstacle-free worlds')
     use_dynamic = LaunchConfiguration('use_dynamic', default=True)  
     use_dynamic_arg = DeclareLaunchArgument('use_dynamic', default_value=use_dynamic, description='Use Drone Simulation Considering Dynamics or Not')
     default_rviz_config = os.path.join(get_package_share_directory('mighty'), 'rviz', 'mighty.rviz')
@@ -82,7 +100,19 @@ def generate_launch_description():
             {'sensing/rate': 50.0},
             {'min_distance': min_dist}
         ],
-        condition = UnlessCondition(use_mockamap)
+        # Runs only when a map is wanted at all AND mockamap wasn't chosen —
+        # preserves the historical use_mockamap semantics.
+        condition=IfCondition(PythonExpression([
+            "'", launch_map_generator, "'.lower() == 'true' and '",
+            use_mockamap, "'.lower() != 'true'"]))
+    )
+
+    subfloor_cloud_node = Node(
+        package='mighty',
+        executable='publish_subfloor_cloud.py',
+        name='subfloor_cloud',
+        output='screen',
+        condition=IfCondition(use_empty_world_cloud)
     )
 
     # use_rviz:=false runs the fake_sim scenarios fully headless, which is what
@@ -117,8 +147,11 @@ def generate_launch_description():
     ld.add_action(use_dynamic_arg)
     ld.add_action(rviz_config_arg)
     ld.add_action(use_rviz_arg)
+    ld.add_action(launch_map_generator_arg)
+    ld.add_action(use_empty_world_cloud_arg)
 
     ld.add_action(random_forest_node)
+    ld.add_action(subfloor_cloud_node)
     ld.add_action(rviz_node)
 
     return ld

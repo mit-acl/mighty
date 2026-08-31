@@ -40,6 +40,12 @@ def generate_launch_description():
     use_ground_robot_arg = DeclareLaunchArgument(
         'use_ground_robot', default_value='false', description='Use ground robot (affects RViz config)'
     )
+    rviz_config_arg = DeclareLaunchArgument(
+        'rviz_config', default_value='',
+        description='RViz config filename to use instead of the auto-selected one '
+                    '(bare name, resolved against mighty/rviz). Multi-robot ground '
+                    'runs pass multi_mighty_sim_ground_robot.rviz.'
+    )
 
     # Dynamic obstacle spawn region
     num_dyn_obstacles_arg = DeclareLaunchArgument('num_dyn_obstacles', default_value='1', description='Number of dynamic obstacles')
@@ -99,8 +105,16 @@ def generate_launch_description():
         use_gazebo_gui = LaunchConfiguration('use_gazebo_gui').perform(context)
         use_ground_robot = convert_str_to_bool(LaunchConfiguration('use_ground_robot').perform(context))
 
-        # Create a rviz node - prefer source rviz config over installed one
-        rviz_config_filename = 'mighty_sim_ground_robot.rviz' if use_ground_robot else 'mighty.rviz'
+        # Create a rviz node - prefer source rviz config over installed one.
+        # rviz_config overrides the auto-selection: multi-robot ground runs pass
+        # multi_mighty_sim_ground_robot.rviz, whose per-namespace display groups
+        # for NX02+ are enabled. The single-robot config leaves them off on
+        # purpose — a solo run should not open with three empty topic trees.
+        rviz_config_override = LaunchConfiguration('rviz_config').perform(context)
+        if rviz_config_override:
+            rviz_config_filename = rviz_config_override
+        else:
+            rviz_config_filename = 'mighty_sim_ground_robot.rviz' if use_ground_robot else 'mighty.rviz'
         # Derive workspace root from installed package path (install/mighty/share/mighty -> workspace root)
         install_share_dir = get_package_share_directory('mighty')
         ws_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(install_share_dir))))
@@ -178,6 +192,7 @@ def generate_launch_description():
         use_gazebo_gui_arg,
         use_dyn_obs_arg,
         use_ground_robot_arg,
+        rviz_config_arg,
         num_dyn_obstacles_arg,
         dyn_x_min_arg,
         dyn_x_max_arg,

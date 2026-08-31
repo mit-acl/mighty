@@ -48,6 +48,32 @@ def generate_launch_description():
         default_value='0.0',
         description='Angular offset in radians for circle positions (e.g. 0.7854 for 45 deg)'
     )
+    start_stagger_arg = DeclareLaunchArgument(
+        'start_stagger_sec',
+        default_value='0.0',
+        description='Per-agent goal-release stagger: agent i holds its first goal '
+                    'i*this seconds, so N agents do not all cross the circle centre '
+                    'at once (0 = historical simultaneous release)'
+    )
+    crossing_offset_arg = DeclareLaunchArgument(
+        'crossing_offset_m',
+        default_value='0.0',
+        description='Roundabout offset: shift every swap goal tangentially (CCW) so '
+                    'the centre crossing becomes a rotary flow instead of N chords '
+                    'through one point (0 = historical exact-antipode geometry)'
+    )
+    goal_pattern_arg = DeclareLaunchArgument(
+        'goal_pattern',
+        default_value='swap',
+        description="'swap' = antipodal exchange; 'random_slot' = each arrival draws "
+                    "the next goal uniformly from the N start slots (spreads traffic "
+                    "instead of one simultaneous centre crossing)"
+    )
+    random_seed_arg = DeclareLaunchArgument(
+        'random_seed',
+        default_value='0',
+        description='Seed mixed into each agent\'s random_slot stream (reproducible runs)'
+    )
 
     def launch_setup(context):
         prefix = LaunchConfiguration('agent_prefix').perform(context)
@@ -57,6 +83,10 @@ def generate_launch_description():
         radius = float(LaunchConfiguration('radius').perform(context))
         use_ground_robot = LaunchConfiguration('use_ground_robot').perform(context)
         angle_offset = float(LaunchConfiguration('angle_offset').perform(context))
+        start_stagger_sec = float(LaunchConfiguration('start_stagger_sec').perform(context))
+        crossing_offset_m = float(LaunchConfiguration('crossing_offset_m').perform(context))
+        goal_pattern = LaunchConfiguration('goal_pattern').perform(context)
+        random_seed = int(LaunchConfiguration('random_seed').perform(context))
 
         namespaces = [f'{prefix}{i:02d}' for i in range(1, num_agents + 1)]
 
@@ -76,6 +106,10 @@ def generate_launch_description():
                         'num_agents': num_agents,
                         'radius': radius,
                         'angle_offset': angle_offset,
+                        'start_stagger_sec': start_stagger_sec,
+                        'crossing_offset_m': crossing_offset_m,
+                        'goal_pattern': goal_pattern,
+                        'random_seed': random_seed,
                     }]
                 )
             )
@@ -89,5 +123,9 @@ def generate_launch_description():
         num_agents_arg,
         radius_arg,
         angle_offset_arg,
+        start_stagger_arg,
+        crossing_offset_arg,
+        goal_pattern_arg,
+        random_seed_arg,
         OpaqueFunction(function=launch_setup),
     ])

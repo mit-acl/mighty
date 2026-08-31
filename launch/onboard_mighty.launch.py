@@ -45,7 +45,23 @@ def generate_launch_description():
     sim_env_arg = DeclareLaunchArgument('sim_env', default_value='', description='Simulation environment: gazebo or fake_sim (empty = use mighty.yaml default)')
     log_level_arg = DeclareLaunchArgument('log_level', default_value='error', description="mighty_node ROS log level. Default 'error' keeps the terminal quiet; use 'info' to see planner diagnostics such as the [expl] frontier-detection counters")
     config_file_arg = DeclareLaunchArgument('config_file', default_value='', description='Override planner config yaml (bare filename in mighty/config, or absolute path; empty = auto-select mighty.yaml / mighty_ground_robot.yaml)')
+    config_overlay_file_arg = DeclareLaunchArgument('config_overlay_file', default_value='',
+        description='Small yaml of parameter deltas layered on top of the base config (bare filename in mighty/config, or absolute path). Used by multi-robot exploration; empty = no overlay')
     use_ground_robot_arg = DeclareLaunchArgument('use_ground_robot', default_value='false', description='Enable ground robot mode (spawns p3at, uses cmd_vel control)')
+    use_lidar_arg = DeclareLaunchArgument('use_lidar', default_value='true', description='Attach the mid360 lidar to the spawned model (false strips it — the dominant per-robot Gazebo cost)')
+    use_camera_arg = DeclareLaunchArgument('use_camera', default_value='true', description='Attach the D435 camera sensors to the spawned model')
+    map_source_arg = DeclareLaunchArgument('map_source', default_value='',
+        description="Planner map feed override. 'sensor_cloud' makes a gazebo run "
+                    "use the fake_sim-style feed (pcl_render over "
+                    "/map_generator/global_cloud) instead of the lidar->global_mapper "
+                    "chain — required when spawning sensorless models "
+                    "(use_lidar:=false). Empty = derive from sim_env as always.")
+    mpc_control_rate_arg = DeclareLaunchArgument('mpc_control_rate_hz', default_value='',
+        description='Override mpc_node control_rate_hz (empty = mpc_sim.yaml value). '
+                    'Large fleets run 20 to match the MPC dt=0.05 model and cut solve load.')
+    mpc_n_horizon_arg = DeclareLaunchArgument('mpc_n_horizon', default_value='',
+        description='Override mpc_node N_horizon (empty = mpc_sim.yaml value). '
+                    'Large fleets run 10 — halves each casadi solve.')
     use_onboard_localization_arg = DeclareLaunchArgument('use_onboard_localization', default_value='false', description='Use onboard localization (DLIO) vs Vicon')
     depth_camera_name_arg = DeclareLaunchArgument('depth_camera_name', default_value='d435', description='Depth camera name for topic remapping')
     robot_type_arg = DeclareLaunchArgument('robot_type', default_value='quadrotor', description='Robot type: quadrotor, red_rover, star_robot')
@@ -109,6 +125,7 @@ def generate_launch_description():
         map_size_z = float(LaunchConfiguration('map_size_z').perform(context))
         odometry_topic = LaunchConfiguration('odometry_topic').perform(context)
         sim_env = LaunchConfiguration('sim_env').perform(context)
+        map_source = LaunchConfiguration('map_source').perform(context)
         use_ground_robot = convert_str_to_bool(LaunchConfiguration('use_ground_robot').perform(context))
         use_onboard_localization = convert_str_to_bool(LaunchConfiguration('use_onboard_localization').perform(context))
         depth_camera_name = LaunchConfiguration('depth_camera_name').perform(context)
@@ -140,9 +157,26 @@ def generate_launch_description():
         # Extract specific node parameters
         parameters = parameters['mighty_node']['ros__parameters']
 
+        # Optional overlay: a small file of deltas applied on top of the base
+        # config. Used by multi-robot exploration, whose difference from the
+        # single-robot setup is three keys — copying the whole ~420-line ground
+        # config to change three values would guarantee the two drift apart, and
+        # the base file's comments record measured campaign results that must
+        # not be duplicated. Applied BEFORE the hardware overlay below so
+        # hardware still has the last word.
+        overlay_file = LaunchConfiguration('config_overlay_file').perform(context)
+        if overlay_file:
+            overlay_path = overlay_file if os.path.isabs(overlay_file) \
+                else os.path.join(get_package_share_directory('mighty'), 'config', overlay_file)
+            with open(overlay_path, 'r') as f:
+                overlay = yaml.safe_load(f)['mighty_node']['ros__parameters']
+            parameters.update(overlay)
+
         # Override sim_env if provided via launch argument
         if sim_env:
             parameters['sim_env'] = sim_env
+        if map_source:
+            parameters['map_source'] = map_source
 
         # Override vehicle_type if using ground robot
         if use_ground_robot:
@@ -242,7 +276,7 @@ def generate_launch_description():
             output='screen',
             namespace=namespace,
             parameters=[{
-                'robot_description': ParameterValue(Command(['xacro ', urdf_path, ' namespace:=', namespace, ' d435_range_max_depth:=', str(parameters['depth_camera_depth_max'])]), value_type=str),
+                'robot_description': ParameterValue(Command(['xacro ', urdf_path, ' namespace:=', namespace, ' d435_range_max_depth:=', str(parameters['depth_camera_depth_max']), ' use_lidar:=', LaunchConfiguration('use_lidar'), ' use_camera:=', LaunchConfiguration('use_camera')]), value_type=str),
                 'use_sim_time': False,
                 'frame_prefix': namespace + '/',
             }],
@@ -290,6 +324,14 @@ def generate_launch_description():
             mpc_params_file = os.path.join(get_package_share_directory('mpc'), 'config', mpc_params_filename)
             mpc_cmd_vel_topic = 'cmd_vel_auto' if use_hardware else 'cmd_vel'
             mpc_overrides = {'cmd_vel_topic': mpc_cmd_vel_topic}
+            # Fleet-scale compute overrides (see the launch args): starving
+            # the control loop is measurably worse than a shorter horizon.
+            mpc_control_rate_str = LaunchConfiguration('mpc_control_rate_hz').perform(context)
+            mpc_n_horizon_str = LaunchConfiguration('mpc_n_horizon').perform(context)
+            if mpc_control_rate_str:
+                mpc_overrides['control_rate_hz'] = float(mpc_control_rate_str)
+            if mpc_n_horizon_str:
+                mpc_overrides['N_horizon'] = int(mpc_n_horizon_str)
             # In sim, fake_sim publishes a single global "map" frame (not per-agent).
             # Prefix '/' tells mpc_node to treat the frame as absolute (skip namespace prefix).
             if not use_hardware:
@@ -391,7 +433,11 @@ def generate_launch_description():
             nodes_to_start.append(spawn_entity_node) if parameters['sim_env'] == 'gazebo' else None
             if use_ground_robot:
                 nodes_to_start.append(mpc_node)
-            nodes_to_start.append(pcl_render_node) if parameters['sim_env'] == 'fake_sim' else None
+            # pcl_render normally belongs to fake_sim; map_source:='sensor_cloud'
+            # pulls it into a gazebo run too (sensorless models still need a
+            # planner map feed — the sub-floor cloud replaces the lidar chain).
+            nodes_to_start.append(pcl_render_node) if (parameters['sim_env'] == 'fake_sim'
+                                                       or map_source == 'sensor_cloud') else None
 
         return nodes_to_start
 
@@ -416,7 +462,13 @@ def generate_launch_description():
         sim_env_arg,
         log_level_arg,
         config_file_arg,
+        config_overlay_file_arg,
         use_ground_robot_arg,
+        use_lidar_arg,
+        use_camera_arg,
+        map_source_arg,
+        mpc_control_rate_arg,
+        mpc_n_horizon_arg,
         use_onboard_localization_arg,
         depth_camera_name_arg,
         robot_type_arg,

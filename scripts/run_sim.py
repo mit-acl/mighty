@@ -222,6 +222,197 @@ unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRA
     return yaml.dump(yaml_content, default_flow_style=False, sort_keys=False)
 
 
+def generate_multiagent_ground_fake_yaml(setup_bash: Path, agents: list, radius: float,
+                                         ros_domain_id: int = 30,
+                                         rviz_config: Path = None,
+                                         config_overlay_file: Path = None,
+                                         use_rviz: bool = True,
+                                         log_level: str = 'error',
+                                         no_goal: bool = False,
+                                         goal_stagger: float = 0.0,
+                                         goal_pattern: str = 'swap',
+                                         mpc_rate: float = 20.0,
+                                         mpc_horizon: int = 10) -> str:
+    """Ground-robot position exchange WITHOUT Gazebo (fake_sim + RViz).
+
+    Mirrors generate_multiagent_yaml (the UAV circle swap), with the ground
+    differences:
+      * obstacle-free world: the simulator pane drops the random forest and
+        publishes the SUB-FLOOR cloud instead — the planner needs a
+        continuously arriving sensor cloud to initialize its map at all, and
+        pcl_render needs a non-empty global cloud, so "no obstacles" is a
+        grid of points at z=-3 m that the voxel map drops via z_min (see
+        scripts/publish_subfloor_cloud.py).
+      * full motion chain, no mapper: onboard_mighty.launch.py auto-starts
+        fake_sim (unicycle integration from cmd_vel) and mpc_node (pose from
+        the TF fake_sim broadcasts) for ground robots in fake_sim — so there
+        is NO global_mapper pane and NO convert_odom pane; the overlay
+        config disables everything mapper-dependent.
+      * staggered agent starts: ten planners + ten casadi MPCs coming up at
+        once contend hard; 2 s spacing flattens the spike.
+    """
+    panes = []
+
+    sim_cmd = ('ros2 launch mighty simulator.launch.py '
+               'launch_map_generator:=false use_empty_world_cloud:=true')
+    if rviz_config:
+        sim_cmd += f' rviz_config:={rviz_config}'
+    if not use_rviz:
+        sim_cmd += ' use_rviz:=false'
+    panes.append({'shell_command': [sim_cmd]})
+
+    overlay_flag = (f' config_overlay_file:={config_overlay_file}'
+                    if config_overlay_file else '')
+    for i, agent in enumerate(agents):
+        delay = 10 + i * 2
+        panes.append({
+            'shell_command': [
+                f'sleep {delay}',
+                f"ros2 launch mighty onboard_mighty.launch.py namespace:={agent['namespace']} "
+                f"x:={agent['x']} y:={agent['y']} z:={agent['z']} yaw:={agent['yaw']} "
+                f"sim_env:=fake_sim use_ground_robot:=true num_agents:={len(agents)} "
+                f"mpc_control_rate_hz:={mpc_rate:g} mpc_n_horizon:={mpc_horizon}"
+                f"{overlay_flag} log_level:={log_level}"
+            ]
+        })
+
+    if not no_goal:
+        # Last agent launches at 10 + 2*(N-1) s; give the fleet time to
+        # initialize before goals start the crossing traffic.
+        #
+        # goal_stagger trades choreography against separation, measured both
+        # ways: 0 releases every antipodal goal together — the classic
+        # all-cross-at-once look, with occasional visual pass-throughs in the
+        # centre (~0.02 m minima; fake_sim has no physics, separation is
+        # reported not gated). ~5.0 keeps only a few robots in the crossing
+        # zone at a time (measured 40x fewer close episodes) at the cost of a
+        # sequential-looking start.
+        panes.append({
+            'shell_command': [
+                'sleep 45',
+                # Tiled layout gives all 13+ panes equal tiny cells; the goal
+                # pane is the one worth reading live, so widen it in place
+                # once the layout has settled (squeezes only its row
+                # neighbors; the piped log files are unaffected by pane size).
+                'tmux resize-pane -t "$TMUX_PANE" -x 60% 2>/dev/null || true',
+                f'ros2 launch mighty goal_monitor.launch.py num_agents:={len(agents)} '
+                f'radius:={radius} agent_prefix:=NX goal_tolerance:=1.0 '
+                f'use_ground_robot:=true start_stagger_sec:={goal_stagger} '
+                f'goal_pattern:={goal_pattern}'
+            ]
+        })
+
+    yaml_content = {
+        'session_name': 'mighty_sim',
+        'windows': [{
+            'window_name': 'main',
+            'layout': 'tiled',
+            'shell_command_before': [
+                f'''if [ -z "$SETUP_BASH" ] || [ ! -f "$SETUP_BASH" ]; then
+  echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
+  exit 1
+fi
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
+. "$SETUP_BASH"''',
+                f'export ROS_DOMAIN_ID={ros_domain_id}'
+            ],
+            'panes': panes + [{'shell_command': ['# free pane — type commands here, e.g. `ros2 topic echo /NX01/term_goal`']}]
+        }]
+    }
+
+    return yaml.dump(yaml_content, default_flow_style=False, sort_keys=False)
+
+
+def generate_multiagent_ground_gazebo_yaml(setup_bash: Path, agents: list, radius: float,
+                                           ros_domain_id: int = 30,
+                                           config_overlay_file: Path = None,
+                                           use_rviz: bool = True,
+                                           log_level: str = 'error',
+                                           no_goal: bool = False,
+                                           goal_stagger: float = 0.0,
+                                           goal_pattern: str = 'swap',
+                                           mpc_rate: float = 20.0,
+                                           mpc_horizon: int = 10) -> str:
+    """Ground-robot position exchange IN GAZEBO, sensorless models.
+
+    The Gazebo sibling of generate_multiagent_ground_fake_yaml: same swap
+    machinery, same overlay, same sub-floor map feed — plus a real Gazebo
+    world so the P3AT model exists and RViz renders it via RobotModel
+    displays instead of colored cubes. What keeps 10 robots affordable:
+      * use_lidar:=false use_camera:=false strips every sensor from the
+        spawned model (the mid360 alone is 36,000 rays @ 10 Hz per robot);
+      * map_source:=sensor_cloud feeds each planner from pcl_render over the
+        sub-floor cloud, exactly like the fake mode — no global_mapper;
+      * motion stays the teleport-puppet chain every Gazebo ground mode uses
+        (fake_sim integrates cmd_vel and set_entity_state's the model), so
+        physics only decorates; robots can still visually overlap in dense
+        crossings.
+    """
+    panes = []
+
+    # Gazebo (empty world: flat ground plane + the gazebo_ros_state plugin
+    # fake_sim's teleport needs) + RViz with the RobotModel config.
+    base_cmd = ('ros2 launch mighty base_mighty.launch.py use_gazebo_gui:=false '
+                f'use_rviz:={str(use_rviz).lower()} env:=empty use_ground_robot:=true '
+                'rviz_config:=multi_mighty_ground_gazebo.rviz')
+    panes.append({'shell_command': ['source /usr/share/gazebo/setup.bash', base_cmd]})
+
+    # base_mighty does not include simulator.launch.py, so the sub-floor
+    # cloud (every agent's pcl_render input) runs standalone.
+    panes.append({'shell_command': ['sleep 5',
+                                    'ros2 run mighty publish_subfloor_cloud.py']})
+
+    overlay_flag = (f' config_overlay_file:={config_overlay_file}'
+                    if config_overlay_file else '')
+    for i, agent in enumerate(agents):
+        delay = 10 + i * 2
+        panes.append({
+            'shell_command': [
+                f'sleep {delay}',
+                f"ros2 launch mighty onboard_mighty.launch.py namespace:={agent['namespace']} "
+                f"x:={agent['x']} y:={agent['y']} z:={agent['z']} yaw:={agent['yaw']} "
+                f"sim_env:=gazebo use_ground_robot:=true use_lidar:=false use_camera:=false "
+                f"map_source:=sensor_cloud num_agents:={len(agents)} "
+                f"mpc_control_rate_hz:={mpc_rate:g} mpc_n_horizon:={mpc_horizon}"
+                f"{overlay_flag} log_level:={log_level}"
+            ]
+        })
+
+    if not no_goal:
+        panes.append({
+            'shell_command': [
+                'sleep 45',
+                # Widen the one pane worth reading live (see the fake-mode
+                # generator for the rationale).
+                'tmux resize-pane -t "$TMUX_PANE" -x 60% 2>/dev/null || true',
+                f'ros2 launch mighty goal_monitor.launch.py num_agents:={len(agents)} '
+                f'radius:={radius} agent_prefix:=NX goal_tolerance:=1.0 '
+                f'use_ground_robot:=true start_stagger_sec:={goal_stagger} '
+                f'goal_pattern:={goal_pattern}'
+            ]
+        })
+
+    yaml_content = {
+        'session_name': 'mighty_sim',
+        'windows': [{
+            'window_name': 'main',
+            'layout': 'tiled',
+            'shell_command_before': [
+                f'''if [ -z "$SETUP_BASH" ] || [ ! -f "$SETUP_BASH" ]; then
+  echo "[ERROR] SETUP_BASH is missing or invalid: $SETUP_BASH" >&2
+  exit 1
+fi
+unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
+. "$SETUP_BASH"''',
+                f'export ROS_DOMAIN_ID={ros_domain_id}'
+            ],
+            'panes': panes + [{'shell_command': ['# free pane — type commands here, e.g. `ros2 topic echo /NX01/term_goal`']}]
+        }]
+    }
+
+    return yaml.dump(yaml_content, default_flow_style=False, sort_keys=False)
+
+
 def generate_interactive_yaml(setup_bash: Path, ros_domain_id: int = 30, rviz_config: Path = None, use_rviz: bool = True) -> str:
     """Generate YAML for single-agent interactive simulation (click goals in RViz)."""
     sim_cmd = 'ros2 launch mighty simulator.launch.py'
@@ -349,14 +540,18 @@ def generate_exploration_multiagent_ground_yaml(
         rviz_config: Path = None, sim_env: str = 'fake_sim',
         env: str = 'ACL_office', use_vlm: bool = False,
         use_follow: bool = False, use_rviz: bool = True,
-        log_level: str = 'error') -> str:
+        log_level: str = 'error', config_overlay_file: Path = None) -> str:
     """Generate YAML for multi-agent ground robot exploration.
 
     Each agent runs:  onboard_mighty (ground robot, exploration enabled)
                     + global_mapper  (2D occ/ESDF for frontier detection)
                     + convert_odom_to_state (Gazebo only)
     No goal monitor — frontier-based exploration is self-driven.
-    MinPos + visited-map sharing coordinate the agents.
+
+    Multi-agent runs additionally layer config/multi_mighty_ground_robot.yaml on
+    top of the ground-robot config, which is what turns MinPos allocation and
+    visited-map sharing on. Without that overlay the agents load the solo config
+    and do not coordinate at all — they just share a world.
 
     use_rviz=False runs fully headless (no RViz, Gazebo GUI already off), which
     is what the automated campaign in scripts/exploration_test.py uses: RViz on
@@ -391,6 +586,11 @@ def generate_exploration_multiagent_ground_yaml(
                 f'ros2 launch mighty base_mighty.launch.py '
                 f'use_gazebo_gui:=false use_rviz:={str(use_rviz).lower()} '
                 f'env:={env} use_ground_robot:=true'
+                # Multi-robot needs the RViz config whose NX02+ display groups
+                # are enabled; the single-robot one leaves them off so a solo
+                # run doesn't open with empty topic trees.
+                + (' rviz_config:=multi_mighty_sim_ground_robot.rviz'
+                   if len(agents) > 1 else '')
             ]
         })
     else:
@@ -435,15 +635,19 @@ def generate_exploration_multiagent_ground_yaml(
             ]
         })
 
-        # Mighty planner (ground robot, exploration + MinPos enabled via config)
+        # Mighty planner. Exploration comes from the ground-robot config; the
+        # overlay (multi-agent only) is what turns MinPos coordination on —
+        # without it every robot loads the solo config and they do not
+        # coordinate at all.
         external_selector_arg = ' external_selector:=true' if use_vlm else ''
+        overlay_arg = f' config_overlay_file:={config_overlay_file}' if config_overlay_file else ''
         panes.append({
             'shell_command': [
                 f'sleep {delay + 2}',
                 f"ros2 launch mighty onboard_mighty.launch.py namespace:={ns} "
                 f"x:={agent['x']} y:={agent['y']} z:={agent['z']} yaw:={agent['yaw']} "
                 f"sim_env:={sim_env} use_ground_robot:=true "
-                f"num_agents:={len(agents)}{external_selector_arg} "
+                f"num_agents:={len(agents)}{external_selector_arg}{overlay_arg} "
                 f"log_level:={log_level}"
             ]
         })
@@ -839,7 +1043,7 @@ def main():
 
     parser.add_argument(
         '--mode', '-m',
-        choices=['multiagent', 'multiagent-ground', 'exploration-singleagent-ground', 'exploration-multiagent-ground', 'swap-multiagent-ground', 'gazebo', 'interactive', 'dyn-test', 'dyn-test-ground', 'dyn-test-ground-mpc'],
+        choices=['multiagent', 'multiagent-ground', 'multiagent-ground-fake', 'multiagent-ground-gazebo', 'exploration-singleagent-ground', 'exploration-multiagent-ground', 'swap-multiagent-ground', 'gazebo', 'interactive', 'dyn-test', 'dyn-test-ground', 'dyn-test-ground-mpc'],
         required=True,
         help='Simulation mode: multiagent, exploration-singleagent-ground, exploration-multiagent-ground, swap-multiagent-ground, gazebo, interactive, dyn-test, dyn-test-ground'
     )
@@ -882,8 +1086,9 @@ def main():
     parser.add_argument(
         '--num-agents', '-n',
         type=int,
-        default=10,
-        help='Number of agents for multiagent mode (default: 10)'
+        default=None,
+        help='Number of agents. Default depends on mode: 10 for multiagent, '
+             '4 for swap/multiagent-ground, 3 for exploration-multiagent-ground'
     )
 
     parser.add_argument(
@@ -891,6 +1096,47 @@ def main():
         type=float,
         default=10.0,
         help='Circle radius for multiagent formation (default: 10.0)'
+    )
+
+    parser.add_argument(
+        '--goal-pattern',
+        choices=['swap', 'random_slot'],
+        default='swap',
+        help="Ground swap modes: 'swap' = antipodal exchange (all robots cross "
+             "the centre); 'random_slot' = each robot draws its next goal from "
+             "the N start slots on arrival — traffic spreads organically instead "
+             "of one simultaneous centre event."
+    )
+
+    parser.add_argument(
+        '--goal-stagger',
+        type=float,
+        default=0.0,
+        help='multiagent-ground-fake: per-agent goal-release stagger in seconds '
+             '(agent i starts its first leg i*this later). 0 = all goals '
+             'released together — the classic simultaneous-crossing look, at '
+             'the cost of occasional visual pass-throughs in the centre '
+             '(fake_sim has no physics; separation is reported, not gated). '
+             'Use ~5.0 for maximum-separation traffic instead.'
+    )
+
+    parser.add_argument(
+        '--mpc-rate',
+        type=float,
+        default=20.0,
+        help='Ground swap modes: mpc_node control rate in Hz (default 20). '
+             '20/10 with --mpc-horizon is the laptop-safe pairing measured '
+             'against CPU starvation (ten fleets at 30 Hz degraded to 16 Hz '
+             'effective and 33%% yaw saturation). On a many-core host try '
+             '--mpc-rate 40 --mpc-horizon 20.'
+    )
+
+    parser.add_argument(
+        '--mpc-horizon',
+        type=int,
+        default=10,
+        help='Ground swap modes: mpc_node N_horizon steps (default 10). '
+             'See --mpc-rate.'
     )
 
     parser.add_argument(
@@ -1034,7 +1280,7 @@ def main():
         else:
             print(f"[INFO] Exploration is self-driven — no goal needed")
     elif args.mode == 'exploration-multiagent-ground':
-        num = args.num_agents if args.num_agents != 10 else 3
+        num = args.num_agents if args.num_agents is not None else 3
         # Arrange agents in a line at y=2, x-axis spaced 5m apart. The y offset
         # keeps every agent off (0,0,0) so the multi-agent origin guard in
         # exploreSelectCallback (which defers exploration when within 0.5m of
@@ -1053,18 +1299,30 @@ def main():
         # Default to Gazebo + ACL_office; --env overrides the world
         sim_env = 'gazebo'
         env = args.env if args.env != 'hard_forest' else 'ACL_office'
+        # The overlay is what makes this multi-ROBOT rather than N-solo-robots.
+        # Without it every agent loads the single-robot config, where MinPos is
+        # off and select_nearest short-circuits it anyway.
+        overlay_file = (Path(__file__).resolve().parent.parent
+                        / 'config' / 'multi_mighty_ground_robot.yaml')
+        if not overlay_file.exists():
+            print(f"[WARN] Multi-robot overlay not found at {overlay_file} — "
+                  f"agents will run UNCOORDINATED (solo config)")
+            overlay_file = None
         yaml_content = generate_exploration_multiagent_ground_yaml(
             setup_bash, agents, args.ros_domain_id, rviz_config=rviz_config,
             sim_env=sim_env, env=env,
             use_rviz=(args.rviz and not args.no_rviz),
-            log_level=args.log_level)
+            log_level=args.log_level,
+            config_overlay_file=overlay_file)
         print(f"[INFO] Mode: Multi-agent ground robot exploration (Gazebo + MinPos) with {num} agents")
+        if overlay_file:
+            print(f"[INFO] Coordination overlay: {overlay_file.name}")
         print(f"[INFO] Environment: {env}")
         for a in agents:
             print(f"[INFO]   {a['namespace']}: ({a['x']}, {a['y']}, {a['z']}) yaw={a['yaw']}")
         print(f"[INFO] Exploration is self-driven — no goal needed")
     elif args.mode == 'swap-multiagent-ground':
-        num = args.num_agents if args.num_agents != 10 else 4
+        num = args.num_agents if args.num_agents is not None else 4
         radius = math.sqrt(32)  # corners of 8x8 square → radius = sqrt(4²+4²)
         angle_offset = math.pi / 4  # 45° so agents land on (4,4), (-4,4), (-4,-4), (4,-4)
         agents = generate_multiagent_positions(num, radius, z=0.0, angle_offset=angle_offset)
@@ -1077,7 +1335,7 @@ def main():
             print(f"[INFO]   {a['namespace']}: ({a['x']}, {a['y']}, {a['z']}) yaw={a['yaw']}")
         print(f"[INFO] Agents swap to diametrically opposite positions")
     elif args.mode == 'multiagent-ground':
-        num = args.num_agents if args.num_agents != 10 else 4
+        num = args.num_agents if args.num_agents is not None else 4
         radius = args.radius if args.radius != 10.0 else 12.0
         agents = generate_multiagent_positions(num, radius, z=0.0, prefix='NX')
         yaml_content = generate_multiagent_ground_yaml(setup_bash, agents, radius,
@@ -1085,6 +1343,65 @@ def main():
         print(f"[INFO] Mode: Multi-agent ground robot (Gazebo + MPC) with {num} agents (radius={radius})")
         for a in agents:
             print(f"[INFO]   {a['namespace']}: ({a['x']}, {a['y']}, {a['z']}) yaw={a['yaw']}")
+    elif args.mode == 'multiagent-ground-fake':
+        num = args.num_agents if args.num_agents is not None else 10
+        radius = args.radius
+        agents = generate_multiagent_positions(num, radius, z=0.0, prefix='NX')
+        rviz_config = find_rviz_config('multi_mighty_ground_swap.rviz')
+        overlay_file = (Path(__file__).resolve().parent.parent
+                        / 'config' / 'swap_mighty_ground_robot.yaml')
+        if not overlay_file.exists():
+            print(f"[WARN] Swap overlay not found at {overlay_file} — agents "
+                  f"will run the solo ground config (mapper-dependent features "
+                  f"will misbehave without Gazebo)")
+            overlay_file = None
+        yaml_content = generate_multiagent_ground_fake_yaml(
+            setup_bash, agents, radius, args.ros_domain_id,
+            rviz_config=rviz_config, config_overlay_file=overlay_file,
+            use_rviz=(args.rviz and not args.no_rviz),
+            log_level=args.log_level, no_goal=args.no_goal,
+            goal_stagger=args.goal_stagger, goal_pattern=args.goal_pattern,
+            mpc_rate=args.mpc_rate, mpc_horizon=args.mpc_horizon)
+        print(f"[INFO] Mode: Ground robot position exchange, NO Gazebo "
+              f"(fake_sim + MPC unicycle) with {num} agents (radius={radius})")
+        if overlay_file:
+            print(f"[INFO] Overlay: {overlay_file.name}")
+        for a in agents:
+            print(f"[INFO]   {a['namespace']}: ({a['x']}, {a['y']}, {a['z']}) yaw={a['yaw']}")
+        if args.goal_stagger > 0:
+            print(f"[INFO] Agents swap to diametrically opposite positions, "
+                  f"goals staggered {args.goal_stagger}s per agent (empty world)")
+        else:
+            print(f"[INFO] Agents swap to diametrically opposite positions, "
+                  f"all goals released together (empty world)")
+    elif args.mode == 'multiagent-ground-gazebo':
+        num = args.num_agents if args.num_agents is not None else 10
+        radius = args.radius
+        agents = generate_multiagent_positions(num, radius, z=0.0, prefix='NX')
+        overlay_file = (Path(__file__).resolve().parent.parent
+                        / 'config' / 'swap_mighty_ground_robot.yaml')
+        if not overlay_file.exists():
+            print(f"[WARN] Swap overlay not found at {overlay_file} — agents "
+                  f"will run the solo ground config (mapper-dependent features "
+                  f"will misbehave without a mapper)")
+            overlay_file = None
+        yaml_content = generate_multiagent_ground_gazebo_yaml(
+            setup_bash, agents, radius, args.ros_domain_id,
+            config_overlay_file=overlay_file,
+            use_rviz=(args.rviz and not args.no_rviz),
+            log_level=args.log_level, no_goal=args.no_goal,
+            goal_stagger=args.goal_stagger, goal_pattern=args.goal_pattern,
+            mpc_rate=args.mpc_rate, mpc_horizon=args.mpc_horizon)
+        print(f"[INFO] Mode: Ground robot position exchange in Gazebo, "
+              f"SENSORLESS models (P3AT in RViz) with {num} agents (radius={radius})")
+        if overlay_file:
+            print(f"[INFO] Overlay: {overlay_file.name}")
+        for a in agents:
+            print(f"[INFO]   {a['namespace']}: ({a['x']}, {a['y']}, {a['z']}) yaw={a['yaw']}")
+        if args.goal_stagger > 0:
+            print(f"[INFO] Goals staggered {args.goal_stagger}s per agent")
+        else:
+            print(f"[INFO] All goals released together")
     elif args.mode == 'multiagent':
         sim_env = 'fake_sim'
         # Multi-agent uses a dedicated RViz config with per-agent NX01..NX10 display groups
@@ -1094,13 +1411,14 @@ def main():
         if not config_file.exists():
             print(f"[WARN] {config_file} not found; falling back to default planner config (mighty.yaml)")
             config_file = None
-        agents = generate_multiagent_positions(args.num_agents, args.radius)
+        num = args.num_agents if args.num_agents is not None else 10
+        agents = generate_multiagent_positions(num, args.radius)
         yaml_content = generate_multiagent_yaml(
             setup_bash, agents, sim_env, args.ros_domain_id, args.radius,
             no_goal=args.no_goal, rviz_config=rviz_config,
             config_file=config_file,
             use_rviz=(args.rviz and not args.no_rviz))
-        print(f"[INFO] Mode: Multi-agent simulation with {args.num_agents} agents (sim_env={sim_env})")
+        print(f"[INFO] Mode: Multi-agent simulation with {num} agents (sim_env={sim_env})")
         print(f"[INFO] Using multi-agent rviz config: {rviz_config}")
         if config_file:
             print(f"[INFO] Using multi-agent planner config: {config_file}")

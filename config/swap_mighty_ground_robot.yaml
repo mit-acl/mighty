@@ -1,0 +1,203 @@
+# Ground-robot position-exchange (fake_sim, no Gazebo) — parameter OVERLAY.
+#
+# Layered on top of config/mighty_ground_robot.yaml by onboard_mighty.launch.py's
+# `config_overlay_file` argument. Used by:
+#   run_sim.py --mode multiagent-ground-fake
+#
+# The mode runs the FULL motion chain without Gazebo: planner → mpc_node →
+# fake_sim's unicycle integrator, ten robots swapping antipodal positions on a
+# circle in an obstacle-free world. There is no global_mapper in this mode —
+# that fact drives most of the keys below.
+
+mighty_node:
+  ros__parameters:
+
+        # ---- No global_mapper ------------------------------------------------
+        # occ_2d/esdf topics never arrive. hgp_manager's updateMap falls back
+        # occ_2d -> esdf -> buildGroundMap2D() (projection of the rendered 3D
+        # cloud), so 2D planning KEEPS WORKING — use_2d_planning stays true on
+        # purpose; disabling it would route ground robots through untested 3D
+        # A* geometry. Only the mapper-dependent extras go off:
+        use_esdf_cost: false
+        # Without a persistent map, use_persistent_global_map would make A*
+        # target the TRUE terminal goal outside the local window
+        # (mighty.cpp: retarget branch) — actively harmful here.
+        use_persistent_global_map: false
+        reuse_global_path: false
+
+        # Swap mode: goal_monitor owns term_goal; the frontier machinery must
+        # not fight it. (A launch arg exploration_enabled would win over this
+        # if ever passed — this records the per-mode truth.)
+        exploration.enabled: false
+
+        # ---- Sensing in an obstacle-free world -------------------------------
+        # The world's only cloud is the sub-floor grid at z = -3 m (see
+        # scripts/publish_subfloor_cloud.py). The base ground config leaves
+        # sphere sensing off, and camera-FOV mode's elevation cone would strip
+        # those sub-floor points -> empty per-agent clouds -> planner never
+        # initializes + WARN spam. Sphere mode keeps them: |z|=3 < radius 5
+        # leaves sqrt(25-9) = 4 m of horizontal reach, well over the 2 m grid
+        # spacing, so pcl_render always returns points.
+        use_sphere_sensing: true
+        sphere_sensing_radius: 5.0
+
+        # ---- Map window / path geometry (mode-local tuning, 2026-08-29) ------
+        # Moved here from hand-edits to the base file so the validated
+        # single-robot config stays untouched. Rationale per key:
+        #   z_max 1.0        — the swap world has no walls to capture; a
+        #                      shorter voxel column is cheaper.
+        #   heat_alpha1      — see the heat block below (lighter peer tubes
+        #                      than the office 3.0: with ten robots converging,
+        #                      heavy tubes over-detour the global routes).
+        #   *_wd{x,y} 20     — window wide enough to hold the full 20 m
+        #                      crossing diameter, so A* sees the whole leg.
+        #   initial_wdz 1.0  — matches the base value; pinned so the set is
+        #                      complete and mode-local.
+        #   max_dist_vertexes 1.0 — coarser global-path vertices (fewer
+        #                      segments over a 20 m leg).
+        #   map_buffer 0.5   — smaller goal/A-point buffer for the open arena.
+        z_max: 1.0
+        initial_wdx: 30.0
+        initial_wdy: 30.0
+        initial_wdz: 1.0
+        max_dist_vertexes: 1.0
+        map_buffer: 0.5
+        min_wdx: 30.0
+        min_wdy: 30.0
+        heat_alpha0: 0.5                                # [-] Weight for reachability blob (smaller for ground robot)
+        heat_alpha1: 1.5                                # [-] Weight for trajectory tube
+        heat_Hmax: 10.0                                  # [-] Maximum dynamic heat value
+        global_planner_heuristic_weight: 1.0
+        heat_weight: 3.0
+        # ---- Peer avoidance ---------------------------------------------------
+        # NOT the office value (1.4). That number was chosen so two robots can
+        # pass in a ~2 m corridor; here there are no corridors — there are TEN
+        # robots converging on one crossing zone, and at 1.4 their repulsion
+        # bubbles tile the whole centre: measured on the first smoke, one robot
+        # sat frozen mid-field for 2+ minutes, boxed in by phantom bubbles.
+        # The UAV swap survives the same geometry with Cw == its bbox (0.5);
+        # proportionally for the 0.6 m ground bbox: 0.8 (0.2 m of margin).
+        planner_Cw: 0.8
+        # The UAV-swap recipe: SMALL bubble, BIG weight (multi_mighty.yaml
+        # runs Cw 0.5 = its bbox with weight 1e+4). Measured here: Cw 0.8
+        # with the office weight 1e+3 kept everyone flowing but let one pair
+        # pass 0.02 m apart — straight through each other — in the first
+        # crossing wave. A 10x weight turns the small bubble into a hard
+        # shell. With exploration off there are no claims and no yield
+        # governor; /trajs + J_dyn is the whole deconfliction story.
+        dynamic_weight: 1e+4
+        # Taper phantom far-future peer conflicts: peers replan ~1 Hz, so a
+        # predicted crossing 30 s out is fiction that bends the local
+        # trajectory tail every replan. 8 s ≈ 8 m closing at 2 x 0.5 m/s.
+        agent_dyn_horizon_sec: 8.0
+        # Stable MPC reference between replans (the yaw-hunting fix): without
+        # the cap the reference re-anchors at the robot pose ~85x/s and the
+        # controller chases micro-rotations.
+        mpc_path_publish_rate_hz: 10.0
+        # Matches the hardware ground config; stiffens the spline against
+        # residual peer-repulsion bending.
+        jerk_weight: 1e+4
+
+        # THE anti-overshoot knob for a 10-robot fleet, measured 2026-08-29:
+        # at the historical 100 Hz replan rate, ten planners ate ~8.5 cores
+        # (load avg 106) and starved the MPC loops — 30 Hz control degraded
+        # to 16 Hz with 231 ms worst-case periods and 33% yaw saturation
+        # (vs 1.3% solo): every command over-applied several times longer
+        # than the model assumed -> overshoot -> hard counter-correction.
+        # Solo tracking at the same settings was clean (2 cm mean
+        # cross-track), proving the controller itself needed no retuning.
+        # 20 Hz still replans every 2.5 cm of travel at 0.5 m/s. Paired with
+        # mpc_control_rate_hz:=20 / mpc_n_horizon:=10 on the launch line
+        # (run_sim.py --mpc-rate/--mpc-horizon; raise on many-core hosts).
+        replan_rate_hz: 20.0
+
+        # The head-on yield rule, sourced from /trajs in this mode (no MinPos
+        # machinery here — publishMpcPath falls back to evaluating peers'
+        # shared trajectories at NOW). Forensically necessary: with J_dyn
+        # alone, 10-way crossings interpenetrated to 0.13 m for seconds at a
+        # time WITH fresh trajectories on both sides — a unicycle cannot
+        # strafe out of a bubble, it can only slow down. Lower agent id wins;
+        # the loser crawls at 0.3x until the winner clears 2.5 m.
+        peer_yield_radius_m: 2.5
+        peer_yield_speed_factor: 0.3
+        # GEOMETRIC separation floor (2026-08-30, tuned on a 48-core host).
+        # The yield above only slows the loser — measured on lambda03 with
+        # healthy CPU (27-thread planners, MPC 40 Hz): 10-way crossings still
+        # bottomed out at 0.05 m, because a crawling loser keeps crossing the
+        # winner's line. This parks it instead: reference waypoints whose
+        # time-matched distance to a senior peer's /trajs trajectory would
+        # dip below the ring are cut from the published MPC reference, with
+        # an explicit zero terminal speed. THE ONE LAW: this ring (and the
+        # derived junior-side ring, mighty_node.cpp) MUST stay below
+        # peer_static_disc_m + drone_radius (= 1.3 here), or holds against a
+        # parked peer can never be cleared by the corridor detour and the
+        # fleet gridlocks (measured: 1.5 ring -> 15 arrivals/420 s with five
+        # robots frozen; 1.2 ring -> flow with the floor intact).
+        peer_standoff_m: 1.2
+        # Parked peers become REAL obstacles: a peer whose eval(now) sits
+        # still for ~0.5 s gets a 0.45 m disc of synthetic points stamped
+        # into this robot's sensor cloud, so the corridor/A*/heat machinery
+        # walls it off — that is what guarantees the WINNER's clearance when
+        # it passes a standoff-parked loser (J_dyn alone is soft, and the
+        # parked robot's advertised plan claims it is somewhere else).
+        # Clearance arithmetic: corridor keeps the spline drone_radius
+        # (drone_bbox/2 = 0.30) from occupied voxels, so a detour passes at
+        # >= disc + 0.30; the barrier's parked-peer hold ring is that minus
+        # 0.2 (mighty_node.cpp) so the detour can actually clear it and
+        # self-lift the hold. disc 1.0 -> pass 1.3 m, hold ring 1.1 m,
+        # floor ~1.05 m after tracking error. (0.45 disc measured
+        # 2026-08-30: floor 0.017 -> ~0.75, per the same arithmetic.)
+        peer_static_disc_m: 1.0
+
+
+
+# ---- The separation-floor journey (12 cells, 2026-08-30, 48-core host) ------
+# Baseline (soft costs only): floor 0.275 m, 16 below-1m episodes/360 s.
+# Compute fixes alone (OMP/executor caps, MPC 40 Hz, replan 20): throughput
+# up 57->75 arrivals, floor WORSE (0.053) — more crossings, same softness.
+# Plan-matched-only standoff: floor 0.017 (juniors parked against the
+# senior's advertised plan while its REAL position lagged meters behind).
+# + reality dual-check + sparse discs: seniors threaded 0.52 m point gaps
+# (A* path measured 0.89 m from a parked robot) — sparse discs are sieves.
+# Permanent any-rank holds: floor 1.14 but 15 arrivals (parking accretion);
+# 2.5 s hold timeout: 80 arrivals but floor 0.01 (moving pairs);
+# junior-only ring: 0.09 m sideswipe embrace, absorbed for a full run.
+# Final (this file): symmetric asymmetric-size rings + outward-only escape
+# below a ring + corridor-true FILLED discs with a body-size near-peer
+# exemption + /trajs keepalive timer (silent robots get pruned and become
+# invisible to ALL avoidance) + dual-horizon ring checks (live-position
+# over the first 4 m — a TIME horizon dies within a metre at yield-crawl
+# speeds; plan-matched within 8 s ETA — beyond that it is fiction; and
+# live-position over the WHOLE path collapsed antipodal flow 41 -> 5
+# arrivals from fictional far-field truncations).
+# SHIPPING NUMBERS (900 s campaign runs, 48-core host, 40 Hz MPC):
+#   antipodal:   min 1.183 / 1.215 m, ZERO below-1m time, 2/2 runs clean.
+#   random_slot: 0-1 brief episode per run (3.4-14.3 s, minima
+#                0.08-0.53 m), 129-160 arrivals — hardened ~20x, not
+#                guaranteed; residual = goal-churn crawl geometry.
+# Slot claims (goal_monitor use_slot_claims, DEFAULT OFF) measured both
+# ways: they kill same-slot contention but the removed waits were
+# accidental load-shedding — mover density rose and below-1m time got
+# 4-10x WORSE. Verifier: scripts/separation_probe.py.
+#
+# ---- Tuning dead-ends, so nobody re-walks them (11-cell matrix, 2026-08-29) --
+# Weave (yaw-reversal) rates at N=10 simultaneous were INVARIANT (within
+# noise) to: heat_alpha1 1.0->2.5, heat_Hmax 5->8, dyn_heat_tube_radius 3->4,
+# agent_dyn_horizon 8->5->4, num_N 7->10, replan_rate 20->10, radius 10->14,
+# yield radius 2.5->3.0, a tangential roundabout goal offset (1.5 m and
+# 3.0 m), and a crossing-zone occupancy meter (K=3/4 over a 3 m zone —
+# leaky by construction: the crawl still crosses the boundary, and holders
+# bunch into a queue-crowd on the meter ring; min_sep got WORSE; the
+# crossing_meter_* params remain available, default-off). Only TWO things measurably reduce the crossing churn: fewer robots
+# (N=5: 2.8 vs ~20 far-weave/agent-min) and goal staggering (fake-mode
+# measurement: ~40x fewer close episodes). Solo tracking in this exact mode
+# is perfect (0 reversals) — the churn is avoidance saturation, not control.
+
+# ---- Deliberately NOT set here ----------------------------------------------
+#   num_agents        — onboard_mighty.launch.py overwrites it from the launch
+#                       arg AFTER the overlay merge; pass num_agents:= instead.
+#   share_traj        — base is already true; /trajs is the deconfliction bus.
+#   force_goal_z / default_goal_z (0.2)
+#                     — base values already match goal_monitor's ground z.
+#   (peer_yield_* IS set above: in non-exploration modes the yield governor
+#    sources peer positions from /trajs instead of the MinPos pose channel.)

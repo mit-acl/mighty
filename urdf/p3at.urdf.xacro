@@ -19,20 +19,32 @@
   <!-- Arguments -->
   <xacro:arg name="namespace" default="NX01" />
   <xacro:arg name="d435_range_max_depth" default="5.0" />
+  <!-- Sensor toggles. Defaults keep every existing mode's expansion
+       byte-identical. use_lidar:=false drops the mid360 ray sensor (36,000
+       rays @ 10 Hz per robot — the dominant per-robot Gazebo cost) and
+       use_camera:=false drops the four D435 camera sensors; the
+       multiagent-ground-gazebo swap runs 10 robots with both off and feeds
+       the planner from the sub-floor cloud instead (map_source param). -->
+  <xacro:arg name="use_lidar" default="true" />
+  <xacro:arg name="use_camera" default="true" />
 
   <xacro:include filename="$(find mighty)/urdf/pioneer3at_body.urdf.xacro" />
   <!-- Disabled: fake_sim handles teleport and TF for ground robot -->
   <!-- <xacro:p3at_gazebo_ext name="$(arg namespace)_red_rover" namespace="$(arg namespace)" /> -->
 
   <xacro:include filename="$(find ros2_livox_simulation)/urdf/mid360.xacro" />
-  <xacro:mid360 name="$(arg namespace)_livox" namespace="$(arg namespace)" parent="base_link" topic="mid360" lidar_update_rate="10" >
-    <origin xyz="0 0 1.0" rpy="0 0.3 0"/>
-  </xacro:mid360>
+  <xacro:if value="$(arg use_lidar)">
+    <xacro:mid360 name="$(arg namespace)_livox" namespace="$(arg namespace)" parent="base_link" topic="mid360" lidar_update_rate="10" >
+      <origin xyz="0 0 1.0" rpy="0 0.3 0"/>
+    </xacro:mid360>
+  </xacro:if>
 
   <xacro:include filename="$(find mighty)/urdf/_d435.urdf.xacro" />
-  <xacro:sensor_d435 name="$(arg namespace)_d435" topics_ns="$(arg namespace)" range_max_depth="$(arg d435_range_max_depth)" parent="base_link"
-                     publish_pointcloud="false" color_sensor_rate="5" depth_sensor_rate="15" depth_plugin_rate="15.0" color_plugin_rate="5.0">
-    <origin xyz="0.2 0.0 0.45" rpy="0 0 0"/>
-  </xacro:sensor_d435>
+  <xacro:if value="$(arg use_camera)">
+    <xacro:sensor_d435 name="$(arg namespace)_d435" topics_ns="$(arg namespace)" range_max_depth="$(arg d435_range_max_depth)" parent="base_link"
+                       publish_pointcloud="false" color_sensor_rate="5" depth_sensor_rate="15" depth_plugin_rate="15.0" color_plugin_rate="5.0">
+      <origin xyz="0.2 0.0 0.45" rpy="0 0 0"/>
+    </xacro:sensor_d435>
+  </xacro:if>
       
 </robot>
