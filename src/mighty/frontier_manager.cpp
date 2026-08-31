@@ -344,7 +344,9 @@ std::optional<FrontierRecord> FrontierManager::selectNextGoalMinPos(
     const Eigen::Vector3d& robot_pose,
     const OccGrid2D& current_grid,
     const std::vector<PeerPose>& peers,
-    double min_dist_to_peers_m) const {
+    double min_dist_to_peers_m,
+    const std::vector<PeerClaim>& claims,
+    double claim_block_radius_m) const {
   const Eigen::Vector2d robot_xy = robot_pose.head<2>();
 
   struct Candidate {
@@ -354,20 +356,40 @@ std::optional<FrontierRecord> FrontierManager::selectNextGoalMinPos(
     double utility;
   };
 
-  auto collectCandidates = [&](FrontierState want) -> std::vector<Candidate> {
+  auto collectCandidates = [&](FrontierState want, double keep_out) -> std::vector<Candidate> {
     std::vector<Candidate> cands;
     for (size_t i = 0; i < records_.size(); ++i) {
       if (records_[i].state != want) continue;
 
-      if (min_dist_to_peers_m > 0.0) {
+      if (keep_out > 0.0) {
         bool too_close = false;
         for (const auto& p : peers) {
-          if ((p.position - records_[i].centroid_xy).norm() < min_dist_to_peers_m) {
+          if ((p.position - records_[i].centroid_xy).norm() < keep_out) {
             too_close = true;
             break;
           }
         }
         if (too_close) continue;
+      }
+
+      // Claim hard-skip: a peer is already driving to (a frontier within
+      // claim_block_radius of) this spot. Captured from the enclosing scope,
+      // NOT from keep_out — so the keep-out fallback below relaxes only the
+      // pose filter while claimed frontiers stay off-limits. Relaxing the
+      // pose keep-out replaces "nothing" with "the best available"; relaxing
+      // the claim filter would replace "nothing" with "a guaranteed
+      // duplicate". All-claimed → nullopt is the designed home-with-resume
+      // endgame, not starvation: selection still returns, the caller's grace
+      // timer runs, and the robot acts.
+      if (claim_block_radius_m > 0.0) {
+        bool claimed = false;
+        for (const auto& c : claims) {
+          if ((c.position - records_[i].centroid_xy).norm() < claim_block_radius_m) {
+            claimed = true;
+            break;
+          }
+        }
+        if (claimed) continue;
       }
 
       const double d_self = (robot_xy - records_[i].centroid_xy).norm();
@@ -388,7 +410,25 @@ std::optional<FrontierRecord> FrontierManager::selectNextGoalMinPos(
 
   // Two-tier: exhaust ACTIVE before falling back to DORMANT.
   for (FrontierState tier : {FrontierState::ACTIVE, FrontierState::DORMANT}) {
-    auto cands = collectCandidates(tier);
+    auto cands = collectCandidates(tier, min_dist_to_peers_m);
+
+    // Keep-out fallback. The peer-distance filter rejects outright, so with a
+    // large radius every candidate in a tier can be inside some peer's circle
+    // and the tier comes back empty. Returning nullopt there does not make the
+    // robot cautious — it makes it idle: it selects nothing, never captures its
+    // exploration start, and simply sits until the peers happen to move. That
+    // was measured, not theorised (one run spent ~1400 s of its 1661 s stopped,
+    // having driven only 132 m).
+    //
+    // Retrying the same tier without the keep-out can only ADD candidates where
+    // there were none, so it is strictly safer than the previous behaviour: it
+    // never overrides a viable separated choice, it only replaces "nothing" with
+    // "the best available". Separation stays a strong preference rather than a
+    // hard constraint that can deadlock.
+    if (cands.empty() && min_dist_to_peers_m > 0.0 && !peers.empty()) {
+      cands = collectCandidates(tier, 0.0);
+    }
+
     if (!cands.empty()) {
       FrontierRecord r = records_[cands[0].idx];
       r.cached_utility = cands[0].utility;
@@ -469,6 +509,122 @@ void FrontierManager::markSelected(uint64_t id, const Eigen::Vector2d& robot_xy,
     r.pursuit_budget_sec = budget;
     r.pursuit_deadline_t = t_now + budget;
     return;
+  }
+}
+
+int FrontierManager::applyPeerStatus(
+    const std::vector<PeerFrontierStatus>& statuses,
+    double t_now, double match_radius_m,
+    std::optional<uint64_t> immune_id) {
+  if (match_radius_m <= 0.0) return 0;
+  int retired = 0;
+
+  // Consumed-verdict markers make each peer verdict apply ONCE, not forever.
+  // Peers rebroadcast their full DB at ~2 Hz for the rest of the run, so
+  // without the markers an old verdict keeps retiring every NEW record that
+  // later appears near the same spot — measured consequence: residual
+  // unknown slivers could never re-enter anyone's frontier set, and in 2 of
+  // 9 campaign runs a single early verdict near a doorway walled off a whole
+  // unexplored wing (team went home at 0.64 coverage). A marker is refreshed
+  // by every matching assert while the peer keeps broadcasting, and expires
+  // peer_verdict_ttl_sec after the last one — so if the verdict-holder dies
+  // and a teammate later reaches a REAL fresh verdict there, it applies.
+  // Expired markers are pruned here (the only writer).
+  peer_verdict_markers_.erase(
+      std::remove_if(peer_verdict_markers_.begin(), peer_verdict_markers_.end(),
+                     [&](const PeerVerdictMarker& mk) {
+                       return params_.peer_verdict_ttl_sec > 0.0 &&
+                              t_now - mk.last_assert_t >
+                                  params_.peer_verdict_ttl_sec;
+                     }),
+      peer_verdict_markers_.end());
+
+  for (const auto& s : statuses) {
+    // Already consumed? Refresh the marker and skip — re-applying an old
+    // verdict to whatever record happens to be nearest NOW is how distinct
+    // new frontiers get wrongly killed.
+    PeerVerdictMarker* consumed = nullptr;
+    {
+      double best_d = match_radius_m;
+      for (auto& mk : peer_verdict_markers_) {
+        const double d = (mk.position - s.position).norm();
+        if (d < best_d) {
+          best_d = d;
+          consumed = &mk;
+        }
+      }
+    }
+    if (consumed) {
+      consumed->last_assert_t = t_now;
+      continue;
+    }
+
+    // Fresh verdict: find the nearest record of ANY state within the radius.
+    // Matching across all states keeps a verdict pinned to the record that
+    // absorbed it instead of creeping onto a distinct neighbor.
+    int best_idx = -1;
+    double best_d = match_radius_m;
+    for (size_t i = 0; i < records_.size(); ++i) {
+      const double d = (records_[i].centroid_xy - s.position).norm();
+      if (d < best_d) {
+        best_d = d;
+        best_idx = static_cast<int>(i);
+      }
+    }
+
+    if (best_idx >= 0) {
+      FrontierRecord& r = records_[best_idx];
+      const bool selectable = (r.state == FrontierState::ACTIVE ||
+                               r.state == FrontierState::DORMANT);
+      if (selectable) {
+        if (!s.invalidated) {
+          // Peer visited it — same semantics as the peer-presence suppression
+          // in update() step g: sticky VISITED. If we are mid-pursuit of this
+          // record, the state flip breaks our pursuit lock at the next select
+          // tick — the desired "stop driving to a cleared frontier" behavior.
+          ++r.visit_count;
+          r.state = FrontierState::VISITED;
+          r.pursuit_deadline_t = -1.0;
+          r.pursuit_budget_sec = 0.0;
+          ++retired;
+        } else {
+          // Peer gave up on it. Our own pursuit is immune: reachability can
+          // be approach-specific, and one robot's failure must not abort a
+          // pursuit that may succeed from ours. The verdict is deliberately
+          // NOT consumed on the immune path — once our pursuit ends, the
+          // peer's still-broadcast verdict gets a real chance to apply.
+          if (immune_id && r.id == *immune_id) continue;
+          // No strike, and no repeated cooldown refresh (the verdict applies
+          // once): the record then follows the NORMAL local lifecycle —
+          // cooldown, respawn, strikes-escalate-to-permanent — exactly as if
+          // this robot had invalidated it itself. Peer verdicts inform the
+          // team; they do not overrule the local retry policy.
+          r.state = FrontierState::INVALIDATED;
+          r.invalidated_at_t = t_now;
+          r.pursuit_deadline_t = -1.0;
+          r.pursuit_budget_sec = 0.0;
+          ++retired;
+        }
+      }
+      // Terminal nearest: nothing to do — never resurrect. Falls through to
+      // marker creation so the rebroadcast stops being evaluated.
+    }
+    // Consume the verdict (also when nothing matched: never create records
+    // from hearsay, and a record appearing here LATER is new information the
+    // old verdict has no authority over — worst case we re-verify a spot the
+    // peer cleared, and merged-map revalidation retires it within a tick).
+    peer_verdict_markers_.push_back({s.position, t_now});
+  }
+  return retired;
+}
+
+void FrontierManager::clearPursuit(uint64_t id) {
+  for (auto& r : records_) {
+    if (r.id == id) {
+      r.pursuit_deadline_t = -1.0;
+      r.pursuit_budget_sec = 0.0;
+      return;
+    }
   }
 }
 

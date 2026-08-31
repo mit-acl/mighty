@@ -59,6 +59,16 @@ struct FrontierRecord {
   int             timeout_count = 0;
 };
 
+// A peer's verdict on one of ITS frontier records, received over
+// /exploration/frontier_status. Only terminal states travel — receivers use
+// these to retire matching local records ("share-to-retire"), never to
+// create or resurrect. The node converts the ROS message to this plain
+// struct so the manager stays message-free.
+struct PeerFrontierStatus {
+  Eigen::Vector2d position{Eigen::Vector2d::Zero()};  // world frame
+  bool invalidated = false;  // false => the peer reported VISITED
+};
+
 struct FrontierManagerParams {
   // Matching / lifecycle
   double merge_radius_m            = 1.0;
@@ -124,6 +134,17 @@ struct FrontierManagerParams {
   // because it relies only on per-peer poses (single-point sync), not on
   // grid alignment. Set <= 0 to disable.
   double peer_visit_radius_m            = 2.0;
+
+  // How long a consumed peer verdict stays consumed after its last
+  // re-assert. Peers rebroadcast their full DB at ~2 Hz for the whole run,
+  // and a verdict must apply ONCE, not on every rebroadcast — re-applying an
+  // old verdict to whatever record is nearest NOW is how genuinely new
+  // frontiers near an old spot get wrongly killed (measured: in 2 of 9
+  // campaign runs an early verdict near a doorway walled off an unexplored
+  // wing and the team went home at 0.64 coverage). Refreshed by every
+  // matching assert; wired to the peer timeout by the node so a dead peer's
+  // verdicts age out on the same clock its claims do.
+  double peer_verdict_ttl_sec           = 5.0;
 };
 
 class FrontierManager {
@@ -158,12 +179,21 @@ class FrontierManager {
   /** @brief MinPos variant: pick the frontier where this robot has the lowest
    *  rank (fewest peers closer to it). When @p peers is empty, degenerates to
    *  nearest-frontier with utility tiebreak — identical to single-robot.
+   *
+   *  @p claims are peers' currently-pursued frontier positions: candidates
+   *  within @p claim_block_radius_m of any claim are hard-skipped. Unlike the
+   *  pose keep-out (which relaxes when it would otherwise starve selection),
+   *  the claim filter is NEVER relaxed — stealing a claim is a guaranteed
+   *  duplicate. All-candidates-claimed therefore returns nullopt, which rides
+   *  the caller's home-grace / resume-on-arrival path by design.
    */
   std::optional<FrontierRecord> selectNextGoalMinPos(
       const Eigen::Vector3d& robot_pose,
       const OccGrid2D& current_grid,
       const std::vector<PeerPose>& peers,
-      double min_dist_to_peers_m = 0.0) const;
+      double min_dist_to_peers_m = 0.0,
+      const std::vector<PeerClaim>& claims = {},
+      double claim_block_radius_m = 0.0) const;
 
   /** @brief Pick the geometrically nearest selectable frontier (ACTIVE or
    *  DORMANT), by Euclidean distance to the centroid, ignoring the utility
@@ -182,15 +212,67 @@ class FrontierManager {
    */
   void markSelected(uint64_t id, const Eigen::Vector2d& robot_xy, double t_now);
 
+  /** @brief Apply peer-reported terminal frontier states (share-to-retire).
+   *
+   *  Each verdict applies ONCE. Peers rebroadcast their full DB at ~2 Hz for
+   *  the rest of the run, so every applied (or absorbed) verdict leaves a
+   *  consumed marker; while the marker is warm (refreshed by each matching
+   *  assert, TTL peer_verdict_ttl_sec) later rebroadcasts are skipped. A NEW
+   *  record appearing near an old verdict is new information — the old
+   *  verdict has no authority over it.
+   *
+   *  A fresh verdict acts on the NEAREST record of ANY state within
+   *  @p match_radius_m: a VISITED status flips an ACTIVE/DORMANT match to
+   *  VISITED (sticky, ++visit_count, deadline cleared — same semantics as
+   *  the peer-presence suppression in update()); an INVALIDATED status flips
+   *  it to INVALIDATED with invalidated_at_t = t_now and NO strike, after
+   *  which the record follows the NORMAL local cooldown/respawn/strike
+   *  lifecycle — peer verdicts inform the team, they do not overrule the
+   *  local retry policy. EXCEPTION: @p immune_id (the record this robot is
+   *  currently pursuing) ignores peer INVALIDATED without consuming the
+   *  verdict — our own attempt judges reachability. (A peer's VISITED
+   *  verdict is NOT immune: someone cleared it, stop driving there.)
+   *
+   *  Never resurrects a terminal record, never creates a record.
+   *
+   *  @return number of records newly retired (for logging).
+   */
+  int applyPeerStatus(const std::vector<PeerFrontierStatus>& statuses,
+                      double t_now, double match_radius_m,
+                      std::optional<uint64_t> immune_id = std::nullopt);
+
+  /** @brief Drop a record's pursuit deadline WITHOUT a state change or
+   *  strike. Used when this robot yields a contested claim: the frontier
+   *  stays ACTIVE for the winning peer, and our armed deadline must not
+   *  later fire INVALIDATED on a frontier the peer is legitimately pursuing
+   *  (status sharing would propagate that retirement team-wide). After this,
+   *  markSelected() can arm a fresh deadline on the next legitimate pursuit.
+   */
+  void clearPursuit(uint64_t id);
+
   const FrontierRecord* find(uint64_t id) const;
   const std::vector<FrontierRecord>& records() const { return records_; }
   const FrontierManagerParams& params() const { return params_; }
 
   // Test helpers
   size_t size() const { return records_.size(); }
-  void clear() { records_.clear(); next_id_ = 0; last_update_t_ = 0.0; }
+  void clear() {
+    records_.clear();
+    peer_verdict_markers_.clear();
+    next_id_ = 0;
+    last_update_t_ = 0.0;
+  }
 
  private:
+  // A peer verdict that has already been applied (or deliberately absorbed).
+  // Kept while the peer keeps re-asserting it so the 2 Hz rebroadcast cannot
+  // re-apply the same old verdict to new records; expires
+  // peer_verdict_ttl_sec after the last assert.
+  struct PeerVerdictMarker {
+    Eigen::Vector2d position{Eigen::Vector2d::Zero()};
+    double last_assert_t = 0.0;
+  };
+
   double computeUtility(const FrontierRecord& r,
                         const Eigen::Vector3d& robot_pose,
                         const OccGrid2D& current_grid) const;
@@ -199,6 +281,7 @@ class FrontierManager {
 
   FrontierManagerParams params_;
   std::vector<FrontierRecord> records_;
+  std::vector<PeerVerdictMarker> peer_verdict_markers_;
   uint64_t next_id_ = 0;
   double last_update_t_ = 0.0;
 };

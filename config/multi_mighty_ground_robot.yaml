@@ -1,0 +1,222 @@
+# Multi-robot ground exploration — parameter OVERLAY.
+#
+# This is not a standalone config. It is layered on top of
+# config/mighty_ground_robot.yaml by onboard_mighty.launch.py's
+# `config_overlay_file` argument, and contains only the keys that differ for a
+# team of robots. Everything else — the vehicle model, the planner tuning, the
+# exploration bounds, and the comments recording which values were measured
+# rather than guessed — stays in the single-robot file, so the two cannot drift.
+#
+# Used by: run_sim.py --mode exploration-multiagent-ground
+#          make run-multiagent-ground-exploration
+#
+# Background: before this file existed, multi-robot runs loaded the single-robot
+# config unchanged, which left BOTH switches below in their solo positions. The
+# robots therefore shared a world but not a plan — three greedy explorers
+# re-covering each other's ground, while the README advertised MinPos
+# coordination. Both keys are required; setting either alone changes nothing.
+
+mighty_node:
+  ros__parameters:
+
+        # ---- Turn coordination on ------------------------------------------
+        # Constructs the peer-pose publisher/subscriber (/exploration/peer_poses),
+        # the visited-map exchange (/exploration/visited_maps), the multi-agent
+        # start guard, and the peer filtering passed into FrontierManager::update.
+        # With this false, none of that machinery is even created.
+        exploration.minpos.enabled: true
+
+        # The key that actually routes selection through MinPos. mighty_node's
+        # selection is `if (select_nearest) { ... } else if (use_minpos) { ... }`,
+        # so leaving this true makes selectNextGoalMinPos unreachable no matter
+        # what minpos.enabled says. Note that with select_nearest false,
+        # exploration.select_commit_margin_m becomes inert — it is only read in
+        # the nearest branch, so do not tune it expecting an effect here.
+        exploration.select_nearest: false
+
+        # ---- Retuned for a team --------------------------------------------
+        # Hard keep-out around peers when collecting frontier candidates, and
+        # the main reason two robots end up in the same corridor at all.
+        #
+        # History, because the value has moved twice: the single-robot file ships
+        # 3.0; this overlay first lowered it to 1.5 out of caution, because the
+        # filter rejects candidates with NO fallback — if every ACTIVE and every
+        # DORMANT candidate falls inside some peer's radius, selection returns
+        # nothing, and a robot that selects nothing never captures its
+        # exploration start, so it sits silently instead of reporting a failure.
+        # That starvation never appeared across 30 measured runs, so the caution
+        # was unfounded and the headroom is real.
+        #
+        # Now 4.0, to keep the robots' work areas genuinely apart. This is the
+        # upstream fix for inter-robot contact: robots that never target the same
+        # region rarely meet in a corridor, whereas dynamic_weight and planner_Cw
+        # only help once they already have. Watch for STUCK outcomes in the
+        # campaign — that is what starvation would look like if 4.0 is too far.
+        exploration.minpos.min_frontier_dist_to_peers_m: 4.0
+
+        # ---- Inter-robot avoidance -----------------------------------------
+        # Weight on the dynamic-obstacle term in the local L-BFGS objective.
+        # Peers reach it as dynamic obstacles: each robot publishes its planned
+        # trajectory on /trajs (share_traj: true), trajCallback feeds it to
+        # MIGHTY::addTraj, and the fused evaluator accumulates J_dyn against
+        # every obstacle whose predicted position comes within planner_Cw
+        # (set below) of a sampled point on our own trajectory.
+        #
+        # Note the peers only count because formation flight is off:
+        # lbfgs_solver.cpp skips is_agent obstacles when formation_weight > 0,
+        # on the grounds that J_form would otherwise fight J_dyn. Ground robots
+        # leave formation_weight at its 0.0 default, so agents are avoided
+        # rather than deferred to a formation term that does not exist.
+        #
+        # Raised 1e+3 -> 1e+4 to match multi_mighty.yaml, the UAV multi-agent
+        # config, which has carried 1e+4 since it was written. A 10x weight buys
+        # a stronger push apart when two planned paths converge; it does not
+        # change the clearance being enforced (planner_Cw does that).
+        dynamic_weight: 1e+3
+
+        # Distance at which a peer starts costing us. Cost is (Cw^2 - d^2)^3,
+        # so it is zero beyond Cw and rises steeply inside it. This value has
+        # been measured at three settings — both extremes fail differently:
+        #   2.0  demands 2 m of center separation in ~2 m corridors, which is
+        #        geometrically impossible when two robots pass; the optimizer
+        #        relieves the giant peer cost at the walls' expense (the base
+        #        file runs stat_weight 0, so walls only exist as corridor
+        #        constraints): trajectories get shoved into walls and close
+        #        passes turn unstable.
+        #   1.0  is feasible everywhere but engages with only ~0.35 m of
+        #        margin over the 0.65 m wheel-to-wheel span — tracking error
+        #        under 3-robot host load eats it: robot-robot contact in 3 of
+        #        5 runs (up to 43 contact events, separations down to 0.29 m),
+        #        after 40 straight contact-free runs at 2.0.
+        #   1.4  is the corridor limit: passing robots need 1.4 + 0.6 = 2.0 m,
+        #        exactly what the office provides, with 0.75 m of margin over
+        #        the wheel span.
+        planner_Cw: 1.4
+
+        # ---- Trajectory smoothness around peers ------------------------------
+        # With three robots the local optimizer gets shoved sideways whenever a
+        # peer's predicted trajectory comes within planner_Cw — late, hard
+        # repulsion against constantly-replanning peers reads as wavy S-curved
+        # driving. Two-part fix: make the GLOBAL route detour around peers
+        # early (wider, stronger dynamic-heat tubes along peer trajectories in
+        # the A* cost), so the local spline starts from a path that already
+        # avoids them, and stiffen the jerk term so what bending remains is
+        # smooth. jerk_weight 1e+4 matches hw_mighty_ground_robot.yaml, which
+        # has run that value on the real Pioneer all along; the base sim file
+        # keeps 1e+3 (validated single-robot, where none of this engages).
+        jerk_weight: 1e+4
+        heat_alpha1: 3.0                    # tube weight, 1.5 in the base file
+        dyn_heat_tube_radius_m: 4.0         # tube radius, 3.0 in the base file
+        # heat_weight (overall A* heat multiplier) deliberately stays 1.0 —
+        # raising it would also rescale STATIC wall heat; alpha1 touches only
+        # the peer-trajectory tubes.
+
+        # Only react to peers' predicted trajectories this many seconds out
+        # (smooth fade over the last 25%; 0 = full horizon = every other
+        # config). Peers replan ~1 Hz, so a predicted crossing 30 s away is
+        # fiction — but J_dyn sampled the whole ~40 s local trajectory, so
+        # every replan bent the tail for phantom conflicts, and the ~85 Hz
+        # re-anchoring at the robot's actual pose adopted each bend as
+        # permanent wander. Measured driven turning: 1.29 rad/m (full
+        # horizon, dw 1e+4) vs 0.56 single-robot. 8 s ≈ 8 m of closing
+        # distance for two 0.5 m/s robots — 4x the planner_Cw envelope, so
+        # every conflict that can physically happen before both robots
+        # replan is still avoided at full strength.
+        agent_dyn_horizon_sec: 8.0
+
+        # Cap the MPC reference re-anchoring. Every successful replan
+        # (~85 Hz) rebuilds mpc_waypoints STARTING AT THE ROBOT'S CURRENT
+        # POSE, so the controller's target micro-rotates several times per
+        # 30 Hz control cycle. Solo that tracks cleanly; with three robots the
+        # host runs Gazebo at RTF ~0.91 with jittery stepping, and the sim
+        # MPC's high yaw authority (w_max 1.5 in mpc_sim.yaml, raised there
+        # to stop corner-clipping) turns each micro-rotation into a hard
+        # correction -> overshoot -> counter-correction: visible serpentine
+        # even far from peers. 10 Hz gives the controller a stable target
+        # between replans; at 0.5 m/s the worst-case staleness is ~5 cm of
+        # travel. 0 (the default everywhere else) = publish on every replan.
+        mpc_path_publish_rate_hz: 10.0
+
+        # Head-on yield rule. The one encounter no clearance radius resolves
+        # is two robots meeting in a pinch: measured across the Cw sweep,
+        # 2.0 paid at the walls, 1.0 ground robot-on-robot in 3/5 runs, and
+        # even 1.4 (the corridor limit) left a multi-second grind in 2/5.
+        # Symmetry is the problem, so the fix is the same deterministic
+        # asymmetry that settles claim contests: the robot that loses the
+        # namespace tie-break crawls (never stops — watchdog stays quiet, no
+        # deadlock since the winner never slows) whenever the winner is
+        # within the radius ahead of it; the winner drives through normally.
+        # The yield acts on the MPC reference speeds — the design that
+        # measured best. A planner-level variant (scaling the optimizer's
+        # V_max so /trajs advertises the slow plan) was built and rejected on
+        # data: replans went fragile against the tightened bound (STUCK at
+        # 0.84 coverage) and the winner, seeing a quasi-static blocker fill
+        # the corridor, pushed through anyway (171-event grind). A 4.0 m
+        # radius was also tried and rejected (loser stops over whole rooms:
+        # 296-event grind). This combination — reference-level, 3.0 m, 0.3x —
+        # measured 4/5 runs contact-free with a worst case of one ~0.1 s
+        # brush at 0.61 m, versus 688/869-event grinds with no yield at all.
+        peer_yield_radius_m: 3.0
+        peer_yield_speed_factor: 0.3
+
+        # ---- Intent + status sharing ----------------------------------------
+        # Positions alone were not enough. Measured over the 20-run campaign
+        # before this existed: goal_duplication_frac (snapshot) mean 0.217,
+        # nonzero in 9/20 runs, two runs at 1.0 — two robots near-equidistant
+        # from a frontier both compute MinPos rank 0, both select it, and the
+        # pursuit lock keeps them both driving there for the whole leg; a
+        # frontier one robot proved unreachable was silently re-attempted by
+        # the others (INVALIDATED never crossed the wire at all).
+        #
+        # Claims fix the selection race: each robot broadcasts its pursued
+        # frontier on /exploration/peer_claims, selection hard-skips claimed
+        # spots, and a contested claim resolves by namespace (NX01 beats NX02)
+        # — the loser yields within about a second instead of after a full
+        # cross-office drive. Status sharing fixes the cleared-frontier
+        # revisit: the full DB, including VISITED/INVALIDATED, goes out on
+        # /exploration/frontier_status, so a verdict reaches the whole team in
+        # <=0.5 s instead of depending on a peer wandering within 2 m of the
+        # exact centroid or on the 1 Hz map merge surviving an unknown sliver.
+        exploration.minpos.claim_block_radius_m: 4.0     # matches min_frontier_dist_to_peers_m: same one-robot-per-4m-work-area reasoning, applied to intents instead of bodies
+        exploration.minpos.share_frontier_status: true
+
+        # One global frontier-marker topic for RViz, published by the
+        # lexicographically-smallest live namespace (leadership hands over
+        # within peer_timeout_sec if that robot dies). Multi-robot RViz shows
+        # a single deduplicated frontier layer plus an orange claim ring per
+        # robot, instead of three overlapping per-namespace marker sets.
+        exploration.visualization.centralized: true
+
+
+# ---- Deliberately inherited, not overridden ---------------------------------
+# Listed here so the next person knows they were considered:
+#
+#   exploration.minpos.peer_timeout_sec: 5.0
+#   exploration.minpos.peer_publish_rate_hz: 5.0
+#       5 Hz of PoseStamped per robot is negligible traffic, and 5 s is ~25
+#       missed messages before a peer is dropped. Sane for a 3-robot team.
+#       Claims ride the same cadence and the same timeout: a crashed or
+#       finished claimant frees its frontier within 5 s.
+#
+#   exploration.minpos.peer_visit_radius_m: 2.0
+#       Matches exploration.manager.visit_radius_m, i.e. "a peer standing here
+#       counts like I would" — but WITHOUT the 1 s dwell my own presence needs.
+#       A peer merely driving past retires the frontier, permanently. Now that
+#       /exploration/frontier_status propagates verdicts explicitly, this is a
+#       last-resort backstop rather than the primary mechanism — still kept,
+#       because it needs nothing but poses to work. See
+#       test_frontier_manager.cpp SuppressionIsStickyAfterPeerLeaves.
+#
+#   exploration.minpos.status_match_radius_m: 2.0
+#       Matches peer_visit_radius_m / visit_radius_m: "the same frontier seen
+#       by two robots" is a 2 m question, while claim_block_radius_m answers
+#       the different question "how far apart should two robots' work areas
+#       be", which is why the two radii deliberately differ.
+#
+#   exploration.minpos.status_publish_rate_hz: 2.0
+#       Full-DB FrontierList is ~100x smaller than the 1 Hz visited-map
+#       exchange, so twice the rate costs nothing and halves verdict latency.
+#
+#   exploration.bounds.*
+#       All robots share one box. MinPos rank IS the allocation mechanism;
+#       assigning static sectors would hide whether it actually works.
